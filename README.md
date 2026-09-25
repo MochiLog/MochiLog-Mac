@@ -11,6 +11,8 @@ MochiLogのiOS/iPadOS 27向けワイヤレスログ転送機能のMac用ベー�
 
 ベータ版です。解析ログの収集は端末のロック解除中にのみ可能です。iOS 16の端末はMochiLog本体を引き続き使えますが、このMac連携機能の対象外です。
 
+Mac内の転送待ちログ、ペアリング情報、診断情報の扱いは[プライバシーポリシー](https://mochilog.ryuya-dev.net/privacy)に、利用条件は[利用規約](https://mochilog.ryuya-dev.net/terms)に記載しています。アプリのサポート欄から両文書を開けます。サポートメールには、送信操作をした場合に限り端末・Macの診断情報を添付します。
+
 ## GitHub Actionsで署名済みDMGを作る
 
 Actionsの「Signed beta DMG」を手動実行すると、macOS 27/Xcode 27のランナーでビルドし、Developer ID署名、公証、ステープル、Gatekeeper検証を行います。完了後、実行結果の「Artifacts」から`MochiLog-Mac-Beta-notarized-<実行番号>`をダウンロードすると、DMGとSHA-256チェックサムを取得できます。成果物の保存期間は90日です。このワークフローはGitHub Releaseを作成しません。リポジトリのActions secretsに`MOCHILOG_CERTIFICATE_P12_BASE64`（空パスワードのDeveloper ID Application p12をbase64化した値）、`MOCHILOG_NOTARY_KEY_BASE64`（App Store Connect APIキーp8のbase64）、`MOCHILOG_NOTARY_KEY_ID`、`MOCHILOG_NOTARY_ISSUER_ID`を設定してください。証明書やAPIキーの実体はリポジトリへコミットしません。
