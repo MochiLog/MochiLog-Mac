@@ -35,7 +35,7 @@ test -x "$sparkle_bin/generate_appcast"
 mkdir -p Build/AppcastArchives
 cp "$dmg" Build/AppcastArchives/MochiLog-Mac-Beta.dmg
 cp "$notes" Build/AppcastArchives/MochiLog-Mac-Beta.md
-"$sparkle_bin/generate_appcast" --maximum-deltas 0 \
+"$sparkle_bin/generate_appcast" --maximum-deltas 0 --embed-release-notes \
   --ed-key-file "$key" \
   --download-url-prefix "https://github.com/MochiLog/MochiLog-Mac/releases/download/$tag/" \
   -o Build/AppcastArchives/appcast.xml Build/AppcastArchives
