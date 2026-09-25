@@ -55,9 +55,13 @@ jobs:
           xcrun stapler validate 'Build/DerivedData/Build/Products/Release/MochiLog Mac.app'
           xcrun stapler validate Build/MochiLog-Mac-Beta.dmg
           spctl --assess --type execute --verbose 'Build/DerivedData/Build/Products/Release/MochiLog Mac.app'
+          cd Build
+          shasum -a 256 MochiLog-Mac-Beta.dmg > MochiLog-Mac-Beta.sha256
       - uses: actions/upload-artifact@v4
         with:
-          name: MochiLog-Mac-Beta-notarized
-          path: Build/MochiLog-Mac-Beta.dmg
+          name: MochiLog-Mac-Beta-notarized-${{ github.run_number }}
+          path: |
+            Build/MochiLog-Mac-Beta.dmg
+            Build/MochiLog-Mac-Beta.sha256
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 90

@@ -31,6 +31,10 @@ cp LICENSE "$app/Contents/Resources/LICENSE-MochiLog.txt"
 license_file="$(find Build/venv/lib -path '*/pymobiledevice3-*.dist-info/licenses/LICENSE' -type f -print -quit)"
 test -n "$license_file"
 cp "$license_file" "$app/Contents/Resources/LICENSE-pymobiledevice3.txt"
+cp Build/DerivedData/SourcePackages/artifacts/sparkle/Sparkle/LICENSE \
+  "$app/Contents/Resources/LICENSE-Sparkle.txt"
+Build/venv/bin/python scripts/bundle-python-licenses.py \
+  "$app/Contents/Resources/LICENSE-Python-Dependencies.txt"
 cp THIRD_PARTY.md "$app/Contents/Resources/THIRD_PARTY.md"
 
 codesign --force --options runtime --timestamp --sign "$identity" \

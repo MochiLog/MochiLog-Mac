@@ -64,7 +64,8 @@ enum SupportDiagnostics {
     let collection = file("collection", for: device)
     let lastCollection = (try? JSONSerialization.jsonObject(with: Data(contentsOf: collection)))
       as? [String: Any] ?? [:]
-    let object: [String: Any] = [
+    var recentEvents = Array(macLogText().split(separator: "\n").suffix(30)).map(String.init)
+    var object: [String: Any] = [
       "schema": 1,
       "generatedAt": ISO8601DateFormatter().string(from: Date()),
       "platform": "macOS",
@@ -76,9 +77,15 @@ enum SupportDiagnostics {
       "pendingFiles": (try? Collector.pending(for: device).count) ?? -1,
       "deliveredFiles": Collector.delivered(for: device).count,
       "lastCollection": lastCollection,
-      "recentEvents": Array(macLogText().split(separator: "\n").suffix(30)).map(String.init)
+      "recentEvents": recentEvents
     ]
-    return (try? JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys])) ?? Data("{}".utf8)
+    while true {
+      let data = (try? JSONSerialization.data(withJSONObject: object,
+        options: [.prettyPrinted, .sortedKeys])) ?? Data("{}".utf8)
+      if data.count <= 16_384 || recentEvents.isEmpty { return data }
+      recentEvents.removeFirst()
+      object["recentEvents"] = recentEvents
+    }
   }
 
   static func mailAttachments(for device: PairedDevice) throws -> [URL] {

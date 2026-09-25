@@ -233,6 +233,7 @@ private struct CompanionView: View {
   @EnvironmentObject private var model: CompanionModel
   @State private var showingSupport = false
   @State private var showingDebugLog = false
+  @State private var showingLicenses = false
   @State private var supportDeviceID: String?
   @State private var launchesAtLogin = MacAppPreferences.launchesAtLogin
   @State private var preferencesError: String?
@@ -349,6 +350,15 @@ private struct CompanionView: View {
               Button(MacTransferL10n.text("mt_026")) {
                 showingDebugLog = true
               }
+              Button(MacTransferL10n.text("mt_l_00")) {
+                showingLicenses = true
+              }
+            }
+            HStack(spacing: 16) {
+              Link(MacTransferL10n.text("mt_l_07"),
+                destination: URL(string: "https://mochilog.ryuya-dev.net/privacy")!)
+              Link(MacTransferL10n.text("mt_l_08"),
+                destination: URL(string: "https://mochilog.ryuya-dev.net/terms")!)
             }
           }.padding(8)
             .onAppear {
@@ -387,6 +397,9 @@ private struct CompanionView: View {
     }
     .sheet(isPresented: $showingDebugLog) {
       MacTransferDebugLogView(device: supportDevice)
+    }
+    .sheet(isPresented: $showingLicenses) {
+      MacLicensesView()
     }
   }
 }
