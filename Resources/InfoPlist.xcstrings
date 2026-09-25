@@ -1,0 +1,59 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "NSLocalNetworkUsageDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This app uses the local network to transfer analytics logs to your iPhone or iPad."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "解析ログをiPhoneまたはiPadへ転送するためにローカルネットワークを使用します。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese App verwendet das lokale Netzwerk, um Analyseprotokolle auf Ihr iPhone oder iPad zu übertragen."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta app usa la red local para transferir registros de análisis a tu iPhone o iPad."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cette app utilise le réseau local pour transférer les journaux d’analyse vers votre iPhone ou iPad."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 앱은 분석 로그를 iPhone 또는 iPad로 전송하기 위해 로컬 네트워크를 사용합니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此应用使用本地网络将分析日志传输到您的 iPhone 或 iPad。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此 App 使用區域網路將分析日誌傳輸到您的 iPhone 或 iPad。"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

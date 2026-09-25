@@ -17,6 +17,7 @@
   <key>SUFeedURL</key><string>https://raw.githubusercontent.com/MochiLog/MochiLog-Mac/main/appcast.xml</string>
   <key>SUPublicEDKey</key><string>ukDc2UcXbca/pGzsNZRQD7OvZsvx1Vz+zvJq23tFtQQ=</string>
   <key>SUEnableAutomaticChecks</key><true/>
+  <key>SUAutomaticallyUpdate</key><true/>
   <key>SUVerifyUpdateBeforeExtraction</key><true/>
   <key>SURequireSignedFeed</key><true/>
 </dict>

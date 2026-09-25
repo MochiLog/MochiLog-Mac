@@ -34,8 +34,8 @@ final class TransferServer: @unchecked Sendable {
     }
     listener.stateUpdateHandler = { [weak self] status in
       switch status {
-      case .ready: self?.onStatus?("iPhoneからの接続を待機中")
-      case .failed(let error): self?.onStatus?("接続待機に失敗: \(error.localizedDescription)")
+      case .ready: self?.onStatus?(MacTransferL10n.text("mt_m_15"))
+      case .failed(let error): self?.onStatus?(MacTransferL10n.format("mt_m_16", error.localizedDescription))
       default: break
       }
     }
@@ -85,7 +85,7 @@ final class TransferServer: @unchecked Sendable {
         try Collector.saveState(state)
         onConfirmed?(request.physicalDeviceID)
       } catch {
-        onStatus?("ペアリング確認の保存に失敗: \(error.localizedDescription)")
+        onStatus?(MacTransferL10n.format("mt_m_17", error.localizedDescription))
       }
     }
     nonces[request.nonce] = Date()
@@ -114,7 +114,7 @@ final class TransferServer: @unchecked Sendable {
       let content = try next.map { try Data(contentsOf: $0, options: .mappedIfSafe) } ?? Data()
       guard content.count <= 64 * 1024 * 1024,
         let nameData = name.data(using: .utf8), nameData.count <= 1024
-      else { throw CollectorError.failed("ログファイルが転送上限を超えました") }
+      else { throw CollectorError.failed(MacTransferL10n.text("mt_c_07")) }
       var plain = Data()
       plain.append(UInt8(nameData.count >> 8))
       plain.append(UInt8(nameData.count & 0xff))
@@ -124,14 +124,14 @@ final class TransferServer: @unchecked Sendable {
         plain.append(SupportDiagnostics.macReport(for: device))
       }
       let sealed = try AES.GCM.seal(plain, using: SymmetricKey(data: device.secret))
-      guard let combined = sealed.combined else { throw CollectorError.failed("暗号化に失敗しました") }
+      guard let combined = sealed.combined else { throw CollectorError.failed(MacTransferL10n.text("mt_c_08")) }
       var length = UInt32(combined.count).bigEndian
       let prefix = withUnsafeBytes(of: &length) { Data($0) }
       connection.send(content: prefix + combined, completion: .contentProcessed { _ in
         connection.cancel()
       })
     } catch {
-      onStatus?("転送に失敗: \(error.localizedDescription)")
+      onStatus?(MacTransferL10n.format("mt_m_18", error.localizedDescription))
       connection.cancel()
     }
   }

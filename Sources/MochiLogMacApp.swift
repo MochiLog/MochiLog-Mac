@@ -69,7 +69,7 @@ private struct MacMenuBarContent: View {
 final class CompanionModel: ObservableObject {
   @Published var devices: [ConnectedDevice] = []
   @Published var selectedUDID: String?
-  @Published var status = "端末を検索してください" {
+  @Published var status = MacTransferL10n.text("mt_m_00") {
     didSet { if status != oldValue { SupportDiagnostics.record(status) } }
   }
   @Published var pairingCode: String?
@@ -92,11 +92,11 @@ final class CompanionModel: ObservableObject {
       Task { @MainActor in
         self?.state = Collector.loadState()
         self?.showPairingQR = false
-        self?.status = "iPhoneとのペアリングが完了しました"
+        self?.status = MacTransferL10n.text("mt_m_01")
       }
     }
     do { try server.start() }
-    catch { status = "転送待機を開始できません: \(error.localizedDescription)" }
+    catch { status = MacTransferL10n.format("mt_m_02", error.localizedDescription) }
     Task {
       await refresh()
       await collectAll()
@@ -114,9 +114,9 @@ final class CompanionModel: ObservableObject {
     defer { isBusy = false }
     do {
       devices = try await Task.detached(priority: .utility) { try Collector.browse() }.value
-      status = "\(devices.count)台の端末が見つかりました"
+      status = MacTransferL10n.format("mt_m_03", devices.count)
       if selectedUDID == nil { selectedUDID = devices.first?.udid }
-    } catch { status = "端末検索に失敗: \(error.localizedDescription)" }
+    } catch { status = MacTransferL10n.format("mt_m_04", error.localizedDescription) }
   }
 
   func pairApp() {
@@ -129,8 +129,8 @@ final class CompanionModel: ObservableObject {
       try Collector.saveState(state)
       server?.update(state: state)
       showPairingQR = true
-      status = "\(selected.name)のQRコードをiPhoneで読み取ってください"
-    } catch { status = "ペアリング情報を保存できません: \(error.localizedDescription)" }
+      status = MacTransferL10n.format("mt_m_05", selected.name)
+    } catch { status = MacTransferL10n.format("mt_m_06", error.localizedDescription) }
   }
 
   var pairingURL: String? {
@@ -160,14 +160,14 @@ final class CompanionModel: ObservableObject {
             Task { @MainActor [weak self] in
               self?.collectionDone = done
               self?.collectionTotal = total
-              self?.status = "\(device.name): \(done)/\(total)件を取得"
+              self?.status = MacTransferL10n.format("mt_m_07", device.name, done, total)
             }
           }
         }.value
         SupportDiagnostics.saveCollection(report, error: nil, for: device)
         status = report.failed == 0
-          ? "\(device.name): 電池ログ\(report.saved)件保存、対象外\(report.skipped)件を除外"
-          : "\(device.name): \(report.saved)件保存、対象外\(report.skipped)件、取得失敗\(report.failed)件。次回再試行します。\(report.lastError ?? "")"
+          ? MacTransferL10n.format("mt_m_08", device.name, report.saved, report.skipped)
+          : MacTransferL10n.format("mt_m_09", device.name, report.saved, report.skipped, report.failed, report.lastError ?? "")
       } catch {
         SupportDiagnostics.saveCollection(nil, error: error, for: device)
         status = "\(device.name): \(error.localizedDescription)"
@@ -179,7 +179,7 @@ final class CompanionModel: ObservableObject {
     guard !isPairingSystem else { return }
     guard let helper = Bundle.main.url(forResource: "pymobiledevice3", withExtension: nil,
       subdirectory: "Collector") else {
-      status = "同梱のログ収集ツールがありません"
+      status = MacTransferL10n.text("mt_m_10")
       return
     }
     let process = Process()
@@ -193,11 +193,11 @@ final class CompanionModel: ObservableObject {
     pairProcess = process
     isPairingSystem = true
     pairingCode = nil
-    status = "iPhoneの『設定 → デベロッパ → ペアリング済みMac』を開いてください"
+    status = MacTransferL10n.text("mt_m_11")
     do { try process.run() }
     catch {
       isPairingSystem = false
-      status = "OSペアリングを開始できません: \(error.localizedDescription)"
+      status = MacTransferL10n.format("mt_m_12", error.localizedDescription)
       return
     }
     let handle = pipe.fileHandleForReading
@@ -218,8 +218,8 @@ final class CompanionModel: ObservableObject {
         self?.isPairingSystem = false
         self?.pairingCode = nil
         self?.status = process.terminationStatus == 0
-          ? "Macと端末のOSペアリングが完了しました。端末を検索してください。"
-          : "OSペアリングが完了しませんでした。条件を確認して再試行してください。"
+          ? MacTransferL10n.text("mt_m_13")
+          : MacTransferL10n.text("mt_m_14")
         Task { [weak self] in await self?.refresh() }
       }
     }

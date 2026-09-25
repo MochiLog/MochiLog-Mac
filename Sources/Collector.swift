@@ -24,10 +24,13 @@ struct CompanionState: Codable {
 }
 
 enum CollectorError: LocalizedError {
-  case helperMissing, failed(String)
+  case helperMissing, timeout, signal(Int32, String), exitCode(Int32, String), failed(String)
   var errorDescription: String? {
     switch self {
-    case .helperMissing: "同梱のログ収集ツールが見つかりません。DMGからアプリを再インストールしてください。"
+    case .helperMissing: MacTransferL10n.text("mt_c_00")
+    case .timeout: MacTransferL10n.text("mt_c_01")
+    case .signal(let code, let detail): MacTransferL10n.format("mt_c_02", code, detail)
+    case .exitCode(let code, let detail): MacTransferL10n.format("mt_c_03", code, detail)
     case .failed(let message): message
     }
   }
@@ -102,7 +105,7 @@ enum Collector {
     try process.run()
     let deadline = Date().addingTimeInterval(timeout)
     while process.isRunning && Date() < deadline { Thread.sleep(forTimeInterval: 0.1) }
-    if process.isRunning { process.terminate(); throw CollectorError.failed("ログ収集がタイムアウトしました") }
+    if process.isRunning { process.terminate(); throw CollectorError.timeout }
     let text = (try? String(contentsOf: outputURL, encoding: .utf8)) ?? ""
     guard process.terminationStatus == 0 else {
       let errorText = (try? String(contentsOf: errorURL, encoding: .utf8)) ?? text
@@ -114,9 +117,9 @@ enum Collector {
       })
       let detail = meaningful.map { String($0.suffix(300)) }
       if process.terminationReason == .uncaughtSignal {
-        throw CollectorError.failed("収集ツールがシグナル\(process.terminationStatus)で異常終了しました\(detail.map { ": \($0)" } ?? "")")
+        throw CollectorError.signal(process.terminationStatus, detail ?? "")
       }
-      throw CollectorError.failed("収集ツールが終了コード\(process.terminationStatus)で停止\(detail.map { ": \($0)" } ?? "")")
+      throw CollectorError.exitCode(process.terminationStatus, detail ?? "")
     }
     return text
   }
@@ -125,7 +128,7 @@ enum Collector {
     let text = try run(["remote", "browse", "--native", "--timeout", "4"], timeout: 20)
     guard let data = text.data(using: .utf8),
       let rows = try JSONSerialization.jsonObject(with: data) as? [[String: Any]]
-    else { throw CollectorError.failed("端末一覧を読み取れませんでした") }
+    else { throw CollectorError.failed(MacTransferL10n.text("mt_c_04")) }
     return rows.compactMap { row in
       guard let udid = row["udid"] as? String, let model = row["model"] as? String,
         model.hasPrefix("iPhone") || model.hasPrefix("iPad")
@@ -152,7 +155,7 @@ enum Collector {
     let base = try directory(for: device, kind: kind)
     guard let source else { return base }
     guard source.hasPrefix("ProxiedDevice-"), source.range(of: #"^ProxiedDevice-[a-fA-F0-9]+$"#,
-      options: .regularExpression) != nil else { throw CollectorError.failed("診断ログの端末識別子が不正です") }
+      options: .regularExpression) != nil else { throw CollectorError.failed(MacTransferL10n.text("mt_c_05")) }
     let url = base.appendingPathComponent(source, isDirectory: true)
     try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
     return url
@@ -186,7 +189,7 @@ enum Collector {
     let source = parent.lastPathComponent
     guard let kind = LogKind(rawValue: parent.deletingLastPathComponent().lastPathComponent),
       parent == (try directory(for: device, kind: kind, source: source)) else {
-      throw CollectorError.failed("待機列のパスが不正です")
+      throw CollectorError.failed(MacTransferL10n.text("mt_c_06"))
     }
     return "\(kind.rawValue)::\(source)::\(file.lastPathComponent)"
   }

@@ -38,10 +38,14 @@ enum SupportDiagnostics {
 
   static func saveCollection(_ report: CollectionReport?, error: Error?, for device: PairedDevice) {
     let category: String
-    if let error {
-      let message = error.localizedDescription
-      category = message.contains("タイムアウト") ? "timeout" :
-        message.contains("シグナル") ? "helper_signal" : "collection_error"
+    if let error = error as? CollectorError {
+      switch error {
+      case .timeout: category = "timeout"
+      case .signal: category = "helper_signal"
+      default: category = "collection_error"
+      }
+    } else if error != nil {
+      category = "collection_error"
     } else { category = report?.failed == 0 ? "completed" : "partial_failure" }
     let object: [String: Any] = [
       "schema": 1,

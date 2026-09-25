@@ -14,6 +14,7 @@ targets:
       - path: Sources
       - path: Resources/Assets.xcassets
       - path: Resources/MacTransfer.xcstrings
+      - path: Resources/InfoPlist.xcstrings
     dependencies:
       - package: Sparkle
         product: Sparkle
@@ -23,7 +24,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: net.ryuya-dev.MochiLog.mac
         PRODUCT_NAME: MochiLog Mac
         MARKETING_VERSION: "0.2.0"
-        CURRENT_PROJECT_VERSION: "2"
+        CURRENT_PROJECT_VERSION: "3"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         MACOSX_DEPLOYMENT_TARGET: "27.0"
         SWIFT_VERSION: "5.0"
