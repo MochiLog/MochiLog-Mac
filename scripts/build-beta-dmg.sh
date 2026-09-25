@@ -9,8 +9,10 @@ mkdir -p Build
 Build/venv/bin/python -m pip install --disable-pip-version-check -r requirements-build.txt
 Build/venv/bin/pyinstaller --onefile --noconfirm --clean \
   --name pymobiledevice3 --collect-all pymobiledevice3 \
+  --recursive-copy-metadata pymobiledevice3 \
   --codesign-identity "$identity" --osx-entitlements-file MacCompanion.entitlements \
   --distpath Build/Collector --workpath Build/PyInstaller CollectorEntry.py
+Build/Collector/pymobiledevice3 --help > Build/collector-smoke.txt
 xcodegen generate --spec project.yml
 xcodebuild -project MochiLogMac.xcodeproj -scheme MochiLogMac \
   -configuration Release -destination 'platform=macOS' \
@@ -31,12 +33,5 @@ codesign --force --deep --options runtime --timestamp --sign "$identity" \
   --entitlements MacCompanion.entitlements "$app"
 codesign --verify --deep --strict --verbose=2 "$app"
 
-rm -rf Build/Stage
-mkdir -p Build/Stage
-ditto "$app" "Build/Stage/MochiLog Mac.app"
-ln -sfn /Applications Build/Stage/Applications
-hdiutil create -volname 'MochiLog Mac Beta' -srcfolder Build/Stage \
-  -ov -format UDZO Build/MochiLog-Mac-Beta.dmg
-codesign --force --timestamp --sign "$identity" Build/MochiLog-Mac-Beta.dmg
-codesign --verify --verbose=2 Build/MochiLog-Mac-Beta.dmg
+bash scripts/repack-dmg.sh
 shasum -a 256 Build/MochiLog-Mac-Beta.dmg

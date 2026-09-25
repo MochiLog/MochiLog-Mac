@@ -13,6 +13,6 @@ MochiLogのiOS/iPadOS 27向けワイヤレスログ転送機能のMac用ベー�
 
 ## ビルド
 
-開発者はXcode 27、XcodeGen、fastlane、Python 3とDeveloper ID Application証明書を用意し、`fastlane mac beta_dmg`を実行します。完成した配布物は`Build/MochiLog-Mac-Beta.dmg`です。使用者側にはこれらの依存は不要です。公証用のkeychain profileがある場合は`MOCHILOG_NOTARY_PROFILE=<profile> fastlane mac notarize_beta`で公証・stapleします。
+開発者はXcode 27、XcodeGen、fastlane、Python 3とDeveloper ID Application証明書を用意し、`fastlane mac beta_dmg`を実行します。完成した配布物は`Build/MochiLog-Mac-Beta.dmg`です。使用者側にはこれらの依存は不要です。公証用のkeychain profileがある場合は`MOCHILOG_NOTARY_PROFILE=<profile> fastlane mac notarize_beta`で**アプリ本体とDMGの両方**を公証・stapleします。APIキーを使う場合は`MOCHILOG_NOTARY_KEY_PATH`、`MOCHILOG_NOTARY_KEY_ID`、`MOCHILOG_NOTARY_ISSUER_ID`を環境変数で渡します。認証情報はリポジトリへ保存しません。
 
 `pymobiledevice3`およびビルド時依存のバージョンは`requirements-build.txt`で固定しています。ライセンスは`LICENSE`と`THIRD_PARTY.md`を参照してください。

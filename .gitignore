@@ -2,3 +2,4 @@ Build/
 MochiLogMac.xcodeproj/
 *.spec
 __pycache__/
+fastlane/report.xml

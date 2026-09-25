@@ -9,9 +9,27 @@ platform :mac do
   desc "Notarize and staple the signed beta DMG using a notarytool keychain profile"
   lane :notarize_beta do
     profile = ENV["MOCHILOG_NOTARY_PROFILE"]
-    UI.user_error!("Set MOCHILOG_NOTARY_PROFILE to a notarytool keychain profile") if profile.to_s.empty?
+    key_path = ENV["MOCHILOG_NOTARY_KEY_PATH"]
+    key_id = ENV["MOCHILOG_NOTARY_KEY_ID"]
+    issuer = ENV["MOCHILOG_NOTARY_ISSUER_ID"]
+    unless !profile.to_s.empty? || (!key_path.to_s.empty? && !key_id.to_s.empty? && !issuer.to_s.empty?)
+      UI.user_error!("Set MOCHILOG_NOTARY_PROFILE or all MOCHILOG_NOTARY_KEY_PATH / KEY_ID / ISSUER_ID")
+    end
+    auth = if !profile.to_s.empty?
+      ["--keychain-profile", profile]
+    else
+      ["--key", key_path, "--key-id", key_id, "--issuer", issuer]
+    end
+    app = File.expand_path("../Build/DerivedData/Build/Products/Release/MochiLog Mac.app", __dir__)
+    archive = File.expand_path("../Build/MochiLog-Mac-App-Notarization.zip", __dir__)
     dmg = File.expand_path("../Build/MochiLog-Mac-Beta.dmg", __dir__)
-    sh("xcrun notarytool submit '#{dmg}' --keychain-profile '#{profile}' --wait")
+    UI.user_error!("Build the signed beta DMG first") unless File.directory?(app) && File.file?(dmg)
+    sh("ditto", "-c", "-k", "--keepParent", app, archive)
+    sh("xcrun", "notarytool", "submit", archive, *auth, "--wait")
+    sh("xcrun", "stapler", "staple", app)
+    sh("xcrun", "stapler", "validate", app)
+    sh("bash", File.expand_path("../scripts/repack-dmg.sh", __dir__))
+    sh("xcrun", "notarytool", "submit", dmg, *auth, "--wait")
     sh("xcrun stapler staple '#{dmg}'")
     sh("xcrun stapler validate '#{dmg}'")
   end

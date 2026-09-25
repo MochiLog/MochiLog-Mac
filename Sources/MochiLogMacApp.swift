@@ -37,7 +37,10 @@ final class CompanionModel: ObservableObject {
     }
     do { try server.start() }
     catch { status = "転送待機を開始できません: \(error.localizedDescription)" }
-    Task { await refresh() }
+    Task {
+      await refresh()
+      await collectAll()
+    }
     Timer.scheduledTimer(withTimeInterval: 30 * 60, repeats: true) { [weak self] _ in
       Task { @MainActor in await self?.collectAll() }
     }
