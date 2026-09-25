@@ -52,11 +52,11 @@ final class TransferServer: @unchecked Sendable {
   }
 
   private func receive(on connection: NWConnection, accumulated: Data) {
-    connection.receive(minimumIncompleteLength: 1, maximumLength: 4096) { [weak self] data, _, complete, error in
+    connection.receive(minimumIncompleteLength: 1, maximumLength: 16_384) { [weak self] data, _, complete, error in
       guard let self, error == nil, !complete else { connection.cancel(); return }
       var bytes = accumulated
       if let data { bytes.append(data) }
-      guard bytes.count <= 4096 else { connection.cancel(); return }
+      guard bytes.count <= 16_384 else { connection.cancel(); return }
       if let end = bytes.firstIndex(of: 10) {
         self.respond(to: Data(bytes[..<end]), on: connection)
       } else {
@@ -92,7 +92,7 @@ final class TransferServer: @unchecked Sendable {
     nonces = nonces.filter { Date().timeIntervalSince($0.value) < 300 }
     if let encoded = request.clientDiagnostics,
       let signature = request.clientDiagnosticsMAC,
-      let report = Data(base64Encoded: encoded), report.count <= 2048,
+      let report = Data(base64Encoded: encoded), report.count <= 8192,
       let supplied = Data(hex: signature) {
       let expectedReportMAC = Data(HMAC<SHA256>.authenticationCode(
         for: Data("diagnostics|\(request.nonce.uuidString)|".utf8) + report,

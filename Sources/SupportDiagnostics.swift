@@ -1,6 +1,24 @@
 import Foundation
 
 enum SupportDiagnostics {
+  private static var eventsURL: URL { Collector.root.appendingPathComponent("support-events.json") }
+
+  static func record(_ message: String) {
+    let normalized = String(message.replacingOccurrences(of: "\n", with: " ").prefix(200))
+    var events = (try? JSONDecoder().decode([String].self,
+      from: Data(contentsOf: eventsURL))) ?? []
+    guard events.last?.hasSuffix(" | \(normalized)") != true else { return }
+    events.append("\(ISO8601DateFormatter().string(from: Date())) | \(normalized)")
+    if events.count > 80 { events.removeFirst(events.count - 80) }
+    try? JSONEncoder().encode(events).write(to: eventsURL, options: .atomic)
+  }
+
+  static func macLogText() -> String {
+    let events = (try? JSONDecoder().decode([String].self,
+      from: Data(contentsOf: eventsURL))) ?? []
+    return events.joined(separator: "\n")
+  }
+
   private static func file(_ name: String, for device: PairedDevice) -> URL {
     Collector.root.appendingPathComponent("support-\(device.physicalDeviceID.uuidString)-\(name).json")
   }
@@ -53,7 +71,8 @@ enum SupportDiagnostics {
       "pairingConfirmed": device.confirmedAt != nil,
       "pendingFiles": (try? Collector.pending(for: device).count) ?? -1,
       "deliveredFiles": Collector.delivered(for: device).count,
-      "lastCollection": lastCollection
+      "lastCollection": lastCollection,
+      "recentEvents": Array(macLogText().split(separator: "\n").suffix(30)).map(String.init)
     ]
     return (try? JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys])) ?? Data("{}".utf8)
   }

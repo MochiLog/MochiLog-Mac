@@ -1,19 +1,67 @@
 import AppKit
 import CoreImage.CIFilterBuiltins
 import CryptoKit
+import Sparkle
 import SwiftUI
 
 @main
 struct MochiLogMacApp: App {
   @StateObject private var model = CompanionModel()
+  @AppStorage(MacAppPreferences.menuBarKey) private var showMenuBar = false
+  @AppStorage(MacAppPreferences.hideDockKey) private var hideDock = false
+  private let updaterController: SPUStandardUpdaterController
+
+  init() {
+    SingleInstanceGuard.claim()
+    updaterController = SPUStandardUpdaterController(startingUpdater: true,
+      updaterDelegate: nil, userDriverDelegate: nil)
+  }
 
   var body: some Scene {
-    WindowGroup {
-      CompanionView()
+    Window("MochiLog Mac", id: "main") {
+      CompanionView(checkForUpdates: { updaterController.checkForUpdates(nil) })
         .environmentObject(model)
         .frame(minWidth: 680, minHeight: 660)
+        .onAppear { MacAppPreferences.applyDockVisibility() }
+        .onChange(of: showMenuBar) { _, _ in MacAppPreferences.applyDockVisibility() }
+        .onChange(of: hideDock) { _, _ in MacAppPreferences.applyDockVisibility() }
     }
     .windowResizability(.contentSize)
+    .commands {
+      CommandGroup(replacing: .newItem) {}
+      CommandGroup(after: .appInfo) {
+        Button("Check for Updates…") { updaterController.checkForUpdates(nil) }
+      }
+    }
+
+    MenuBarExtra("MochiLog Mac", systemImage: "battery.100percent",
+      isInserted: $showMenuBar) {
+      MacMenuBarContent(model: model,
+        checkForUpdates: { updaterController.checkForUpdates(nil) })
+    }
+  }
+}
+
+private struct MacMenuBarContent: View {
+  @Environment(\.openWindow) private var openWindow
+  @ObservedObject var model: CompanionModel
+  let checkForUpdates: () -> Void
+
+  var body: some View {
+    Button(MacTransferL10n.text("mt_000")) {
+      openWindow(id: "main")
+      NSApp.activate(ignoringOtherApps: true)
+    }
+    Button(MacTransferL10n.text("mt_001")) {
+      Task { await model.collectAll() }
+    }.disabled(model.isBusy || model.state.devices.isEmpty)
+    Button(MacTransferL10n.text("mt_002")) {
+      checkForUpdates()
+    }
+    Divider()
+    Text(model.status)
+    Divider()
+    Button(MacTransferL10n.text("mt_003")) { NSApp.terminate(nil) }
   }
 }
 
@@ -21,7 +69,9 @@ struct MochiLogMacApp: App {
 final class CompanionModel: ObservableObject {
   @Published var devices: [ConnectedDevice] = []
   @Published var selectedUDID: String?
-  @Published var status = "端末を検索してください"
+  @Published var status = "端末を検索してください" {
+    didSet { if status != oldValue { SupportDiagnostics.record(status) } }
+  }
   @Published var pairingCode: String?
   @Published var isPairingSystem = false
   @Published var isBusy = false
@@ -179,10 +229,15 @@ final class CompanionModel: ObservableObject {
 }
 
 private struct CompanionView: View {
+  let checkForUpdates: () -> Void
   @EnvironmentObject private var model: CompanionModel
   @State private var showingSupport = false
+  @State private var showingDebugLog = false
   @State private var supportDeviceID: String?
-  private var japanese: Bool { Locale.preferredLanguages.first?.hasPrefix("ja") == true }
+  @State private var launchesAtLogin = MacAppPreferences.launchesAtLogin
+  @State private var preferencesError: String?
+  @AppStorage(MacAppPreferences.menuBarKey) private var showMenuBar = false
+  @AppStorage(MacAppPreferences.hideDockKey) private var hideDock = false
   private var supportDevice: PairedDevice? {
     model.state.devices.first(where: { $0.udid == supportDeviceID })
       ?? model.state.devices.first(where: { $0.udid == model.selectedUDID })
@@ -197,29 +252,21 @@ private struct CompanionView: View {
             .font(.largeTitle).foregroundStyle(.green)
           VStack(alignment: .leading) {
             Text("MochiLog Mac").font(.largeTitle.bold())
-            Text(japanese ? "ワイヤレスログ転送 · ベータ" : "Wireless log transfer · Beta")
+            Text(MacTransferL10n.text("mt_004"))
               .foregroundStyle(.secondary)
           }
         }
-        GroupBox(japanese ? "利用条件と最初の設定" : "Requirements and first setup") {
+        GroupBox(MacTransferL10n.text("mt_005")) {
           VStack(alignment: .leading, spacing: 9) {
-            Text(japanese
-              ? "1. macOS 27 / iOS 27、同じWi-Fi、Bluetoothを使用します。iPhoneのロックを解除してください。"
-              : "1. Use macOS 27 and iOS 27, the same Wi-Fi, and Bluetooth. Unlock the iPhone.")
-            Text(japanese
-              ? "2. 初回のみ、iPhoneでデベロッパモードをオンにし、『設定 → デベロッパ → ペアリング済みMac』でこのMacを選びます。下の6桁コードを入力します。OSペアリング後はオフに戻せます。"
-              : "2. For first pairing only, enable Developer Mode and open Settings → Developer → Paired Macs. Choose this Mac and enter the six-digit code below. You may turn Developer Mode off afterwards.")
-            Text(japanese
-              ? "3. 端末を検索して選び、MochiLogのペアリングを作成します。iPhoneアプリの『Mac連携』でQRを読み取ります。"
-              : "3. Refresh and select the device, create MochiLog pairing, then scan its QR in the iPhone app's Mac transfer screen.")
-            Text(japanese
-              ? "4. 解析ログはiPhoneのロック解除中にのみ収集できます。Macが起動中なら定期収集し、iPhoneでMochiLogを開くと受信・解析します。"
-              : "4. Analytics logs can be collected only while the iPhone is unlocked. The Mac collects periodically while open; open MochiLog on the iPhone to receive and import.")
+            Text(MacTransferL10n.text("mt_006"))
+            Text(MacTransferL10n.text("mt_007"))
+            Text(MacTransferL10n.text("mt_008"))
+            Text(MacTransferL10n.text("mt_009"))
           }.frame(maxWidth: .infinity, alignment: .leading).padding(8)
         }
         HStack {
-          Button(model.isPairingSystem ? (japanese ? "待機を中止" : "Stop pairing")
-            : (japanese ? "OSペアリングを開始" : "Start OS pairing")) {
+          Button(model.isPairingSystem ? (MacTransferL10n.text("mt_010"))
+            : (MacTransferL10n.text("mt_011"))) {
               model.isPairingSystem ? model.stopSystemPairing() : model.startSystemPairing()
             }
           if let code = model.pairingCode {
@@ -227,28 +274,28 @@ private struct CompanionView: View {
               .textSelection(.enabled)
           }
         }
-        GroupBox(japanese ? "端末とMochiLogのペアリング" : "Devices and MochiLog pairing") {
+        GroupBox(MacTransferL10n.text("mt_012")) {
           VStack(alignment: .leading, spacing: 12) {
             HStack {
-              Picker(japanese ? "端末" : "Device", selection: $model.selectedUDID) {
-                Text(japanese ? "選択してください" : "Select a device").tag(String?.none)
+              Picker(MacTransferL10n.text("mt_013"), selection: $model.selectedUDID) {
+                Text(MacTransferL10n.text("mt_014")).tag(String?.none)
                 ForEach(model.devices) { device in
                   Text("\(device.name) (\(device.model))").tag(Optional(device.udid))
                 }
               }
-              Button(japanese ? "再検索" : "Refresh") { Task { await model.refresh() } }
+              Button(MacTransferL10n.text("mt_015")) { Task { await model.refresh() } }
             }
             if let selected = model.selected {
               if model.pairedSelected == nil {
-                Button(japanese ? "MochiLogペアリングを作成" : "Create MochiLog pairing") {
+                Button(MacTransferL10n.text("mt_016")) {
                   model.pairApp()
                 }
               } else if model.pairedSelected?.confirmedAt != nil && !model.showPairingQR {
                 HStack {
-                  Label(japanese ? "iPhoneとペアリング済み" : "Paired with iPhone",
+                  Label(MacTransferL10n.text("mt_017"),
                     systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.green)
-                  Button(japanese ? "QRを再表示" : "Show QR again") {
+                  Button(MacTransferL10n.text("mt_018")) {
                     model.showPairingQR = true
                   }
                 }
@@ -258,13 +305,11 @@ private struct CompanionView: View {
                     .frame(width: 210, height: 210)
                   VStack(alignment: .leading, spacing: 8) {
                     Text(selected.name).font(.headline)
-                    Text(japanese ? "このQRは選択した端末専用です。iPhoneのMochiLogで読み取ってください。再インストール後も同じ個体IDを復元できます。"
-                      : "This QR belongs to the selected device. Scan it in MochiLog. The same device ID is restored after reinstalling the iPhone app.")
-                    Text(japanese ? "QRには秘密鍵が含まれます。公開・共有しないでください。"
-                      : "The QR contains a secret key. Do not publish or share it.")
+                    Text(MacTransferL10n.text("mt_019"))
+                    Text(MacTransferL10n.text("mt_020"))
                       .font(.caption).foregroundStyle(.secondary)
                     if model.pairedSelected?.confirmedAt != nil {
-                      Button(japanese ? "QRを隠す" : "Hide QR") {
+                      Button(MacTransferL10n.text("mt_021")) {
                         model.showPairingQR = false
                       }
                     }
@@ -275,7 +320,7 @@ private struct CompanionView: View {
           }.padding(8)
         }
         HStack {
-          Button(japanese ? "今すぐログを収集" : "Collect logs now") {
+          Button(MacTransferL10n.text("mt_001")) {
             Task { await model.collectAll() }
           }.disabled(model.isBusy || model.state.devices.isEmpty)
           if model.isBusy { ProgressView() }
@@ -287,27 +332,51 @@ private struct CompanionView: View {
           }
           Text(model.status).foregroundStyle(.secondary).textSelection(.enabled)
         }
-        GroupBox(japanese ? "Mac連携のサポート" : "Mac transfer support") {
+        GroupBox(MacTransferL10n.text("mt_022")) {
           VStack(alignment: .leading, spacing: 8) {
-            Text(japanese
-              ? "接続できない場合も、保存済みの診断情報を添付して報告できます。"
-              : "You can report connection failures with saved diagnostics, even while offline.")
+            Text(MacTransferL10n.text("mt_023"))
             HStack {
-              Picker(japanese ? "対象の端末" : "Affected device", selection: $supportDeviceID) {
-                Text(japanese ? "選択してください" : "Select a device").tag(String?.none)
+              Picker(MacTransferL10n.text("mt_024"), selection: $supportDeviceID) {
+                Text(MacTransferL10n.text("mt_014")).tag(String?.none)
                 ForEach(model.state.devices) { device in
                   Text("\(device.name) (\(device.model))").tag(Optional(device.udid))
                 }
               }.frame(maxWidth: 320)
               Spacer()
-              Button(japanese ? "問い合わせる" : "Contact support") {
+              Button(MacTransferL10n.text("mt_025")) {
                 showingSupport = true
               }.disabled(supportDevice == nil)
+              Button(MacTransferL10n.text("mt_026")) {
+                showingDebugLog = true
+              }
             }
           }.padding(8)
             .onAppear {
               if supportDeviceID == nil { supportDeviceID = model.state.devices.first?.udid }
             }
+        }
+        GroupBox(MacTransferL10n.text("mt_027")) {
+          VStack(alignment: .leading, spacing: 10) {
+            Toggle(MacTransferL10n.text("mt_028"),
+              isOn: Binding(get: { launchesAtLogin }, set: { desired in
+                do {
+                  try MacAppPreferences.setLaunchAtLogin(desired)
+                  launchesAtLogin = MacAppPreferences.launchesAtLogin
+                  preferencesError = nil
+                } catch {
+                  launchesAtLogin = MacAppPreferences.launchesAtLogin
+                  preferencesError = error.localizedDescription
+                }
+              }))
+            Toggle(MacTransferL10n.text("mt_029"), isOn: $showMenuBar)
+            Toggle(MacTransferL10n.text("mt_030"),
+              isOn: $hideDock)
+              .disabled(!showMenuBar)
+            Button(MacTransferL10n.text("mt_002")) {
+              checkForUpdates()
+            }
+            if let preferencesError { Text(preferencesError).foregroundStyle(.red) }
+          }.padding(8)
         }
       }.padding(24)
     }
@@ -315,6 +384,9 @@ private struct CompanionView: View {
       if let device = supportDevice {
         MacTransferSupportView(device: device)
       }
+    }
+    .sheet(isPresented: $showingDebugLog) {
+      MacTransferDebugLogView(device: supportDevice)
     }
   }
 }

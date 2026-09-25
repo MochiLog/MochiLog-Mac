@@ -14,11 +14,17 @@ Build/venv/bin/pyinstaller --onefile --noconfirm --clean \
   --distpath Build/Collector --workpath Build/PyInstaller CollectorEntry.py
 Build/Collector/pymobiledevice3 --help > Build/collector-smoke.txt
 xcodegen generate --spec project.yml
+app="Build/DerivedData/Build/Products/Release/MochiLog Mac.app"
+# A previously notarized app cannot be modified in place on macOS. Keep it in
+# the staging directory until the new build has completed.
+if [[ -d "$app" ]]; then
+  mkdir -p Build/Stage
+  mv "$app" "Build/Stage/previous-$(date +%s).app"
+fi
 xcodebuild -project MochiLogMac.xcodeproj -scheme MochiLogMac \
   -configuration Release -destination 'platform=macOS' \
   -derivedDataPath Build/DerivedData CODE_SIGNING_ALLOWED=NO build
 
-app="Build/DerivedData/Build/Products/Release/MochiLog Mac.app"
 mkdir -p "$app/Contents/Resources/Collector" Build/Stage
 cp Build/Collector/pymobiledevice3 "$app/Contents/Resources/Collector/pymobiledevice3"
 cp LICENSE "$app/Contents/Resources/LICENSE-MochiLog.txt"
