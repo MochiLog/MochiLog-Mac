@@ -1,0 +1,18 @@
+default_platform(:mac)
+
+platform :mac do
+  desc "Build a self-contained Developer ID signed beta DMG"
+  lane :beta_dmg do
+    sh("bash '#{File.expand_path('../scripts/build-beta-dmg.sh', __dir__)}'")
+  end
+
+  desc "Notarize and staple the signed beta DMG using a notarytool keychain profile"
+  lane :notarize_beta do
+    profile = ENV["MOCHILOG_NOTARY_PROFILE"]
+    UI.user_error!("Set MOCHILOG_NOTARY_PROFILE to a notarytool keychain profile") if profile.to_s.empty?
+    dmg = File.expand_path("../Build/MochiLog-Mac-Beta.dmg", __dir__)
+    sh("xcrun notarytool submit '#{dmg}' --keychain-profile '#{profile}' --wait")
+    sh("xcrun stapler staple '#{dmg}'")
+    sh("xcrun stapler validate '#{dmg}'")
+  end
+end

@@ -1,0 +1,28 @@
+name: MochiLogMac
+options:
+  deploymentTarget:
+    macOS: "27.0"
+targets:
+  MochiLogMac:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: net.ryuya-dev.MochiLog.mac
+        PRODUCT_NAME: MochiLog Mac
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        MACOSX_DEPLOYMENT_TARGET: "27.0"
+        SWIFT_VERSION: "5.0"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: MochiLog Mac
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.utilities
+        INFOPLIST_KEY_NSLocalNetworkUsageDescription: iPhoneへ解析ログを転送するためにローカルネットワークを使用します。
+        ENABLE_HARDENED_RUNTIME: YES
+        CODE_SIGN_ENTITLEMENTS: MacCompanion.entitlements
+    entitlements:
+      path: MacCompanion.entitlements
+      properties:
+        com.apple.security.cs.disable-library-validation: true

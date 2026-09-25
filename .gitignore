@@ -1,0 +1,4 @@
+Build/
+MochiLogMac.xcodeproj/
+*.spec
+__pycache__/
