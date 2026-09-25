@@ -7,9 +7,13 @@ MochiLogのiOS/iPadOS 27向けワイヤレスログ転送機能のMac用ベー�
 1. 署名済みDMGを開き、`MochiLog Mac.app`をApplicationsへコピーします。Python、Xcode、Homebrewの追加インストールは不要です。
 2. iPhone/iPadとMacを同じWi-Fiに接続し、Bluetoothをオンにします。初回OSペアリング時のみiPhone/iPadのデベロッパモードをオンにし、Macアプリの案内に従って6桁コードを入力します。完了後はオフに戻せます。
 3. Macアプリで端末を選んでMochiLogペアリングを作成し、iPhone/iPadのMochiLogの「設定 → 高度な設定 → Mac連携」でQRコードを読み取ります。QRコードには秘密鍵が含まれるため共有しないでください。
-4. Macアプリを起動したままにすると定期的にログを収集します。iPhone/iPadのMochiLogを開くと転送と取り込みが始まります。
+4. Macアプリを起動したままにすると定期的にログを収集します。Macは明らかに対象外のsessionファイル、極端に短いファイル、電池ログの必須キーがないファイルを除外します。ペアリング済みApple WatchのログはiPhone内の代理端末領域から取得し、ログのOS表記でiPhone/Watchを区別します。同日・同名のログも取得元ごとに保持します。iPhone/iPadのMochiLogを開くと転送と取り込みが始まり、値の解析・記録は端末側で行います。
 
-ベータ版です。端末探索やログ取得には端末のロック解除が必要な場合があります。iOS 16の端末はMochiLog本体を引き続き使えますが、このMac連携機能の対象外です。
+ベータ版です。解析ログの収集は端末のロック解除中にのみ可能です。iOS 16の端末はMochiLog本体を引き続き使えますが、このMac連携機能の対象外です。
+
+## GitHub Actionsで署名済みDMGを作る
+
+Actionsの「Signed beta DMG」を手動実行すると、macOS 27/Xcode 27のランナーでビルドし、Developer ID署名、公証、ステープル、Gatekeeper検証を行い、DMGを成果物として保存します。リポジトリのActions secretsに`MOCHILOG_CERTIFICATE_P12_BASE64`（空パスワードのDeveloper ID Application p12をbase64化した値）、`MOCHILOG_NOTARY_KEY_BASE64`（App Store Connect APIキーp8のbase64）、`MOCHILOG_NOTARY_KEY_ID`、`MOCHILOG_NOTARY_ISSUER_ID`を設定してください。証明書やAPIキーの実体はリポジトリへコミットしません。
 
 ## ビルド
 

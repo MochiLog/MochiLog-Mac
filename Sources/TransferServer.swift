@@ -17,6 +17,7 @@ final class TransferServer: @unchecked Sendable {
   private var state: CompanionState
   private var nonces: [UUID: Date] = [:]
   var onStatus: ((String) -> Void)?
+  var onConfirmed: ((UUID) -> Void)?
 
   init(state: CompanionState) { self.state = state }
 
@@ -74,21 +75,29 @@ final class TransferServer: @unchecked Sendable {
     guard let received = Data(hex: request.mac), received == expected else {
       connection.cancel(); return
     }
+    if let index = state.devices.firstIndex(where: {
+      $0.physicalDeviceID == request.physicalDeviceID
+    }), state.devices[index].confirmedAt == nil {
+      state.devices[index].confirmedAt = Date()
+      do {
+        try Collector.saveState(state)
+        onConfirmed?(request.physicalDeviceID)
+      } catch {
+        onStatus?("ペアリング確認の保存に失敗: \(error.localizedDescription)")
+      }
+    }
     nonces[request.nonce] = Date()
     nonces = nonces.filter { Date().timeIntervalSince($0.value) < 300 }
     do {
-      let directory = try Collector.directory(for: device)
       if let ack = request.ack,
-        ack == URL(fileURLWithPath: ack).lastPathComponent,
-        ack.hasPrefix("Analytics-"), ack.hasSuffix(".ips.ca.synced") {
-        let acknowledged = directory.appendingPathComponent(ack)
+        let acknowledged = try Collector.queueFile(for: ack, device: device) {
         if FileManager.default.fileExists(atPath: acknowledged.path) {
           try Collector.markDelivered(ack, for: device)
           try FileManager.default.removeItem(at: acknowledged)
         }
       }
       let next = try Collector.pending(for: device).first
-      let name = next?.lastPathComponent ?? ""
+      let name = try next.map { try Collector.queueToken(for: $0, device: device) } ?? ""
       let content = try next.map { try Data(contentsOf: $0, options: .mappedIfSafe) } ?? Data()
       guard content.count <= 64 * 1024 * 1024,
         let nameData = name.data(using: .utf8), nameData.count <= 1024

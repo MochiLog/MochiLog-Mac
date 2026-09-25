@@ -25,6 +25,9 @@ final class CompanionModel: ObservableObject {
   @Published var pairingCode: String?
   @Published var isPairingSystem = false
   @Published var isBusy = false
+  @Published var collectionDone = 0
+  @Published var collectionTotal = 0
+  @Published var showPairingQR = false
   @Published var state = Collector.loadState()
   private var server: TransferServer?
   private var pairProcess: Process?
@@ -34,6 +37,13 @@ final class CompanionModel: ObservableObject {
     self.server = server
     server.onStatus = { [weak self] message in
       Task { @MainActor in self?.status = message }
+    }
+    server.onConfirmed = { [weak self] _ in
+      Task { @MainActor in
+        self?.state = Collector.loadState()
+        self?.showPairingQR = false
+        self?.status = "iPhoneとのペアリングが完了しました"
+      }
     }
     do { try server.start() }
     catch { status = "転送待機を開始できません: \(error.localizedDescription)" }
@@ -68,6 +78,7 @@ final class CompanionModel: ObservableObject {
     do {
       try Collector.saveState(state)
       server?.update(state: state)
+      showPairingQR = true
       status = "\(selected.name)のQRコードをiPhoneで読み取ってください"
     } catch { status = "ペアリング情報を保存できません: \(error.localizedDescription)" }
   }
@@ -92,10 +103,20 @@ final class CompanionModel: ObservableObject {
     defer { isBusy = false }
     for device in state.devices {
       do {
-        let count = try await Task.detached(priority: .utility) {
-          try Collector.collect(device)
+        collectionDone = 0
+        collectionTotal = 0
+        let report = try await Task.detached(priority: .utility) { [weak self] in
+          try Collector.collect(device) { done, total in
+            Task { @MainActor [weak self] in
+              self?.collectionDone = done
+              self?.collectionTotal = total
+              self?.status = "\(device.name): \(done)/\(total)件を取得"
+            }
+          }
         }.value
-        status = "\(device.name): \(count)件の新しいログを保存しました"
+        status = report.failed == 0
+          ? "\(device.name): 電池ログ\(report.saved)件保存、対象外\(report.skipped)件を除外"
+          : "\(device.name): \(report.saved)件保存、対象外\(report.skipped)件、取得失敗\(report.failed)件。次回再試行します。\(report.lastError ?? "")"
       } catch {
         status = "\(device.name): \(error.localizedDescription)"
       }
@@ -137,17 +158,17 @@ final class CompanionModel: ObservableObject {
         if let range = output.range(of: #"Enter this code on your device: [0-9]{6}"#,
           options: .regularExpression) {
           let code = String(output[range].suffix(6))
-          await MainActor.run { self?.pairingCode = code }
+          await MainActor.run { [weak self] in self?.pairingCode = code }
         }
       }
       process.waitUntilExit()
-      await MainActor.run {
+      await MainActor.run { [weak self] in
         self?.isPairingSystem = false
         self?.pairingCode = nil
         self?.status = process.terminationStatus == 0
           ? "Macと端末のOSペアリングが完了しました。端末を検索してください。"
           : "OSペアリングが完了しませんでした。条件を確認して再試行してください。"
-        Task { await self?.refresh() }
+        Task { [weak self] in await self?.refresh() }
       }
     }
   }
@@ -183,8 +204,8 @@ private struct CompanionView: View {
               ? "3. 端末を検索して選び、MochiLogのペアリングを作成します。iPhoneアプリの『Mac連携』でQRを読み取ります。"
               : "3. Refresh and select the device, create MochiLog pairing, then scan its QR in the iPhone app's Mac transfer screen.")
             Text(japanese
-              ? "4. Macが起動中なら定期収集します。iPhoneでMochiLogを開くと受信・解析します。取得時はiPhoneのロック解除が必要な場合があります。"
-              : "4. The Mac collects periodically while open. Open MochiLog on the iPhone to receive and import. Collection may require the iPhone to be unlocked.")
+              ? "4. 解析ログはiPhoneのロック解除中にのみ収集できます。Macが起動中なら定期収集し、iPhoneでMochiLogを開くと受信・解析します。"
+              : "4. Analytics logs can be collected only while the iPhone is unlocked. The Mac collects periodically while open; open MochiLog on the iPhone to receive and import.")
           }.frame(maxWidth: .infinity, alignment: .leading).padding(8)
         }
         HStack {
@@ -213,6 +234,15 @@ private struct CompanionView: View {
                 Button(japanese ? "MochiLogペアリングを作成" : "Create MochiLog pairing") {
                   model.pairApp()
                 }
+              } else if model.pairedSelected?.confirmedAt != nil && !model.showPairingQR {
+                HStack {
+                  Label(japanese ? "iPhoneとペアリング済み" : "Paired with iPhone",
+                    systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                  Button(japanese ? "QRを再表示" : "Show QR again") {
+                    model.showPairingQR = true
+                  }
+                }
               } else if let url = model.pairingURL, let image = QRCode.image(for: url) {
                 HStack(alignment: .top, spacing: 20) {
                   Image(nsImage: image).interpolation(.none).resizable()
@@ -224,6 +254,11 @@ private struct CompanionView: View {
                     Text(japanese ? "QRには秘密鍵が含まれます。公開・共有しないでください。"
                       : "The QR contains a secret key. Do not publish or share it.")
                       .font(.caption).foregroundStyle(.secondary)
+                    if model.pairedSelected?.confirmedAt != nil {
+                      Button(japanese ? "QRを隠す" : "Hide QR") {
+                        model.showPairingQR = false
+                      }
+                    }
                   }
                 }
               }
@@ -235,6 +270,12 @@ private struct CompanionView: View {
             Task { await model.collectAll() }
           }.disabled(model.isBusy || model.state.devices.isEmpty)
           if model.isBusy { ProgressView() }
+          if model.isBusy && model.collectionTotal > 0 {
+            ProgressView(value: Double(model.collectionDone), total: Double(model.collectionTotal))
+              .frame(width: 160)
+            Text("\(model.collectionDone)/\(model.collectionTotal)")
+              .monospacedDigit()
+          }
           Text(model.status).foregroundStyle(.secondary).textSelection(.enabled)
         }
       }.padding(24)
