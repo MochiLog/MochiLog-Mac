@@ -8,6 +8,8 @@ private struct PullRequest: Decodable {
   let nonce: UUID
   let ack: String?
   let mac: String
+  let clientDiagnostics: String?
+  let clientDiagnosticsMAC: String?
 }
 
 /// Local-only, authenticated pull server. The full filename and log are encrypted.
@@ -88,6 +90,17 @@ final class TransferServer: @unchecked Sendable {
     }
     nonces[request.nonce] = Date()
     nonces = nonces.filter { Date().timeIntervalSince($0.value) < 300 }
+    if let encoded = request.clientDiagnostics,
+      let signature = request.clientDiagnosticsMAC,
+      let report = Data(base64Encoded: encoded), report.count <= 2048,
+      let supplied = Data(hex: signature) {
+      let expectedReportMAC = Data(HMAC<SHA256>.authenticationCode(
+        for: Data("diagnostics|\(request.nonce.uuidString)|".utf8) + report,
+        using: SymmetricKey(data: device.secret)))
+      if supplied == expectedReportMAC {
+        try? SupportDiagnostics.savePhoneReport(report, for: device)
+      }
+    }
     do {
       if let ack = request.ack,
         let acknowledged = try Collector.queueFile(for: ack, device: device) {
@@ -107,6 +120,9 @@ final class TransferServer: @unchecked Sendable {
       plain.append(UInt8(nameData.count & 0xff))
       plain.append(nameData)
       plain.append(content)
+      if name.isEmpty {
+        plain.append(SupportDiagnostics.macReport(for: device))
+      }
       let sealed = try AES.GCM.seal(plain, using: SymmetricKey(data: device.secret))
       guard let combined = sealed.combined else { throw CollectorError.failed("暗号化に失敗しました") }
       var length = UInt32(combined.count).bigEndian

@@ -114,10 +114,12 @@ final class CompanionModel: ObservableObject {
             }
           }
         }.value
+        SupportDiagnostics.saveCollection(report, error: nil, for: device)
         status = report.failed == 0
           ? "\(device.name): 電池ログ\(report.saved)件保存、対象外\(report.skipped)件を除外"
           : "\(device.name): \(report.saved)件保存、対象外\(report.skipped)件、取得失敗\(report.failed)件。次回再試行します。\(report.lastError ?? "")"
       } catch {
+        SupportDiagnostics.saveCollection(nil, error: error, for: device)
         status = "\(device.name): \(error.localizedDescription)"
       }
     }
@@ -178,6 +180,7 @@ final class CompanionModel: ObservableObject {
 
 private struct CompanionView: View {
   @EnvironmentObject private var model: CompanionModel
+  @State private var showingSupport = false
   private var japanese: Bool { Locale.preferredLanguages.first?.hasPrefix("ja") == true }
 
   var body: some View {
@@ -278,7 +281,23 @@ private struct CompanionView: View {
           }
           Text(model.status).foregroundStyle(.secondary).textSelection(.enabled)
         }
+        GroupBox(japanese ? "Mac連携のサポート" : "Mac transfer support") {
+          HStack {
+            Text(japanese
+              ? "不具合の報告にはMacとiPhoneの診断情報を添付できます。"
+              : "Attach Mac and iPhone diagnostics when reporting a problem.")
+            Spacer()
+            Button(japanese ? "問い合わせる" : "Contact support") {
+              showingSupport = true
+            }.disabled(model.pairedSelected == nil)
+          }.padding(8)
+        }
       }.padding(24)
+    }
+    .sheet(isPresented: $showingSupport) {
+      if let device = model.pairedSelected {
+        MacTransferSupportView(device: device)
+      }
     }
   }
 }
