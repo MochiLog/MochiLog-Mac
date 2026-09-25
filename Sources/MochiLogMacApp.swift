@@ -181,7 +181,13 @@ final class CompanionModel: ObservableObject {
 private struct CompanionView: View {
   @EnvironmentObject private var model: CompanionModel
   @State private var showingSupport = false
+  @State private var supportDeviceID: String?
   private var japanese: Bool { Locale.preferredLanguages.first?.hasPrefix("ja") == true }
+  private var supportDevice: PairedDevice? {
+    model.state.devices.first(where: { $0.udid == supportDeviceID })
+      ?? model.state.devices.first(where: { $0.udid == model.selectedUDID })
+      ?? model.state.devices.first
+  }
 
   var body: some View {
     ScrollView {
@@ -282,20 +288,31 @@ private struct CompanionView: View {
           Text(model.status).foregroundStyle(.secondary).textSelection(.enabled)
         }
         GroupBox(japanese ? "Mac連携のサポート" : "Mac transfer support") {
-          HStack {
+          VStack(alignment: .leading, spacing: 8) {
             Text(japanese
-              ? "不具合の報告にはMacとiPhoneの診断情報を添付できます。"
-              : "Attach Mac and iPhone diagnostics when reporting a problem.")
-            Spacer()
-            Button(japanese ? "問い合わせる" : "Contact support") {
-              showingSupport = true
-            }.disabled(model.pairedSelected == nil)
+              ? "接続できない場合も、保存済みの診断情報を添付して報告できます。"
+              : "You can report connection failures with saved diagnostics, even while offline.")
+            HStack {
+              Picker(japanese ? "対象の端末" : "Affected device", selection: $supportDeviceID) {
+                Text(japanese ? "選択してください" : "Select a device").tag(String?.none)
+                ForEach(model.state.devices) { device in
+                  Text("\(device.name) (\(device.model))").tag(Optional(device.udid))
+                }
+              }.frame(maxWidth: 320)
+              Spacer()
+              Button(japanese ? "問い合わせる" : "Contact support") {
+                showingSupport = true
+              }.disabled(supportDevice == nil)
+            }
           }.padding(8)
+            .onAppear {
+              if supportDeviceID == nil { supportDeviceID = model.state.devices.first?.udid }
+            }
         }
       }.padding(24)
     }
     .sheet(isPresented: $showingSupport) {
-      if let device = model.pairedSelected {
+      if let device = supportDevice {
         MacTransferSupportView(device: device)
       }
     }
