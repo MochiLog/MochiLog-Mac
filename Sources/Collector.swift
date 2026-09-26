@@ -60,6 +60,13 @@ private struct RemoteLog {
 
 enum Collector {
   static let root: URL = {
+    #if TRANSFER_TESTING
+    if let path = ProcessInfo.processInfo.environment["MOCHILOG_TRANSFER_TEST_ROOT"] {
+      let base = URL(fileURLWithPath: path, isDirectory: true)
+      try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+      return base
+    }
+    #endif
     let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
       .appendingPathComponent("MochiLog Mac", isDirectory: true)
     try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
@@ -182,13 +189,16 @@ enum Collector {
 
   static func queueToken(for file: URL, device: PairedDevice) throws -> String {
     let parent = file.deletingLastPathComponent()
-    if parent == (try directory(for: device)) { return file.lastPathComponent }
+    if parent.standardizedFileURL.path == (try directory(for: device)).standardizedFileURL.path {
+      return file.lastPathComponent
+    }
     if let kind = LogKind(rawValue: parent.lastPathComponent) {
       return "\(kind.rawValue)::\(file.lastPathComponent)"
     }
     let source = parent.lastPathComponent
     guard let kind = LogKind(rawValue: parent.deletingLastPathComponent().lastPathComponent),
-      parent == (try directory(for: device, kind: kind, source: source)) else {
+      parent.standardizedFileURL.path == (try directory(for: device, kind: kind,
+        source: source)).standardizedFileURL.path else {
       throw CollectorError.failed(MacTransferL10n.text("mt_c_06"))
     }
     return "\(kind.rawValue)::\(source)::\(file.lastPathComponent)"

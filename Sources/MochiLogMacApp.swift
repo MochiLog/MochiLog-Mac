@@ -21,7 +21,7 @@ struct MochiLogMacApp: App {
     Window("MochiLog Mac", id: "main") {
       CompanionView(checkForUpdates: { updaterController.checkForUpdates(nil) })
         .environmentObject(model)
-        .frame(minWidth: 680, minHeight: 660)
+        .frame(minWidth: 780, minHeight: 620)
         .onAppear { MacAppPreferences.applyDockVisibility() }
         .onChange(of: showMenuBar) { _, _ in MacAppPreferences.applyDockVisibility() }
         .onChange(of: hideDock) { _, _ in MacAppPreferences.applyDockVisibility() }
@@ -229,8 +229,30 @@ final class CompanionModel: ObservableObject {
 }
 
 private struct CompanionView: View {
+  private enum Page: String, CaseIterable, Identifiable {
+    case overview, devices, support, settings
+    var id: Self { self }
+    var titleKey: String {
+      switch self {
+      case .overview: "mt_nav_overview"
+      case .devices: "mt_nav_devices"
+      case .support: "mt_022"
+      case .settings: "mt_nav_settings"
+      }
+    }
+    var symbol: String {
+      switch self {
+      case .overview: "square.grid.2x2"
+      case .devices: "iphone.gen3"
+      case .support: "questionmark.circle"
+      case .settings: "gearshape"
+      }
+    }
+  }
+
   let checkForUpdates: () -> Void
   @EnvironmentObject private var model: CompanionModel
+  @State private var page: Page? = .overview
   @State private var showingSupport = false
   @State private var showingDebugLog = false
   @State private var showingLicenses = false
@@ -246,149 +268,40 @@ private struct CompanionView: View {
   }
 
   var body: some View {
-    ScrollView {
-      VStack(alignment: .leading, spacing: 20) {
-        HStack {
-          Image(systemName: "iphone.and.arrow.forward")
-            .font(.largeTitle).foregroundStyle(.green)
-          VStack(alignment: .leading) {
-            Text("MochiLog Mac").font(.largeTitle.bold())
-            Text(MacTransferL10n.text("mt_004"))
-              .foregroundStyle(.secondary)
+    NavigationSplitView {
+      List(Page.allCases, selection: $page) { item in
+        Label(MacTransferL10n.text(item.titleKey), systemImage: item.symbol)
+          .tag(item)
+      }
+      .listStyle(.sidebar)
+      .navigationSplitViewColumnWidth(min: 170, ideal: 190, max: 230)
+    } detail: {
+      ScrollView {
+        VStack(alignment: .leading, spacing: 24) {
+          HStack(spacing: 14) {
+            Image(systemName: page?.symbol ?? "square.grid.2x2")
+              .font(.title2).foregroundStyle(.green)
+              .frame(width: 44, height: 44)
+              .background(.green.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
+            VStack(alignment: .leading, spacing: 3) {
+              Text(MacTransferL10n.text(page?.titleKey ?? "mt_nav_overview"))
+                .font(.largeTitle.bold())
+              Text(MacTransferL10n.text("mt_004"))
+                .font(.subheadline).foregroundStyle(.secondary)
+            }
+          }
+          switch page ?? .overview {
+          case .overview: overview
+          case .devices: devices
+          case .support: support
+          case .settings: settings
           }
         }
-        GroupBox(MacTransferL10n.text("mt_005")) {
-          VStack(alignment: .leading, spacing: 9) {
-            Text(MacTransferL10n.text("mt_006"))
-            Text(MacTransferL10n.text("mt_007"))
-            Text(MacTransferL10n.text("mt_008"))
-            Text(MacTransferL10n.text("mt_009"))
-          }.frame(maxWidth: .infinity, alignment: .leading).padding(8)
-        }
-        HStack {
-          Button(model.isPairingSystem ? (MacTransferL10n.text("mt_010"))
-            : (MacTransferL10n.text("mt_011"))) {
-              model.isPairingSystem ? model.stopSystemPairing() : model.startSystemPairing()
-            }
-          if let code = model.pairingCode {
-            Text(code).font(.system(size: 26, weight: .bold, design: .monospaced))
-              .textSelection(.enabled)
-          }
-        }
-        GroupBox(MacTransferL10n.text("mt_012")) {
-          VStack(alignment: .leading, spacing: 12) {
-            HStack {
-              Picker(MacTransferL10n.text("mt_013"), selection: $model.selectedUDID) {
-                Text(MacTransferL10n.text("mt_014")).tag(String?.none)
-                ForEach(model.devices) { device in
-                  Text("\(device.name) (\(device.model))").tag(Optional(device.udid))
-                }
-              }
-              Button(MacTransferL10n.text("mt_015")) { Task { await model.refresh() } }
-            }
-            if let selected = model.selected {
-              if model.pairedSelected == nil {
-                Button(MacTransferL10n.text("mt_016")) {
-                  model.pairApp()
-                }
-              } else if model.pairedSelected?.confirmedAt != nil && !model.showPairingQR {
-                HStack {
-                  Label(MacTransferL10n.text("mt_017"),
-                    systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
-                  Button(MacTransferL10n.text("mt_018")) {
-                    model.showPairingQR = true
-                  }
-                }
-              } else if let url = model.pairingURL, let image = QRCode.image(for: url) {
-                HStack(alignment: .top, spacing: 20) {
-                  Image(nsImage: image).interpolation(.none).resizable()
-                    .frame(width: 210, height: 210)
-                  VStack(alignment: .leading, spacing: 8) {
-                    Text(selected.name).font(.headline)
-                    Text(MacTransferL10n.text("mt_019"))
-                    Text(MacTransferL10n.text("mt_020"))
-                      .font(.caption).foregroundStyle(.secondary)
-                    if model.pairedSelected?.confirmedAt != nil {
-                      Button(MacTransferL10n.text("mt_021")) {
-                        model.showPairingQR = false
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }.padding(8)
-        }
-        HStack {
-          Button(MacTransferL10n.text("mt_001")) {
-            Task { await model.collectAll() }
-          }.disabled(model.isBusy || model.state.devices.isEmpty)
-          if model.isBusy { ProgressView() }
-          if model.isBusy && model.collectionTotal > 0 {
-            ProgressView(value: Double(model.collectionDone), total: Double(model.collectionTotal))
-              .frame(width: 160)
-            Text("\(model.collectionDone)/\(model.collectionTotal)")
-              .monospacedDigit()
-          }
-          Text(model.status).foregroundStyle(.secondary).textSelection(.enabled)
-        }
-        GroupBox(MacTransferL10n.text("mt_022")) {
-          VStack(alignment: .leading, spacing: 8) {
-            Text(MacTransferL10n.text("mt_023"))
-            HStack {
-              Picker(MacTransferL10n.text("mt_024"), selection: $supportDeviceID) {
-                Text(MacTransferL10n.text("mt_014")).tag(String?.none)
-                ForEach(model.state.devices) { device in
-                  Text("\(device.name) (\(device.model))").tag(Optional(device.udid))
-                }
-              }.frame(maxWidth: 320)
-              Spacer()
-              Button(MacTransferL10n.text("mt_025")) {
-                showingSupport = true
-              }.disabled(supportDevice == nil)
-              Button(MacTransferL10n.text("mt_026")) {
-                showingDebugLog = true
-              }
-              Button(MacTransferL10n.text("mt_l_00")) {
-                showingLicenses = true
-              }
-            }
-            HStack(spacing: 16) {
-              Link(MacTransferL10n.text("mt_l_07"),
-                destination: URL(string: "https://mochilog.ryuya-dev.net/privacy")!)
-              Link(MacTransferL10n.text("mt_l_08"),
-                destination: URL(string: "https://mochilog.ryuya-dev.net/terms")!)
-            }
-          }.padding(8)
-            .onAppear {
-              if supportDeviceID == nil { supportDeviceID = model.state.devices.first?.udid }
-            }
-        }
-        GroupBox(MacTransferL10n.text("mt_027")) {
-          VStack(alignment: .leading, spacing: 10) {
-            Toggle(MacTransferL10n.text("mt_028"),
-              isOn: Binding(get: { launchesAtLogin }, set: { desired in
-                do {
-                  try MacAppPreferences.setLaunchAtLogin(desired)
-                  launchesAtLogin = MacAppPreferences.launchesAtLogin
-                  preferencesError = nil
-                } catch {
-                  launchesAtLogin = MacAppPreferences.launchesAtLogin
-                  preferencesError = error.localizedDescription
-                }
-              }))
-            Toggle(MacTransferL10n.text("mt_029"), isOn: $showMenuBar)
-            Toggle(MacTransferL10n.text("mt_030"),
-              isOn: $hideDock)
-              .disabled(!showMenuBar)
-            Button(MacTransferL10n.text("mt_002")) {
-              checkForUpdates()
-            }
-            if let preferencesError { Text(preferencesError).foregroundStyle(.red) }
-          }.padding(8)
-        }
-      }.padding(24)
+        .frame(maxWidth: 720, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .padding(30)
+      }
+      .background(Color(nsColor: .windowBackgroundColor))
     }
     .sheet(isPresented: $showingSupport) {
       if let device = supportDevice {
@@ -400,6 +313,184 @@ private struct CompanionView: View {
     }
     .sheet(isPresented: $showingLicenses) {
       MacLicensesView()
+    }
+  }
+
+  private var overview: some View {
+    VStack(alignment: .leading, spacing: 22) {
+      GroupBox(MacTransferL10n.text("mt_nav_activity")) {
+        VStack(alignment: .leading, spacing: 18) {
+          Text(model.status).textSelection(.enabled)
+            .frame(maxWidth: .infinity, alignment: .leading)
+          if model.isBusy {
+            if model.collectionTotal > 0 {
+              ProgressView(value: Double(model.collectionDone),
+                total: Double(model.collectionTotal))
+              Text("\(model.collectionDone)/\(model.collectionTotal)")
+                .font(.caption).monospacedDigit().foregroundStyle(.secondary)
+            } else { ProgressView() }
+          }
+          Button {
+            Task { await model.collectAll() }
+          } label: {
+            Label(MacTransferL10n.text("mt_001"), systemImage: "arrow.down.doc")
+          }
+          .buttonStyle(.borderedProminent)
+          .disabled(model.isBusy || model.state.devices.isEmpty)
+        }.padding(12)
+      }
+      GroupBox(MacTransferL10n.text("mt_nav_connected")) {
+        VStack(alignment: .leading, spacing: 12) {
+          if model.state.devices.isEmpty {
+            Text(MacTransferL10n.text("mt_nav_no_devices"))
+              .foregroundStyle(.secondary)
+          } else {
+            ForEach(model.state.devices) { device in
+              HStack {
+                Image(systemName: "iphone.gen3").foregroundStyle(.green)
+                VStack(alignment: .leading) {
+                  Text(device.name).fontWeight(.medium)
+                  Text(device.model).font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                if device.confirmedAt != nil {
+                  Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                }
+              }
+            }
+          }
+          Button(MacTransferL10n.text("mt_nav_manage_devices")) { page = .devices }
+            .buttonStyle(.link)
+        }.frame(maxWidth: .infinity, alignment: .leading).padding(12)
+      }
+    }
+  }
+
+  private var devices: some View {
+    VStack(alignment: .leading, spacing: 22) {
+      GroupBox(MacTransferL10n.text("mt_005")) {
+        VStack(alignment: .leading, spacing: 10) {
+          Text(MacTransferL10n.text("mt_006"))
+          Text(MacTransferL10n.text("mt_007"))
+          Text(MacTransferL10n.text("mt_008"))
+          Text(MacTransferL10n.text("mt_009"))
+          Divider()
+          HStack {
+            Button(model.isPairingSystem ? MacTransferL10n.text("mt_010")
+              : MacTransferL10n.text("mt_011")) {
+              model.isPairingSystem ? model.stopSystemPairing() : model.startSystemPairing()
+            }
+            if let code = model.pairingCode {
+              Text(code).font(.system(.title2, design: .monospaced).bold())
+                .textSelection(.enabled)
+            }
+          }
+        }.frame(maxWidth: .infinity, alignment: .leading).padding(12)
+      }
+      GroupBox(MacTransferL10n.text("mt_012")) {
+        VStack(alignment: .leading, spacing: 18) {
+          HStack {
+            Picker(MacTransferL10n.text("mt_013"), selection: $model.selectedUDID) {
+              Text(MacTransferL10n.text("mt_014")).tag(String?.none)
+              ForEach(model.devices) { device in
+                Text("\(device.name) (\(device.model))").tag(Optional(device.udid))
+              }
+            }
+            Button {
+              Task { await model.refresh() }
+            } label: { Image(systemName: "arrow.clockwise") }
+              .help(MacTransferL10n.text("mt_015"))
+          }
+          if let selected = model.selected {
+            if model.pairedSelected == nil {
+              Button(MacTransferL10n.text("mt_016")) { model.pairApp() }
+                .buttonStyle(.borderedProminent)
+            } else if model.pairedSelected?.confirmedAt != nil && !model.showPairingQR {
+              HStack {
+                Label(MacTransferL10n.text("mt_017"),
+                  systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                Spacer()
+                Button(MacTransferL10n.text("mt_018")) { model.showPairingQR = true }
+              }
+            } else if let url = model.pairingURL, let image = QRCode.image(for: url) {
+              HStack(alignment: .top, spacing: 20) {
+                Image(nsImage: image).interpolation(.none).resizable()
+                  .frame(width: 210, height: 210)
+                VStack(alignment: .leading, spacing: 8) {
+                  Text(selected.name).font(.headline)
+                  Text(MacTransferL10n.text("mt_019"))
+                  Text(MacTransferL10n.text("mt_020"))
+                    .font(.caption).foregroundStyle(.secondary)
+                  if model.pairedSelected?.confirmedAt != nil {
+                    Button(MacTransferL10n.text("mt_021")) { model.showPairingQR = false }
+                  }
+                }
+              }
+            }
+          }
+        }.frame(maxWidth: .infinity, alignment: .leading).padding(12)
+      }
+    }
+  }
+
+  private var support: some View {
+    VStack(alignment: .leading, spacing: 22) {
+      GroupBox(MacTransferL10n.text("mt_022")) {
+        VStack(alignment: .leading, spacing: 16) {
+          Text(MacTransferL10n.text("mt_023"))
+          Picker(MacTransferL10n.text("mt_024"), selection: $supportDeviceID) {
+            Text(MacTransferL10n.text("mt_014")).tag(String?.none)
+            ForEach(model.state.devices) { device in
+              Text("\(device.name) (\(device.model))").tag(Optional(device.udid))
+            }
+          }.frame(maxWidth: 420)
+          HStack {
+            Button(MacTransferL10n.text("mt_025")) { showingSupport = true }
+              .buttonStyle(.borderedProminent).disabled(supportDevice == nil)
+            Button(MacTransferL10n.text("mt_026")) { showingDebugLog = true }
+          }
+        }.frame(maxWidth: .infinity, alignment: .leading).padding(12)
+      }
+      GroupBox(MacTransferL10n.text("mt_nav_about")) {
+        VStack(alignment: .leading, spacing: 12) {
+          Button(MacTransferL10n.text("mt_l_00")) { showingLicenses = true }
+          Link(MacTransferL10n.text("mt_l_07"),
+            destination: URL(string: "https://mochilog.ryuya-dev.net/privacy")!)
+          Link(MacTransferL10n.text("mt_l_08"),
+            destination: URL(string: "https://mochilog.ryuya-dev.net/terms")!)
+        }.frame(maxWidth: .infinity, alignment: .leading).padding(12)
+      }
+    }
+    .onAppear {
+      if supportDeviceID == nil { supportDeviceID = model.state.devices.first?.udid }
+    }
+  }
+
+  private var settings: some View {
+    VStack(alignment: .leading, spacing: 22) {
+      GroupBox(MacTransferL10n.text("mt_027")) {
+        VStack(alignment: .leading, spacing: 14) {
+          Toggle(MacTransferL10n.text("mt_028"),
+            isOn: Binding(get: { launchesAtLogin }, set: { desired in
+              do {
+                try MacAppPreferences.setLaunchAtLogin(desired)
+                launchesAtLogin = MacAppPreferences.launchesAtLogin
+                preferencesError = nil
+              } catch {
+                launchesAtLogin = MacAppPreferences.launchesAtLogin
+                preferencesError = error.localizedDescription
+              }
+            }))
+          Toggle(MacTransferL10n.text("mt_029"), isOn: $showMenuBar)
+          Toggle(MacTransferL10n.text("mt_030"), isOn: $hideDock)
+            .disabled(!showMenuBar)
+          if let preferencesError { Text(preferencesError).foregroundStyle(.red) }
+        }.frame(maxWidth: .infinity, alignment: .leading).padding(12)
+      }
+      GroupBox(MacTransferL10n.text("mt_nav_updates")) {
+        Button(MacTransferL10n.text("mt_002")) { checkForUpdates() }
+          .frame(maxWidth: .infinity, alignment: .leading).padding(12)
+      }
     }
   }
 }
