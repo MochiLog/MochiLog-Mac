@@ -1,8 +1,24 @@
-<?xml version="1.0" standalone="yes"?><!-- sparkle-sign-warning:
+<?xml version="1.0" standalone="yes"?>
+<!-- sparkle-sign-warning:
 IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
---><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+-->
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
     <channel>
         <title>MochiLog Mac</title>
+        <item>
+            <title>0.2.4</title>
+            <pubDate>Sat, 26 Sep 2026 02:20:52 +0900</pubDate>
+            <sparkle:version>7</sparkle:version>
+            <sparkle:shortVersionString>0.2.4</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>27.0</sparkle:minimumSystemVersion>
+            <description sparkle:format="markdown"><![CDATA[# MochiLog Mac 0.2.4 Beta
+
+Mac now advertises its reachable local addresses so iPhone and iPad can connect even when Bonjour's service endpoint stalls. The listener uses a stable port. If Tailscale is active, a separate direct receiver offers an optional route without multicast discovery; devices without Tailscale continue to use the local network. Connection diagnostics now use the device's local time zone.
+
+Macが接続可能なローカルアドレスを通知するようになり、Bonjourの接続先で通信が止まる場合もiPhone・iPadから接続できるよう改善しました。待受ポートを固定し、Tailscaleが有効な場合はマルチキャスト検出を使わない専用の受信経路も利用できます。Tailscaleを使わない端末は従来どおりローカルネットワークを使用します。接続診断の時刻は端末の標準時で表示します。
+]]></description>
+            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.4/MochiLog-Mac-Beta.dmg" length="54396178" type="application/octet-stream" sparkle:edSignature="/XyOepq+rEFagRSiWE4li8OvZUV5Ff0UEf/AxCOfeuHRomk1W5j6KWsvDgdCc2nIcS3Uo3EPhQWqme+Rt9WvBA=="/>
+        </item>
         <item>
             <title>0.2.0</title>
             <pubDate>Sat, 26 Sep 2026 02:20:52 +0900</pubDate>
@@ -23,10 +39,11 @@ MochiLog Mac 0.2.0ベータ版は、iOS/iPadOS 27向けの開発中の連携ア�
 
 この版ではアイコン、メニューバー・ログイン時起動の設定、ペアリング進捗、コピー可能な診断ログ、アップデート確認、8言語の案内を追加しました。対応するモバイル機能はまだApp Store版には含まれません。
 ]]></description>
-            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.0/MochiLog-Mac-Beta.dmg" length="53931395" type="application/octet-stream" sparkle:edSignature="vBpyBholUkklfPyZTVFVE4IFUEhf0yluQRKemZIOGhIIjma9Ncf48OQ1mpMpte1zXgVHfnDrRdyzu3CLPS1hBw=="></enclosure>
+            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.0/MochiLog-Mac-Beta.dmg" length="53931395" type="application/octet-stream" sparkle:edSignature="vBpyBholUkklfPyZTVFVE4IFUEhf0yluQRKemZIOGhIIjma9Ncf48OQ1mpMpte1zXgVHfnDrRdyzu3CLPS1hBw=="/>
         </item>
     </channel>
-</rss><!-- sparkle-signatures:
-edSignature: 6kjCTQEMnAYuTQ+dJLg6PiDQsiKtdtD5t0QsMVbGYexPCwzokTFniFlqVp8jIHKjqXbxzVtV0T6k0riNP7xaBA==
-length: 2543
+</rss>
+<!-- sparkle-signatures:
+edSignature: 30+Ij8/eVMNW4GV2XG3RhXbGFiLE6MpWYOC9zjs3NB2gLJsIoXGgzBLWrn5I7+sDcSCv7uXjBQnEL0mSd6zICw==
+length: 4133
 -->
