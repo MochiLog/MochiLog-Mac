@@ -11,6 +11,8 @@ MochiLogのiOS/iPadOS 27向けワイヤレスログ転送機能のMac用ベー�
 
 ベータ版です。解析ログの収集は端末のロック解除中にのみ可能です。iOS 16の端末はMochiLog本体を引き続き使えますが、このMac連携機能の対象外です。
 
+初回も無線でデベロッパモードを使わない設定についての調査結果は[初回ペアリングの制約](docs/FIRST_PAIRING.md)に記録しています。
+
 Mac内の転送待ちログ、ペアリング情報、診断情報の扱いは[プライバシーポリシー](https://mochilog.ryuya-dev.net/privacy)に、利用条件は[利用規約](https://mochilog.ryuya-dev.net/terms)に記載しています。アプリのサポート欄から両文書を開けます。サポートメールには、送信操作をした場合に限り端末・Macの診断情報を添付します。
 
 ## GitHub Actionsで署名済みDMGを作る
