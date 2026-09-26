@@ -6,6 +6,24 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>MochiLog Mac</title>
         <item>
+            <title>0.2.5</title>
+            <pubDate>Sat, 26 Sep 2026 02:20:52 +0900</pubDate>
+            <sparkle:version>8</sparkle:version>
+            <sparkle:shortVersionString>0.2.5</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>27.0</sparkle:minimumSystemVersion>
+            <description sparkle:format="markdown"><![CDATA[# MochiLog Mac 0.2.5 Beta
+
+端末検索がタイムアウトした際にも、別のWi-Fi検索方式を試すよう改善しました。端末検索とログ収集の重複実行を防ぎ、検索タイムアウトの案内を修正しました。
+
+Device discovery now tries the alternate Wi-Fi discovery method even when native discovery times out. Device discovery and log collection no longer run concurrently, and discovery timeout messages now describe the correct operation.
+
+Tailscale経由で要求の到着が遅れたり分割されたりすると接続を閉じてしまう不具合を修正しました。
+
+Fixed premature disconnects when requests arrive late or in multiple TCP segments over Tailscale.
+]]></description>
+            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.5/MochiLog-Mac-Beta.dmg" length="54394912" type="application/octet-stream" sparkle:edSignature="HHJhpV2VH4RwhyaHNuvuA4A/qxQl9JXZyWY2hBMbmGREgDRHukVlesZ5PvRjYz93JQpwdxg9np4GWeQPC20CDg=="/>
+        </item>
+        <item>
             <title>0.2.4</title>
             <pubDate>Sat, 26 Sep 2026 02:20:52 +0900</pubDate>
             <sparkle:version>7</sparkle:version>
@@ -44,6 +62,6 @@ MochiLog Mac 0.2.0ベータ版は、iOS/iPadOS 27向けの開発中の連携ア�
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: 30+Ij8/eVMNW4GV2XG3RhXbGFiLE6MpWYOC9zjs3NB2gLJsIoXGgzBLWrn5I7+sDcSCv7uXjBQnEL0mSd6zICw==
-length: 4133
+edSignature: oK1sbIf4NK1DMN5sks0lo4EjebXZx4YXV9SbnmPXYLVkBRSsnsvz7ijFMwMjrT2AJlYyciq8Q9zPpRqmDEZ/CQ==
+length: 5539
 -->
