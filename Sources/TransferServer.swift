@@ -15,9 +15,18 @@ private struct PullRequest: Decodable {
 
 /// Local-only, authenticated pull server. The full filename and log are encrypted.
 final class TransferServer: @unchecked Sendable {
+  #if TRANSFER_TESTING
+  static let servicePort: NWEndpoint.Port = .any
+  #else
+  static let servicePort: NWEndpoint.Port = 54555
+  #endif
+  static let tailnetPort: UInt16 = 54557
   private let queue = DispatchQueue(label: "net.ryuya-dev.MochiLog.mac-transfer")
   private var listener: NWListener?
   private var pathMonitor: NWPathMonitor?
+  private var tailnetReadSource: DispatchSourceRead?
+  private var tailnetAddress: String?
+  private var activeTailnetClients = 0
   private var state: CompanionState
   private var nonces: [UUID: Date] = [:]
   var onStatus: ((String) -> Void)?
@@ -27,8 +36,10 @@ final class TransferServer: @unchecked Sendable {
 
   func update(state: CompanionState) { queue.async { self.state = state } }
 
+  var activeTailnetAddress: String? { queue.sync { tailnetAddress } }
+
   func start() throws {
-    let listener = try NWListener(using: .tcp)
+    let listener = try NWListener(using: .tcp, on: Self.servicePort)
     listener.service = NWListener.Service(name: state.hostID.uuidString,
       type: "_mochilog._tcp")
     listener.newConnectionHandler = { [weak self] connection in
@@ -57,22 +68,128 @@ final class TransferServer: @unchecked Sendable {
     guard let listener, let port = listener.port else { return }
     let wifiInterfaces = Set(pathMonitor?.currentPath.availableInterfaces
       .filter { $0.type == .wifi }.map(\.name) ?? [])
-    let addresses = Self.localIPv4Addresses(wifiInterfaces: wifiInterfaces)
-    guard !addresses.isEmpty else { return }
-    let record = NWTXTRecord([
+    let routes = Self.localIPv4Addresses(wifiInterfaces: wifiInterfaces)
+    #if !TRANSFER_TESTING
+    updateTailnetSocket(address: routes.tailnet.first)
+    #endif
+    guard !routes.lan.isEmpty || tailnetAddress != nil else { return }
+    var fields = [
       "v": "1",
       "port": String(port.rawValue),
-      "ipv4": addresses.joined(separator: ",")
-    ])
+      "ipv4": routes.lan.joined(separator: ",")
+    ]
+    if let tailnetAddress {
+      fields["tailnet"] = tailnetAddress
+      fields["tailnetPort"] = String(Self.tailnetPort)
+    }
+    let record = NWTXTRecord(fields)
     listener.service = NWListener.Service(name: state.hostID.uuidString,
       type: "_mochilog._tcp", txtRecord: record)
   }
 
-  private static func localIPv4Addresses(wifiInterfaces: Set<String>) -> [String] {
+  static func tailnetIPv4Address() -> String? {
+    localIPv4Addresses(wifiInterfaces: []).tailnet.first
+  }
+
+  private func updateTailnetSocket(address: String?) {
+    guard address != tailnetAddress else { return }
+    tailnetReadSource?.cancel()
+    tailnetReadSource = nil
+    tailnetAddress = nil
+    guard let address else { return }
+    let fd = Darwin.socket(AF_INET, SOCK_STREAM, 0)
+    guard fd >= 0 else { return }
+    var option: Int32 = 1
+    _ = withUnsafePointer(to: &option) {
+      setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, $0, socklen_t(MemoryLayout<Int32>.size))
+    }
+    var endpoint = sockaddr_in()
+    endpoint.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+    endpoint.sin_family = sa_family_t(AF_INET)
+    endpoint.sin_port = Self.tailnetPort.bigEndian
+    let parsed = address.withCString { inet_pton(AF_INET, $0, &endpoint.sin_addr) }
+    let bound = withUnsafePointer(to: &endpoint) {
+      $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+        Darwin.bind(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+      }
+    }
+    guard parsed == 1, bound == 0, Darwin.listen(fd, 8) == 0 else {
+      Darwin.close(fd)
+      onStatus?("Tailscale listener unavailable: \(String(cString: strerror(errno)))")
+      return
+    }
+    _ = fcntl(fd, F_SETFL, O_NONBLOCK)
+    let source = DispatchSource.makeReadSource(fileDescriptor: fd, queue: queue)
+    source.setEventHandler { [weak self] in
+      while true {
+        let client = Darwin.accept(fd, nil, nil)
+        if client < 0 { break }
+        guard let self else { Darwin.close(client); continue }
+        guard self.activeTailnetClients < 4 else { Darwin.close(client); continue }
+        self.activeTailnetClients += 1
+        DispatchQueue.global(qos: .userInitiated).async {
+          self.handleTailnetSocket(client)
+        }
+      }
+    }
+    source.setCancelHandler { Darwin.close(fd) }
+    tailnetReadSource = source
+    tailnetAddress = address
+    source.resume()
+  }
+
+  private func handleTailnetSocket(_ client: Int32) {
+    defer {
+      Darwin.close(client)
+      queue.async { self.activeTailnetClients -= 1 }
+    }
+    var noPipe: Int32 = 1
+    _ = withUnsafePointer(to: &noPipe) {
+      setsockopt(client, SOL_SOCKET, SO_NOSIGPIPE, $0,
+        socklen_t(MemoryLayout<Int32>.size))
+    }
+    var timeout = timeval(tv_sec: 20, tv_usec: 0)
+    withUnsafePointer(to: &timeout) {
+      setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, $0,
+        socklen_t(MemoryLayout<timeval>.size))
+      setsockopt(client, SOL_SOCKET, SO_SNDTIMEO, $0,
+        socklen_t(MemoryLayout<timeval>.size))
+    }
+    var request = Data()
+    var buffer = [UInt8](repeating: 0, count: 4096)
+    while request.count <= 16_384 {
+      let count = Darwin.recv(client, &buffer, buffer.count, 0)
+      guard count > 0 else { return }
+      request.append(contentsOf: buffer.prefix(count))
+      guard request.count <= 16_384 else { return }
+      if let newline = request.firstIndex(of: 10) {
+        let response = queue.sync { makeResponse(to: Data(request[..<newline])) }
+        guard let response else { return }
+        var offset = 0
+        while offset < response.count {
+          let written = response.withUnsafeBytes { bytes in
+            Darwin.send(client, bytes.baseAddress!.advanced(by: offset),
+              response.count - offset, 0)
+          }
+          guard written > 0 else { return }
+          offset += written
+        }
+        _ = Darwin.shutdown(client, SHUT_WR)
+        // Keep the socket alive until the peer consumes the final frame. Some
+        // packet-tunnel paths otherwise expose an early EOF to NWConnection.
+        _ = Darwin.recv(client, &buffer, 1, 0)
+        return
+      }
+    }
+  }
+
+  private static func localIPv4Addresses(wifiInterfaces: Set<String>)
+    -> (lan: [String], tailnet: [String]) {
     var first: UnsafeMutablePointer<ifaddrs>?
-    guard getifaddrs(&first) == 0 else { return [] }
+    guard getifaddrs(&first) == 0 else { return ([], []) }
     defer { freeifaddrs(first) }
-    var values: [(name: String, address: String)] = []
+    var lan: [(name: String, address: String)] = []
+    var tailnet: [String] = []
     var current = first
     while let entry = current?.pointee {
       defer { current = entry.ifa_next }
@@ -81,7 +198,7 @@ final class TransferServer: @unchecked Sendable {
         (entry.ifa_flags & UInt32(IFF_UP)) != 0,
         (entry.ifa_flags & UInt32(IFF_LOOPBACK)) == 0 else { continue }
       let name = String(cString: entry.ifa_name)
-      guard name.hasPrefix("en") else { continue }
+      guard name.hasPrefix("en") || name.hasPrefix("utun") else { continue }
       var storage = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
       var sockaddr = address.withMemoryRebound(to: sockaddr_in.self, capacity: 1) {
         $0.pointee
@@ -92,16 +209,21 @@ final class TransferServer: @unchecked Sendable {
       guard ipv4 != nil else { continue }
       let value = String(cString: storage)
       let parts = value.split(separator: ".").compactMap { Int($0) }
-      if value.hasPrefix("10.") || value.hasPrefix("192.168.") ||
-        (parts.count == 4 && parts[0] == 172 && (16...31).contains(parts[1])) {
-        values.append((name, value))
+      if name.hasPrefix("utun"), parts.count == 4,
+        parts[0] == 100 && (64...127).contains(parts[1]) {
+        tailnet.append(value)
+      } else if name.hasPrefix("en") &&
+        (value.hasPrefix("10.") || value.hasPrefix("192.168.") ||
+        (parts.count == 4 && parts[0] == 172 && (16...31).contains(parts[1]))) {
+        lan.append((name, value))
       }
     }
-    return values.sorted {
+    let sortedLAN = lan.sorted {
       let firstWiFi = wifiInterfaces.contains($0.name)
       let secondWiFi = wifiInterfaces.contains($1.name)
       return firstWiFi == secondWiFi ? $0.name < $1.name : firstWiFi
     }.prefix(4).map(\.address)
+    return (sortedLAN, Array(Set(tailnet)).sorted())
   }
 
   private func handle(_ connection: NWConnection) {
@@ -127,17 +249,25 @@ final class TransferServer: @unchecked Sendable {
   }
 
   private func respond(to requestData: Data, on connection: NWConnection) {
+    guard let response = makeResponse(to: requestData) else {
+      connection.cancel()
+      return
+    }
+    connection.send(content: response, completion: .contentProcessed { _ in
+      connection.cancel()
+    })
+  }
+
+  private func makeResponse(to requestData: Data) -> Data? {
     guard let request = try? JSONDecoder().decode(PullRequest.self, from: requestData),
       request.hostID == state.hostID,
       let device = state.devices.first(where: { $0.physicalDeviceID == request.physicalDeviceID }),
       Date().timeIntervalSince(nonces[request.nonce] ?? .distantPast) > 300
-    else { connection.cancel(); return }
+    else { return nil }
     let message = "\(request.hostID.uuidString)|\(request.physicalDeviceID.uuidString)|\(request.nonce.uuidString)|\(request.ack ?? "")"
     let expected = Data(HMAC<SHA256>.authenticationCode(for: Data(message.utf8),
       using: SymmetricKey(data: device.secret)))
-    guard let received = Data(hex: request.mac), received == expected else {
-      connection.cancel(); return
-    }
+    guard let received = Data(hex: request.mac), received == expected else { return nil }
     if let index = state.devices.firstIndex(where: {
       $0.physicalDeviceID == request.physicalDeviceID
     }), state.devices[index].confirmedAt == nil {
@@ -188,12 +318,10 @@ final class TransferServer: @unchecked Sendable {
       guard let combined = sealed.combined else { throw CollectorError.failed(MacTransferL10n.text("mt_c_08")) }
       var length = UInt32(combined.count).bigEndian
       let prefix = withUnsafeBytes(of: &length) { Data($0) }
-      connection.send(content: prefix + combined, completion: .contentProcessed { _ in
-        connection.cancel()
-      })
+      return prefix + combined
     } catch {
       onStatus?(MacTransferL10n.format("mt_m_18", error.localizedDescription))
-      connection.cancel()
+      return nil
     }
   }
 }

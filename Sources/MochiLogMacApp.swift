@@ -200,6 +200,10 @@ final class CompanionModel: ObservableObject {
       .init(name: "model", value: pairedSelected.model),
       .init(name: "key", value: pairedSelected.secret.base64EncodedString())
     ]
+    if let tailnet = server?.activeTailnetAddress {
+      components.queryItems?.append(.init(name: "tailnet", value: tailnet))
+      components.queryItems?.append(.init(name: "tailnetPort", value: String(TransferServer.tailnetPort)))
+    }
     return components.url?.absoluteString
   }
 
