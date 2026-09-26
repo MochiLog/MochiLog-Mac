@@ -9,15 +9,46 @@ private struct PullRequest: Decodable {
   let nonce: UUID
   let ack: String?
   let mac: String
+  let version: String?
   let presence: String?
   let presenceMAC: String?
-  let clientDiagnostics: String?
-  let clientDiagnosticsMAC: String?
+  let clientDiagnosticsBox: String?
 }
 
 private struct PreparedResponse {
   let data: Data
   let deviceID: UUID
+}
+
+struct PairingInvitation {
+  let sessionID: UUID
+  let hostID: UUID
+  let physicalDeviceID: UUID
+  let model: String
+  let publicKey: Data
+  let code: String
+  let lanAddresses: [String]
+  let lanPort: UInt16
+  let tailnetAddress: String?
+  let tailnetPort: UInt16?
+}
+
+private struct PairingRequest: Decodable {
+  let type: String
+  let sessionID: UUID
+  let clientPublicKey: String
+  let confirmationMAC: String?
+}
+
+private struct PairingSession {
+  let invitation: PairingInvitation
+  let selected: ConnectedDevice
+  let privateKey: Curve25519.KeyAgreement.PrivateKey
+  let expiresAt: Date
+  var clientPublicKey: Data?
+  var key: Data?
+  var attempts = 0
+  var confirmed = false
 }
 
 /// Local-only, authenticated pull server. The full filename and log are encrypted.
@@ -37,15 +68,34 @@ final class TransferServer: @unchecked Sendable {
   private var state: CompanionState
   private var nonces: [UUID: Date] = [:]
   private var announcementRevision = 0
+  private var pairingSession: PairingSession?
   var onStatus: ((String) -> Void)?
   var onConfirmed: ((UUID) -> Void)?
   var onAuthenticatedRequest: ((UUID, Date) -> Void)?
   var onAppPresence: ((UUID, Bool, Date) -> Void)?
   var onTransferActivity: ((UUID, Bool) -> Void)?
+  var onPairingCompleted: (() -> Void)?
 
   init(state: CompanionState) { self.state = state }
 
   func update(state: CompanionState) { queue.async { self.state = state } }
+
+  func beginPairing(for selected: ConnectedDevice, existing: PairedDevice?) -> PairingInvitation {
+    queue.sync {
+      let privateKey = Curve25519.KeyAgreement.PrivateKey()
+      let routes = Self.localIPv4Addresses(wifiInterfaces: [])
+      let invitation = PairingInvitation(sessionID: UUID(), hostID: state.hostID,
+        physicalDeviceID: existing?.physicalDeviceID ?? UUID(), model: selected.model,
+        publicKey: privateKey.publicKey.rawRepresentation,
+        code: String(format: "%06d", Int.random(in: 0...999_999)),
+        lanAddresses: routes.lan, lanPort: Self.servicePort.rawValue,
+        tailnetAddress: tailnetAddress,
+        tailnetPort: tailnetAddress == nil ? nil : Self.tailnetPort)
+      pairingSession = PairingSession(invitation: invitation, selected: selected,
+        privateKey: privateKey, expiresAt: Date().addingTimeInterval(180))
+      return invitation
+    }
+  }
 
   func announceQueuedFiles() {
     queue.async {
@@ -192,7 +242,22 @@ final class TransferServer: @unchecked Sendable {
       request.append(contentsOf: buffer.prefix(count))
       guard request.count <= 16_384 else { return }
       if let newline = request.firstIndex(of: 10) {
-        let response = queue.sync { makeResponse(to: Data(request[..<newline])) }
+        let body = Data(request[..<newline])
+        if let pairingReply = queue.sync(execute: { makePairingResponse(to: body) }) {
+          var offset = 0
+          while offset < pairingReply.count {
+            let written = pairingReply.withUnsafeBytes { bytes in
+              Darwin.send(client, bytes.baseAddress!.advanced(by: offset),
+                pairingReply.count - offset, 0)
+            }
+            guard written > 0 else { return }
+            offset += written
+          }
+          _ = Darwin.shutdown(client, SHUT_WR)
+          _ = Darwin.recv(client, &buffer, 1, 0)
+          return
+        }
+        let response = queue.sync { makeResponse(to: body) }
         guard let response else { return }
         onTransferActivity?(response.deviceID, true)
         defer { onTransferActivity?(response.deviceID, false) }
@@ -280,6 +345,12 @@ final class TransferServer: @unchecked Sendable {
   }
 
   private func respond(to requestData: Data, on connection: NWConnection) {
+    if let pairingReply = makePairingResponse(to: requestData) {
+      connection.send(content: pairingReply, completion: .contentProcessed { _ in
+        connection.cancel()
+      })
+      return
+    }
     guard let response = makeResponse(to: requestData) else {
       connection.cancel()
       return
@@ -291,16 +362,87 @@ final class TransferServer: @unchecked Sendable {
     })
   }
 
+  private func makePairingResponse(to requestData: Data) -> Data? {
+    guard let request = try? JSONDecoder().decode(PairingRequest.self, from: requestData),
+      ["pair-init", "pair-confirm"].contains(request.type),
+      var session = pairingSession,
+      session.invitation.sessionID == request.sessionID,
+      Date() < session.expiresAt,
+      let publicData = Data(base64Encoded: request.clientPublicKey),
+      publicData.count == 32,
+      let publicKey = try? Curve25519.KeyAgreement.PublicKey(rawRepresentation: publicData)
+    else { return nil }
+    guard session.clientPublicKey == nil || session.clientPublicKey == publicData else { return nil }
+    let invitation = session.invitation
+    let key: Data
+    if let existing = session.key {
+      key = existing
+    } else {
+      guard let shared = try? session.privateKey.sharedSecretFromKeyAgreement(
+        with: publicKey) else { return nil }
+      let derived = shared.hkdfDerivedSymmetricKey(using: SHA256.self,
+        salt: Data(request.sessionID.uuidString.utf8),
+        sharedInfo: Data("MochiLog pair v2|\(invitation.hostID.uuidString)|\(invitation.physicalDeviceID.uuidString)".utf8),
+        outputByteCount: 32)
+      key = derived.withUnsafeBytes { Data($0) }
+      session.clientPublicKey = publicData
+      session.key = key
+    }
+    let secret = SymmetricKey(data: key)
+    if request.type == "pair-init" {
+      let proof = HMAC<SHA256>.authenticationCode(
+        for: Data("pair-challenge|\(request.sessionID.uuidString)".utf8),
+        using: secret).map { String(format: "%02x", $0) }.joined()
+      pairingSession = session
+      return try? JSONSerialization.data(withJSONObject: [
+        "type": "pair-challenge", "sessionID": request.sessionID.uuidString,
+        "proof": proof
+      ]) + Data([10])
+    }
+    guard session.attempts < 3,
+      let supplied = request.confirmationMAC.flatMap(Data.init(hex:)) else { return nil }
+    let confirmationMessage = Data("pair-confirm|\(request.sessionID.uuidString)|\(invitation.code)".utf8)
+    guard HMAC<SHA256>.isValidAuthenticationCode(supplied,
+      authenticating: confirmationMessage, using: secret)
+    else {
+      session.attempts += 1
+      pairingSession = session
+      return nil
+    }
+    if !session.confirmed {
+      var updated = state
+      let newDevice = PairedDevice(udid: session.selected.udid, name: session.selected.name,
+        model: session.selected.model, physicalDeviceID: invitation.physicalDeviceID,
+        secret: key)
+      if let index = updated.devices.firstIndex(where: { $0.udid == session.selected.udid }) {
+        updated.devices[index] = newDevice
+      } else { updated.devices.append(newDevice) }
+      guard (try? Collector.saveState(updated)) != nil else { return nil }
+      state = updated
+      session.confirmed = true
+      pairingSession = session
+      onPairingCompleted?()
+    }
+    let proof = HMAC<SHA256>.authenticationCode(
+      for: Data("pair-complete|\(request.sessionID.uuidString)".utf8), using: secret)
+      .map { String(format: "%02x", $0) }.joined()
+    return try? JSONSerialization.data(withJSONObject: [
+      "type": "pair-complete", "sessionID": request.sessionID.uuidString,
+      "proof": proof
+    ]) + Data([10])
+  }
+
   private func makeResponse(to requestData: Data) -> PreparedResponse? {
     guard let request = try? JSONDecoder().decode(PullRequest.self, from: requestData),
+      request.version == "2",
       request.hostID == state.hostID,
       let device = state.devices.first(where: { $0.physicalDeviceID == request.physicalDeviceID }),
       Date().timeIntervalSince(nonces[request.nonce] ?? .distantPast) > 300
     else { return nil }
-    let message = "\(request.hostID.uuidString)|\(request.physicalDeviceID.uuidString)|\(request.nonce.uuidString)|\(request.ack ?? "")"
+    let message = "v2|\(request.hostID.uuidString)|\(request.physicalDeviceID.uuidString)|\(request.nonce.uuidString)|\(request.ack ?? "")"
     let expected = Data(HMAC<SHA256>.authenticationCode(for: Data(message.utf8),
       using: SymmetricKey(data: device.secret)))
-    let backgroundMessage = "background|\(request.hostID.uuidString)|\(request.physicalDeviceID.uuidString)|\(request.nonce.uuidString)"
+    let backgroundMessage = "v2|background|\(request.hostID.uuidString)|\(request.physicalDeviceID.uuidString)|\(request.nonce.uuidString)"
     let expectedBackground = Data(HMAC<SHA256>.authenticationCode(
       for: Data(backgroundMessage.utf8), using: SymmetricKey(data: device.secret)))
     guard let received = Data(hex: request.mac) else { return nil }
@@ -336,16 +478,13 @@ final class TransferServer: @unchecked Sendable {
         onStatus?(MacTransferL10n.format("mt_m_17", error.localizedDescription))
       }
     }
-    if let encoded = request.clientDiagnostics,
-      let signature = request.clientDiagnosticsMAC,
-      let report = Data(base64Encoded: encoded), report.count <= 8192,
-      let supplied = Data(hex: signature) {
-      let expectedReportMAC = Data(HMAC<SHA256>.authenticationCode(
-        for: Data("diagnostics|\(request.nonce.uuidString)|".utf8) + report,
-        using: SymmetricKey(data: device.secret)))
-      if supplied == expectedReportMAC {
-        try? SupportDiagnostics.savePhoneReport(report, for: device)
-      }
+    if let encoded = request.clientDiagnosticsBox,
+      let combined = Data(base64Encoded: encoded), combined.count <= 8_256,
+      let box = try? AES.GCM.SealedBox(combined: combined),
+      let report = try? AES.GCM.open(box, using: SymmetricKey(data: device.secret),
+        authenticating: Data("v2|diagnostics|\(request.hostID.uuidString)|\(request.physicalDeviceID.uuidString)|\(request.nonce.uuidString)".utf8)),
+      report.count <= 8_192 {
+      try? SupportDiagnostics.savePhoneReport(report, for: device)
     }
     do {
       if let ack = request.ack,
@@ -369,7 +508,9 @@ final class TransferServer: @unchecked Sendable {
       if name.isEmpty {
         plain.append(SupportDiagnostics.macReport(for: device))
       }
-      let sealed = try AES.GCM.seal(plain, using: SymmetricKey(data: device.secret))
+      let responseContext = Data("v2|response|\(request.hostID.uuidString)|\(request.physicalDeviceID.uuidString)|\(request.nonce.uuidString)".utf8)
+      let sealed = try AES.GCM.seal(plain, using: SymmetricKey(data: device.secret),
+        authenticating: responseContext)
       guard let combined = sealed.combined else { throw CollectorError.failed(MacTransferL10n.text("mt_c_08")) }
       var length = UInt32(combined.count).bigEndian
       let prefix = withUnsafeBytes(of: &length) { Data($0) }

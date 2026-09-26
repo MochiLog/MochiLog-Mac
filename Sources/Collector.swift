@@ -16,6 +16,40 @@ struct PairedDevice: Codable, Identifiable {
   let secret: Data
   var confirmedAt: Date? = nil
   var id: String { udid }
+
+  private enum CodingKeys: String, CodingKey {
+    case udid, name, model, physicalDeviceID, secret, confirmedAt
+  }
+
+  init(udid: String, name: String, model: String, physicalDeviceID: UUID,
+    secret: Data, confirmedAt: Date? = nil) {
+    self.udid = udid
+    self.name = name
+    self.model = model
+    self.physicalDeviceID = physicalDeviceID
+    self.secret = secret
+    self.confirmedAt = confirmedAt
+  }
+
+  init(from decoder: Decoder) throws {
+    let values = try decoder.container(keyedBy: CodingKeys.self)
+    udid = try values.decode(String.self, forKey: .udid)
+    name = try values.decode(String.self, forKey: .name)
+    model = try values.decode(String.self, forKey: .model)
+    physicalDeviceID = try values.decode(UUID.self, forKey: .physicalDeviceID)
+    // Read the first beta's plaintext key only for the one-time Keychain migration.
+    secret = try values.decodeIfPresent(Data.self, forKey: .secret) ?? Data()
+    confirmedAt = try values.decodeIfPresent(Date.self, forKey: .confirmedAt)
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var values = encoder.container(keyedBy: CodingKeys.self)
+    try values.encode(udid, forKey: .udid)
+    try values.encode(name, forKey: .name)
+    try values.encode(model, forKey: .model)
+    try values.encode(physicalDeviceID, forKey: .physicalDeviceID)
+    try values.encodeIfPresent(confirmedAt, forKey: .confirmedAt)
+  }
 }
 
 struct CompanionState: Codable {
@@ -78,12 +112,31 @@ enum Collector {
 
   static func loadState() -> CompanionState {
     guard let data = try? Data(contentsOf: stateURL),
-      let state = try? JSONDecoder().decode(CompanionState.self, from: data)
+      var state = try? JSONDecoder().decode(CompanionState.self, from: data)
     else { return CompanionState() }
+    var needsMigration = false
+    for index in state.devices.indices {
+      let device = state.devices[index]
+      if device.secret.count == 32 {
+        // Do not remove the old copy unless every key reaches the Keychain.
+        guard (try? PairingKeyStore.save(device.secret, for: device.physicalDeviceID)) != nil
+        else { return state }
+        needsMigration = true
+      } else if let secret = PairingKeyStore.load(for: device.physicalDeviceID) {
+        state.devices[index] = PairedDevice(udid: device.udid, name: device.name,
+          model: device.model, physicalDeviceID: device.physicalDeviceID,
+          secret: secret, confirmedAt: device.confirmedAt)
+      }
+    }
+    if needsMigration { try? saveState(state) }
     return state
   }
 
   static func saveState(_ state: CompanionState) throws {
+    for device in state.devices {
+      guard device.secret.count == 32 else { throw CollectorError.failed("Pairing key unavailable") }
+      try PairingKeyStore.save(device.secret, for: device.physicalDeviceID)
+    }
     let data = try JSONEncoder().encode(state)
     try data.write(to: stateURL, options: .atomic)
     try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: stateURL.path)

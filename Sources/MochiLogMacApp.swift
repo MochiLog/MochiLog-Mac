@@ -102,6 +102,7 @@ final class CompanionModel: ObservableObject {
   @Published private var activeTransfers: [UUID: Int] = [:]
   @Published private var presenceClock = Date()
   @Published var showPairingQR = false
+  @Published var pairingInvitation: PairingInvitation?
   @Published var state = Collector.loadState()
   private var server: TransferServer?
   private var pairProcess: Process?
@@ -116,8 +117,12 @@ final class CompanionModel: ObservableObject {
       Task { @MainActor in
         self?.state = Collector.loadState()
         self?.showPairingQR = false
+        self?.pairingInvitation = nil
         self?.status = MacTransferL10n.text("mt_m_01")
       }
+    }
+    server.onPairingCompleted = { [weak self] in
+      Task { @MainActor in self?.state = Collector.loadState() }
     }
     server.onAuthenticatedRequest = { [weak self] deviceID, date in
       Task { @MainActor in self?.lastAppRequestAt[deviceID] = date }
@@ -219,32 +224,30 @@ final class CompanionModel: ObservableObject {
 
   func pairApp() {
     guard let selected, isOSPairingVerified else { return }
-    guard state.devices.first(where: { $0.udid == selected.udid }) == nil else { return }
-    let new = PairedDevice(udid: selected.udid, name: selected.name, model: selected.model,
-      physicalDeviceID: UUID(), secret: Data((0..<32).map { _ in UInt8.random(in: 0...255) }))
-    state.devices.append(new)
-    do {
-      try Collector.saveState(state)
-      server?.update(state: state)
-      showPairingQR = true
-      status = MacTransferL10n.format("mt_m_05", selected.name)
-    } catch { status = MacTransferL10n.format("mt_m_06", error.localizedDescription) }
+    pairingInvitation = server?.beginPairing(for: selected, existing: pairedSelected)
+    showPairingQR = pairingInvitation != nil
+    status = MacTransferL10n.format("mt_m_05", selected.name)
   }
 
   var pairingURL: String? {
-    guard let pairedSelected else { return nil }
+    guard let invitation = pairingInvitation else { return nil }
     var components = URLComponents()
     components.scheme = "mochilog-mac"
     components.host = "pair"
     components.queryItems = [
-      .init(name: "host", value: state.hostID.uuidString),
-      .init(name: "device", value: pairedSelected.physicalDeviceID.uuidString),
-      .init(name: "model", value: pairedSelected.model),
-      .init(name: "key", value: pairedSelected.secret.base64EncodedString())
+      .init(name: "v", value: "2"),
+      .init(name: "host", value: invitation.hostID.uuidString),
+      .init(name: "device", value: invitation.physicalDeviceID.uuidString),
+      .init(name: "model", value: invitation.model),
+      .init(name: "session", value: invitation.sessionID.uuidString),
+      .init(name: "public", value: invitation.publicKey.base64EncodedString()),
+      .init(name: "ipv4", value: invitation.lanAddresses.joined(separator: ",")),
+      .init(name: "port", value: String(invitation.lanPort))
     ]
-    if let tailnet = server?.activeTailnetAddress {
+    if let tailnet = invitation.tailnetAddress {
       components.queryItems?.append(.init(name: "tailnet", value: tailnet))
-      components.queryItems?.append(.init(name: "tailnetPort", value: String(TransferServer.tailnetPort)))
+      components.queryItems?.append(.init(name: "tailnetPort",
+        value: String(invitation.tailnetPort ?? TransferServer.tailnetPort)))
     }
     return components.url?.absoluteString
   }
@@ -623,29 +626,35 @@ private struct CompanionView: View {
             Label(MacTransferL10n.text("mt_os_paired"),
               systemImage: "checkmark.circle.fill")
               .foregroundStyle(.green)
-            if model.pairedSelected == nil {
-              Button(MacTransferL10n.text("mt_016")) { model.pairApp() }
-                .buttonStyle(.borderedProminent)
-            } else if model.pairedSelected?.confirmedAt != nil && !model.showPairingQR {
-              HStack {
-                Label(MacTransferL10n.text("mt_017"),
-                  systemImage: "checkmark.circle.fill").foregroundStyle(.green)
-                Spacer()
-                Button(MacTransferL10n.text("mt_018")) { model.showPairingQR = true }
-              }
-            } else if let url = model.pairingURL, let image = QRCode.image(for: url) {
+            if model.showPairingQR, let url = model.pairingURL,
+              let image = QRCode.image(for: url) {
               HStack(alignment: .top, spacing: 20) {
                 Image(nsImage: image).interpolation(.none).resizable()
                   .frame(width: 210, height: 210)
                 VStack(alignment: .leading, spacing: 8) {
                   Text(selected.name).font(.headline)
                   Text(MacTransferL10n.text("mt_019"))
-                  Text(MacTransferL10n.text("mt_020"))
+                  Text(MacTransferL10n.text("mt_pair_code_instruction"))
                     .font(.caption).foregroundStyle(.secondary)
-                  if model.pairedSelected?.confirmedAt != nil {
-                    Button(MacTransferL10n.text("mt_021")) { model.showPairingQR = false }
+                  if let invitation = model.pairingInvitation {
+                    Text(invitation.code)
+                      .font(.system(.title, design: .monospaced).weight(.bold))
+                      .textSelection(.enabled)
+                  }
+                  Button(MacTransferL10n.text("mt_021")) {
+                    model.showPairingQR = false
                   }
                 }
+              }
+            } else if model.pairedSelected == nil {
+              Button(MacTransferL10n.text("mt_016")) { model.pairApp() }
+                .buttonStyle(.borderedProminent)
+            } else {
+              HStack {
+                Label(MacTransferL10n.text("mt_017"),
+                  systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                Spacer()
+                Button(MacTransferL10n.text("mt_018")) { model.pairApp() }
               }
             }
           } else if case .checking = model.osPairingState {

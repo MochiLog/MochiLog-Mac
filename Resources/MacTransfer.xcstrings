@@ -1067,49 +1067,49 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The QR contains a secret key. Do not publish or share it."
+            "value": "The QR contains a temporary public key. Enter the 6-digit code shown on this Mac to confirm pairing."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "QRには秘密鍵が含まれます。公開・共有しないでください。"
+            "value": "QRには一時的な公開鍵が含まれます。Macに表示された6桁のコードを入力してペアリングを確認してください。"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Der QR enthält einen geheimen Schlüssel. Veröffentlichen oder teilen Sie es nicht."
+            "value": "Der QR-Code enthält einen temporären öffentlichen Schlüssel. Gib den 6-stelligen Code auf diesem Mac ein, um die Kopplung zu bestätigen."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "El QR contiene una clave secreta. No lo publiques ni lo compartas."
+            "value": "El QR contiene una clave pública temporal. Introduce el código de 6 dígitos del Mac para confirmar el enlace."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Le QR contient une clé secrète. Ne le publiez pas et ne le partagez pas."
+            "value": "Le QR contient une clé publique temporaire. Saisissez le code à 6 chiffres affiché sur ce Mac pour confirmer le jumelage."
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "QR에는 비밀 키가 포함되어 있습니다. 게시하거나 공유하지 마세요."
+            "value": "QR 코드에는 임시 공개 키가 포함됩니다. Mac에 표시된 6자리 코드를 입력해 페어링을 확인하세요."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "二维码包含一个密钥。请勿发布或分享。"
+            "value": "二维码包含临时公钥。输入这台 Mac 上显示的 6 位代码以确认配对。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "QR包含一個密鑰。請勿發佈或分享。"
+            "value": "QR 碼包含暫時公開金鑰。輸入這台 Mac 上顯示的 6 位代碼以確認配對。"
           }
         }
       }
@@ -8277,6 +8277,19 @@
             "value": "裝置搜尋逾時。請保持裝置解鎖並連接同一 Wi-Fi，然後重試。"
           }
         }
+      }
+    },
+    "mt_pair_code_instruction": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Enter this 6-digit code on the iPhone or iPad. The code is not included in the QR." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "iPhoneまたはiPadでこの6桁のコードを入力してください。コードはQRに含まれません。" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Gib diesen 6-stelligen Code auf dem iPhone oder iPad ein. Er ist nicht im QR-Code enthalten." } },
+        "es": { "stringUnit": { "state": "translated", "value": "Introduce este código de 6 dígitos en el iPhone o iPad. No está incluido en el QR." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Saisissez ce code à 6 chiffres sur l’iPhone ou l’iPad. Il ne figure pas dans le QR." } },
+        "ko": { "stringUnit": { "state": "translated", "value": "iPhone 또는 iPad에 이 6자리 코드를 입력하세요. 코드는 QR에 포함되지 않습니다." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "在 iPhone 或 iPad 上输入此 6 位代码。二维码中不包含该代码。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "在 iPhone 或 iPad 上輸入此 6 位代碼。QR 碼中不包含該代碼。" } }
       }
     }
   },
