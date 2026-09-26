@@ -9,8 +9,15 @@ private struct PullRequest: Decodable {
   let nonce: UUID
   let ack: String?
   let mac: String
+  let presence: String?
+  let presenceMAC: String?
   let clientDiagnostics: String?
   let clientDiagnosticsMAC: String?
+}
+
+private struct PreparedResponse {
+  let data: Data
+  let deviceID: UUID
 }
 
 /// Local-only, authenticated pull server. The full filename and log are encrypted.
@@ -33,6 +40,8 @@ final class TransferServer: @unchecked Sendable {
   var onStatus: ((String) -> Void)?
   var onConfirmed: ((UUID) -> Void)?
   var onAuthenticatedRequest: ((UUID, Date) -> Void)?
+  var onAppPresence: ((UUID, Bool, Date) -> Void)?
+  var onTransferActivity: ((UUID, Bool) -> Void)?
 
   init(state: CompanionState) { self.state = state }
 
@@ -185,11 +194,13 @@ final class TransferServer: @unchecked Sendable {
       if let newline = request.firstIndex(of: 10) {
         let response = queue.sync { makeResponse(to: Data(request[..<newline])) }
         guard let response else { return }
+        onTransferActivity?(response.deviceID, true)
+        defer { onTransferActivity?(response.deviceID, false) }
         var offset = 0
-        while offset < response.count {
-          let written = response.withUnsafeBytes { bytes in
+        while offset < response.data.count {
+          let written = response.data.withUnsafeBytes { bytes in
             Darwin.send(client, bytes.baseAddress!.advanced(by: offset),
-              response.count - offset, 0)
+              response.data.count - offset, 0)
           }
           guard written > 0 else { return }
           offset += written
@@ -273,12 +284,14 @@ final class TransferServer: @unchecked Sendable {
       connection.cancel()
       return
     }
-    connection.send(content: response, completion: .contentProcessed { _ in
+    onTransferActivity?(response.deviceID, true)
+    connection.send(content: response.data, completion: .contentProcessed { [weak self] _ in
+      self?.onTransferActivity?(response.deviceID, false)
       connection.cancel()
     })
   }
 
-  private func makeResponse(to requestData: Data) -> Data? {
+  private func makeResponse(to requestData: Data) -> PreparedResponse? {
     guard let request = try? JSONDecoder().decode(PullRequest.self, from: requestData),
       request.hostID == state.hostID,
       let device = state.devices.first(where: { $0.physicalDeviceID == request.physicalDeviceID }),
@@ -287,8 +300,31 @@ final class TransferServer: @unchecked Sendable {
     let message = "\(request.hostID.uuidString)|\(request.physicalDeviceID.uuidString)|\(request.nonce.uuidString)|\(request.ack ?? "")"
     let expected = Data(HMAC<SHA256>.authenticationCode(for: Data(message.utf8),
       using: SymmetricKey(data: device.secret)))
-    guard let received = Data(hex: request.mac), received == expected else { return nil }
-    onAuthenticatedRequest?(device.physicalDeviceID, Date())
+    let backgroundMessage = "background|\(request.hostID.uuidString)|\(request.physicalDeviceID.uuidString)|\(request.nonce.uuidString)"
+    let expectedBackground = Data(HMAC<SHA256>.authenticationCode(
+      for: Data(backgroundMessage.utf8), using: SymmetricKey(data: device.secret)))
+    guard let received = Data(hex: request.mac) else { return nil }
+    let backgroundNotice = request.presence == "background" && request.ack == ""
+      && received == expectedBackground
+    guard backgroundNotice || received == expected else { return nil }
+    let now = Date()
+    onAuthenticatedRequest?(device.physicalDeviceID, now)
+    nonces[request.nonce] = now
+    nonces = nonces.filter { now.timeIntervalSince($0.value) < 300 }
+    if backgroundNotice {
+      onAppPresence?(device.physicalDeviceID, false, now)
+      return nil
+    }
+    let signedPresence: String? = {
+      guard let presence = request.presence, ["foreground", "background"].contains(presence),
+        let supplied = request.presenceMAC.flatMap(Data.init(hex:)) else { return nil }
+      let expectedPresence = Data(HMAC<SHA256>.authenticationCode(
+        for: Data("presence|\(request.nonce.uuidString)|\(presence)".utf8),
+        using: SymmetricKey(data: device.secret)))
+      return supplied == expectedPresence ? presence : nil
+    }()
+    onAppPresence?(device.physicalDeviceID, signedPresence != "background", now)
+    if signedPresence == "background" { return nil }
     if let index = state.devices.firstIndex(where: {
       $0.physicalDeviceID == request.physicalDeviceID
     }), state.devices[index].confirmedAt == nil {
@@ -300,8 +336,6 @@ final class TransferServer: @unchecked Sendable {
         onStatus?(MacTransferL10n.format("mt_m_17", error.localizedDescription))
       }
     }
-    nonces[request.nonce] = Date()
-    nonces = nonces.filter { Date().timeIntervalSince($0.value) < 300 }
     if let encoded = request.clientDiagnostics,
       let signature = request.clientDiagnosticsMAC,
       let report = Data(base64Encoded: encoded), report.count <= 8192,
@@ -339,7 +373,7 @@ final class TransferServer: @unchecked Sendable {
       guard let combined = sealed.combined else { throw CollectorError.failed(MacTransferL10n.text("mt_c_08")) }
       var length = UInt32(combined.count).bigEndian
       let prefix = withUnsafeBytes(of: &length) { Data($0) }
-      return prefix + combined
+      return PreparedResponse(data: prefix + combined, deviceID: device.physicalDeviceID)
     } catch {
       onStatus?(MacTransferL10n.format("mt_m_18", error.localizedDescription))
       return nil

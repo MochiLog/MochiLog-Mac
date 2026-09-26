@@ -6982,6 +6982,84 @@
         "zh-Hant": { "stringUnit": { "state": "translated", "value": "已配對；目前不一定已連線" } }
       }
     },
+    "mt_presence_foreground": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "App open and responding" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "アプリを開いています" } },
+        "de": { "stringUnit": { "state": "translated", "value": "App geöffnet und erreichbar" } },
+        "es": { "stringUnit": { "state": "translated", "value": "App abierta y responde" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "App ouverte et joignable" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "앱이 열려 있고 응답 중" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "App 已打开且有响应" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "App 已開啟且有回應" } }
+      }
+    },
+    "mt_presence_transferring": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Sending logs to the app" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "アプリへログを転送中" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Logs werden an die App gesendet" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Enviando registros a la app" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Envoi des journaux à l’app" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "앱으로 로그 전송 중" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "正在向 App 发送日志" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "正在向 App 傳送日誌" } }
+      }
+    },
+    "mt_presence_background": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "App in background" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "アプリはバックグラウンドです" } },
+        "de": { "stringUnit": { "state": "translated", "value": "App im Hintergrund" } },
+        "es": { "stringUnit": { "state": "translated", "value": "App en segundo plano" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "App en arrière-plan" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "앱이 백그라운드에 있음" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "App 在后台" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "App 在背景執行" } }
+      }
+    },
+    "mt_presence_no_response": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "No recent response; app closed or unreachable" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "最近の応答なし。アプリ終了または通信不可" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Keine neue Antwort; App geschlossen oder nicht erreichbar" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Sin respuesta reciente; app cerrada o inaccesible" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Aucune réponse récente ; app fermée ou inaccessible" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "최근 응답 없음: 앱 종료 또는 연결 불가" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "近期无响应：App 已关闭或无法连接" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "近期無回應：App 已關閉或無法連線" } }
+      }
+    },
+    "mt_presence_unknown": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "App state not yet confirmed" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "アプリの状態をまだ確認できません" } },
+        "de": { "stringUnit": { "state": "translated", "value": "App-Status noch nicht bestätigt" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Estado de la app aún sin confirmar" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "État de l’app non confirmé" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "앱 상태 아직 확인되지 않음" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "尚未确认 App 状态" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "尚未確認 App 狀態" } }
+      }
+    },
+    "mt_presence_note": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "“Open” means a recent authenticated request, not a permanent connection. If an app closes unexpectedly, it may take about 2½ minutes to show no response." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "「開いている」は最近の認証済み通信を示し、常時接続ではありません。予期せず終了した場合、応答なしへの切り替えに約2分半かかることがあります。" } },
+        "de": { "stringUnit": { "state": "translated", "value": "„Geöffnet“ bedeutet eine kürzliche authentifizierte Anfrage, keine dauerhafte Verbindung. Nach einem unerwarteten Schließen kann es etwa 2½ Minuten bis „Keine Antwort“ dauern." } },
+        "es": { "stringUnit": { "state": "translated", "value": "«Abierta» indica una solicitud autenticada reciente, no una conexión permanente. Tras un cierre inesperado, pueden pasar unos 2,5 minutos hasta mostrar «Sin respuesta»." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "«Ouverte» indique une requête authentifiée récente, pas une connexion permanente. Après une fermeture inattendue, l’absence de réponse peut apparaître sous environ 2 min 30." } },
+        "ko": { "stringUnit": { "state": "translated", "value": "「열림」은 최근 인증된 요청을 뜻하며 지속 연결은 아닙니다. 앱이 갑자기 종료되면 응답 없음 표시까지 약 2분 30초 걸릴 수 있습니다." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "“已打开”表示近期收到经过验证的请求，并非持续连接。App 意外关闭后，约需 2 分半钟才会显示“无响应”。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "「已開啟」表示近期收到經驗證的請求，並非持續連線。App 意外關閉後，約需 2 分半鐘才會顯示「無回應」。" } }
+      }
+    },
     "mt_nav_connected": {
       "extractionState": "manual",
       "localizations": {

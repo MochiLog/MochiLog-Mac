@@ -34,8 +34,11 @@ private func discover(_ name: String) throws -> NWEndpoint {
 
 private func request(_ endpoint: NWEndpoint, hostID: UUID, device: PairedDevice,
   nonce: UUID = UUID(), ack: String = "", validMAC: Bool = true,
-  diagnostics: Data? = nil, expectNoResponse: Bool = false, delayedChunks: Bool = false) throws -> Data {
-  let message = "\(hostID.uuidString)|\(device.physicalDeviceID.uuidString)|\(nonce.uuidString)|\(ack)"
+  diagnostics: Data? = nil, presence: String? = nil,
+  expectNoResponse: Bool = false, delayedChunks: Bool = false) throws -> Data {
+  let message = presence == "background"
+    ? "background|\(hostID.uuidString)|\(device.physicalDeviceID.uuidString)|\(nonce.uuidString)"
+    : "\(hostID.uuidString)|\(device.physicalDeviceID.uuidString)|\(nonce.uuidString)|\(ack)"
   let mac = HMAC<SHA256>.authenticationCode(for: Data(message.utf8),
     using: SymmetricKey(data: device.secret))
     .map { String(format: "%02x", $0) }.joined()
@@ -46,6 +49,13 @@ private func request(_ endpoint: NWEndpoint, hostID: UUID, device: PairedDevice,
     "ack": ack,
     "mac": validMAC ? mac : String(repeating: "0", count: 64)
   ]
+  if let presence {
+    payload["presence"] = presence
+    payload["presenceMAC"] = HMAC<SHA256>.authenticationCode(
+      for: Data("presence|\(nonce.uuidString)|\(presence)".utf8),
+      using: SymmetricKey(data: device.secret))
+      .map { String(format: "%02x", $0) }.joined()
+  }
   if let diagnostics {
     payload["clientDiagnostics"] = diagnostics.base64EncodedString()
     payload["clientDiagnosticsMAC"] = HMAC<SHA256>.authenticationCode(
@@ -165,7 +175,11 @@ struct TransferProtocolTests {
       source: source).appendingPathComponent(filename))
     let server = TransferServer(state: state)
     var authenticatedRequests = 0
+    var presenceEvents: [Bool] = []
+    var transferEvents: [Bool] = []
     server.onAuthenticatedRequest = { _, _ in authenticatedRequests += 1 }
+    server.onAppPresence = { _, isForeground, _ in presenceEvents.append(isForeground) }
+    server.onTransferActivity = { _, active in transferEvents.append(active) }
     try server.start()
     let endpoint = try discover(hostID.uuidString)
 
@@ -198,6 +212,7 @@ struct TransferProtocolTests {
       validMAC: false, expectNoResponse: true)
     try check(rejected.isEmpty, "Invalid MAC was accepted")
     try check(authenticatedRequests == 0, "Invalid MAC appeared as a connected app")
+    try check(presenceEvents.isEmpty, "Invalid MAC changed app presence")
     let afterInvalidMAC = try Collector.pending(for: device)
     try check(afterInvalidMAC.count == 2, "Invalid MAC changed the queue")
 
@@ -209,6 +224,8 @@ struct TransferProtocolTests {
     try check(first.0 == hostToken && first.1 == hostContent,
       "Host payload or token was incorrect")
     try check(authenticatedRequests == 1, "Authenticated app contact was not recorded")
+    try check(presenceEvents == [true], "Old client request did not register as foreground")
+    try check(transferEvents == [true, false], "Transfer activity did not close cleanly")
     try check(Collector.loadState().devices.first?.confirmedAt != nil,
       "First valid request did not confirm pairing")
     try check(SupportDiagnostics.phoneReport(for: device) != nil,
@@ -219,6 +236,20 @@ struct TransferProtocolTests {
       nonce: firstNonce, expectNoResponse: true)
     try check(replay.isEmpty, "Replayed nonce was accepted")
     try check(authenticatedRequests == 1, "Replay appeared as a new app contact")
+    print("Checking authenticated background notice")
+    let backgroundNonce = UUID()
+    let backgroundReply = try request(endpoint, hostID: hostID, device: device,
+      nonce: backgroundNonce, presence: "background", expectNoResponse: true)
+    try check(backgroundReply.isEmpty, "Background notice started a log transfer")
+    try check(presenceEvents.last == false, "Background notice was not recorded")
+    try check(transferEvents == [true, false], "Background notice appeared as a file transfer")
+    let afterNoticeCount = presenceEvents.count
+    _ = try request(endpoint, hostID: hostID, device: device,
+      nonce: backgroundNonce, presence: "background", expectNoResponse: true)
+    try check(presenceEvents.count == afterNoticeCount, "Replayed background notice changed presence")
+    let afterBackground = try Collector.pending(for: device)
+    try check(afterBackground.count == 2,
+      "Background notice changed the delivery queue")
     print("Checking host ACK and Watch transfer")
     let second = try opened(request(endpoint, hostID: hostID, device: device,
       ack: hostToken), secret: device.secret)

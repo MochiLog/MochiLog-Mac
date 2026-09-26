@@ -72,6 +72,15 @@ private enum OSPairingState {
   case unavailable, checking, awaitingWireless, verified, failed
 }
 
+private struct AppPresence {
+  let isForeground: Bool
+  let date: Date
+}
+
+private enum AppPresenceDisplay {
+  case foreground, transferring, background, noResponse, unknown
+}
+
 @MainActor
 final class CompanionModel: ObservableObject {
   @Published var devices: [ConnectedDevice] = []
@@ -89,6 +98,9 @@ final class CompanionModel: ObservableObject {
   @Published var collectionDone = 0
   @Published var collectionTotal = 0
   @Published var lastAppRequestAt: [UUID: Date] = [:]
+  @Published private var appPresence: [UUID: AppPresence] = [:]
+  @Published private var activeTransfers: [UUID: Int] = [:]
+  @Published private var presenceClock = Date()
   @Published var showPairingQR = false
   @Published var state = Collector.loadState()
   private var server: TransferServer?
@@ -110,6 +122,18 @@ final class CompanionModel: ObservableObject {
     server.onAuthenticatedRequest = { [weak self] deviceID, date in
       Task { @MainActor in self?.lastAppRequestAt[deviceID] = date }
     }
+    server.onAppPresence = { [weak self] deviceID, isForeground, date in
+      Task { @MainActor in
+        self?.appPresence[deviceID] = AppPresence(isForeground: isForeground, date: date)
+      }
+    }
+    server.onTransferActivity = { [weak self] deviceID, active in
+      Task { @MainActor in
+        guard let self else { return }
+        let count = self.activeTransfers[deviceID, default: 0]
+        self.activeTransfers[deviceID] = max(0, count + (active ? 1 : -1))
+      }
+    }
     do { try server.start() }
     catch { status = MacTransferL10n.format("mt_m_02", error.localizedDescription) }
     Task {
@@ -119,6 +143,17 @@ final class CompanionModel: ObservableObject {
     Timer.scheduledTimer(withTimeInterval: 30 * 60, repeats: true) { [weak self] _ in
       Task { @MainActor in await self?.collectAll() }
     }
+    Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
+      Task { @MainActor in self?.presenceClock = Date() }
+    }
+  }
+
+  fileprivate func presenceState(for deviceID: UUID) -> AppPresenceDisplay {
+    if activeTransfers[deviceID, default: 0] > 0 { return .transferring }
+    guard let presence = appPresence[deviceID] else { return .unknown }
+    guard presence.isForeground else { return .background }
+    return presenceClock.timeIntervalSince(presence.date) <= 150
+      ? .foreground : .noResponse
   }
 
   var selectableDevices: [ConnectedDevice] {
@@ -467,6 +502,10 @@ private struct CompanionView: View {
                 VStack(alignment: .leading) {
                   Text(device.name).fontWeight(.medium)
                   Text(device.model).font(.caption).foregroundStyle(.secondary)
+                  let presence = model.presenceState(for: device.physicalDeviceID)
+                  Label(presenceTitle(for: presence), systemImage: presenceSymbol(for: presence))
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(presenceColor(for: presence))
                   if let lastRequest = model.lastAppRequestAt[device.physicalDeviceID] {
                     Text(MacTransferL10n.format("mt_last_request",
                       DateFormatter.localizedString(from: lastRequest,
@@ -485,10 +524,40 @@ private struct CompanionView: View {
               }
             }
           }
+          Text(MacTransferL10n.text("mt_presence_note"))
+            .font(.caption).foregroundStyle(.secondary)
           Button(MacTransferL10n.text("mt_nav_manage_devices")) { page = .devices }
             .buttonStyle(.link)
         }.frame(maxWidth: .infinity, alignment: .leading).padding(12)
       }
+    }
+  }
+
+  private func presenceTitle(for state: AppPresenceDisplay) -> String {
+    switch state {
+    case .foreground: MacTransferL10n.text("mt_presence_foreground")
+    case .transferring: MacTransferL10n.text("mt_presence_transferring")
+    case .background: MacTransferL10n.text("mt_presence_background")
+    case .noResponse: MacTransferL10n.text("mt_presence_no_response")
+    case .unknown: MacTransferL10n.text("mt_presence_unknown")
+    }
+  }
+
+  private func presenceSymbol(for state: AppPresenceDisplay) -> String {
+    switch state {
+    case .foreground: "checkmark.circle.fill"
+    case .transferring: "arrow.up.doc"
+    case .background: "moon.zzz"
+    case .noResponse: "wifi.exclamationmark"
+    case .unknown: "questionmark.circle"
+    }
+  }
+
+  private func presenceColor(for state: AppPresenceDisplay) -> Color {
+    switch state {
+    case .foreground, .transferring: .green
+    case .noResponse: .orange
+    case .background, .unknown: .secondary
     }
   }
 
