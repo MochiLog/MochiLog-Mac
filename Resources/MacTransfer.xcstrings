@@ -8056,6 +8056,59 @@
           }
         }
       }
+    },
+    "mt_discovery_timeout": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Device discovery timed out. Keep the device unlocked and connected to the same Wi-Fi, then try again."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "端末の検索がタイムアウトしました。端末をロック解除し、同じWi-Fiに接続して再試行してください。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Gerätesuche hat das Zeitlimit überschritten. Lassen Sie das Gerät entsperrt und mit demselben WLAN verbunden und versuchen Sie es erneut."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se agotó el tiempo de búsqueda de dispositivos. Mantén el dispositivo desbloqueado y conectado a la misma red Wi-Fi e inténtalo de nuevo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La recherche des appareils a expiré. Gardez l’appareil déverrouillé et connecté au même réseau Wi-Fi, puis réessayez."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "기기 검색 시간이 초과되었습니다. 기기의 잠금을 해제하고 같은 Wi-Fi에 연결한 후 다시 시도하세요."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "设备搜索超时。请保持设备解锁并连接同一 Wi-Fi，然后重试。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "裝置搜尋逾時。請保持裝置解鎖並連接同一 Wi-Fi，然後重試。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

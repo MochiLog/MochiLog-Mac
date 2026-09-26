@@ -34,7 +34,7 @@ private func discover(_ name: String) throws -> NWEndpoint {
 
 private func request(_ endpoint: NWEndpoint, hostID: UUID, device: PairedDevice,
   nonce: UUID = UUID(), ack: String = "", validMAC: Bool = true,
-  diagnostics: Data? = nil, expectNoResponse: Bool = false) throws -> Data {
+  diagnostics: Data? = nil, expectNoResponse: Bool = false, delayedChunks: Bool = false) throws -> Data {
   let message = "\(hostID.uuidString)|\(device.physicalDeviceID.uuidString)|\(nonce.uuidString)|\(ack)"
   let mac = HMAC<SHA256>.authenticationCode(for: Data(message.utf8),
     using: SymmetricKey(data: device.secret))
@@ -74,12 +74,24 @@ private func request(_ endpoint: NWEndpoint, hostID: UUID, device: PairedDevice,
   connection.stateUpdateHandler = { state in
     switch state {
     case .ready:
-      connection.send(content: data, completion: .contentProcessed { error in
-        if let error {
-          connectionError = error
-          finished.signal()
-        } else { receive() }
-      })
+      if delayedChunks {
+        queue.asyncAfter(deadline: .now() + 0.25) {
+          connection.send(content: Data(data.prefix(100)), completion: .contentProcessed { error in
+            if let error { connectionError = error; finished.signal(); return }
+            queue.asyncAfter(deadline: .now() + 0.25) {
+              connection.send(content: Data(data.dropFirst(100)), completion: .contentProcessed { error in
+                if let error { connectionError = error; finished.signal() }
+                else { receive() }
+              })
+            }
+          })
+        }
+      } else {
+        connection.send(content: data, completion: .contentProcessed { error in
+          if let error { connectionError = error; finished.signal() }
+          else { receive() }
+        })
+      }
     case .failed(let error):
       connectionError = error
       finished.signal()
@@ -112,6 +124,26 @@ private func opened(_ response: Data, secret: Data) throws -> (String, Data) {
 @main
 struct TransferProtocolTests {
   static func main() throws {
+    print("Checking device discovery fallback after native timeout")
+    let fallback = try Collector.browse { args, _ in
+      if args.first == "remote" { throw CollectorError.timeout }
+      if args.first == "usbmux" { return #"["offline", "ipad"]"# }
+      if args.last == "offline" { throw CollectorError.timeout }
+      return #"{"ProductType":"iPad16,6","DeviceName":"Test iPad"}"#
+    }
+    try check(fallback.count == 1 && fallback[0].udid == "ipad",
+      "A native timeout or offline peer must not hide a reachable Wi-Fi device")
+    let merged = try Collector.browse { args, _ in
+      if args.first == "remote" { return #"[{"udid":"ipad","model":"iPad16,6"}]"# }
+      if args.first == "usbmux" { return #"["ipad"]"# }
+      throw TestFailure.failed("Already discovered device was probed again")
+    }
+    try check(merged.count == 1, "Discovery paths must not duplicate a device")
+    do {
+      _ = try Collector.browse { _, _ in throw CollectorError.timeout }
+      throw TestFailure.failed("Complete discovery failure was hidden")
+    } catch CollectorError.discoveryTimeout { }
+
     setbuf(stdout, nil)
     guard ProcessInfo.processInfo.environment["MOCHILOG_TRANSFER_TEST_ROOT"] != nil else {
       throw TestFailure.failed("Set an isolated MOCHILOG_TRANSFER_TEST_ROOT")
@@ -179,6 +211,13 @@ struct TransferProtocolTests {
     let repeatPull = try opened(request(endpoint, hostID: hostID, device: device),
       secret: device.secret)
     try check(repeatPull.0.isEmpty, "Delivered payload appeared again")
+    print("Checking delayed fragmented requests on the VPN receiver")
+    server.startTestTailnetReceiver()
+    let vpnEndpoint = NWEndpoint.hostPort(host: "127.0.0.1",
+      port: NWEndpoint.Port(rawValue: TransferServer.tailnetPort)!)
+    let vpnReply = try opened(request(vpnEndpoint, hostID: hostID, device: device,
+      delayedChunks: true), secret: device.secret)
+    try check(vpnReply.0.isEmpty, "Delayed VPN request did not receive terminal response")
     print("PASS: authenticated transfer, replay rejection, host/Watch separation, acknowledgements, diagnostics, and repeat pull")
   }
 }

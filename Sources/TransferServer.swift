@@ -87,6 +87,12 @@ final class TransferServer: @unchecked Sendable {
       type: "_mochilog._tcp", txtRecord: record)
   }
 
+  #if TRANSFER_TESTING
+  func startTestTailnetReceiver() {
+    queue.sync { updateTailnetSocket(address: "127.0.0.1") }
+  }
+  #endif
+
   static func tailnetIPv4Address() -> String? {
     localIPv4Addresses(wifiInterfaces: []).tailnet.first
   }
@@ -143,6 +149,10 @@ final class TransferServer: @unchecked Sendable {
       Darwin.close(client)
       queue.async { self.activeTailnetClients -= 1 }
     }
+    // Darwin's accept inherits O_NONBLOCK from the listening socket. This
+    // worker must wait for request bytes, including later TCP fragments.
+    let flags = fcntl(client, F_GETFL)
+    guard flags >= 0, fcntl(client, F_SETFL, flags & ~O_NONBLOCK) == 0 else { return }
     var noPipe: Int32 = 1
     _ = withUnsafePointer(to: &noPipe) {
       setsockopt(client, SOL_SOCKET, SO_NOSIGPIPE, $0,

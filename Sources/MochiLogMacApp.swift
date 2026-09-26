@@ -135,7 +135,7 @@ final class CompanionModel: ObservableObject {
   }
 
   func refresh() async {
-    guard !isRefreshing else { return }
+    guard !isRefreshing, !isBusy else { return }
     isRefreshing = true
     isBusy = true
     defer { isBusy = false; isRefreshing = false }
@@ -208,7 +208,7 @@ final class CompanionModel: ObservableObject {
   }
 
   func collectAll() async {
-    guard !state.devices.isEmpty else { return }
+    guard !state.devices.isEmpty, !isBusy else { return }
     isBusy = true
     defer { isBusy = false }
     for device in state.devices {

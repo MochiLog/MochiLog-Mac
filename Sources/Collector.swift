@@ -24,11 +24,12 @@ struct CompanionState: Codable {
 }
 
 enum CollectorError: LocalizedError {
-  case helperMissing, timeout, signal(Int32, String), exitCode(Int32, String), failed(String)
+  case helperMissing, timeout, discoveryTimeout, signal(Int32, String), exitCode(Int32, String), failed(String)
   var errorDescription: String? {
     switch self {
     case .helperMissing: MacTransferL10n.text("mt_c_00")
     case .timeout: MacTransferL10n.text("mt_c_01")
+    case .discoveryTimeout: MacTransferL10n.text("mt_discovery_timeout")
     case .signal(let code, let detail): MacTransferL10n.format("mt_c_02", code, detail)
     case .exitCode(let code, let detail): MacTransferL10n.format("mt_c_03", code, detail)
     case .failed(let message): message
@@ -131,29 +132,41 @@ enum Collector {
     return text
   }
 
-  static func browse() throws -> [ConnectedDevice] {
-    let text = try run(["remote", "browse", "--native", "--timeout", "4"], timeout: 20)
-    guard let data = text.data(using: .utf8),
-      let rows = try JSONSerialization.jsonObject(with: data) as? [[String: Any]]
-    else { throw CollectorError.failed(MacTransferL10n.text("mt_c_04")) }
-    var devices: [ConnectedDevice] = rows.compactMap { row in
-      guard let udid = row["udid"] as? String, let model = row["model"] as? String,
-        model.hasPrefix("iPhone") || model.hasPrefix("iPad")
-      else { return nil }
-      return ConnectedDevice(udid: udid, name: row["name"] as? String ?? model,
-        model: model)
+  static func browse(runCommand: ([String], TimeInterval) throws -> String = {
+    try Collector.run($0, timeout: $1)
+  }) throws -> [ConnectedDevice] {
+    var devices: [ConnectedDevice] = []
+    var nativeError: Error?
+    do {
+      let text = try runCommand(["remote", "browse", "--native", "--timeout", "4"], 20)
+      guard let data = text.data(using: .utf8),
+        let rows = try JSONSerialization.jsonObject(with: data) as? [[String: Any]]
+      else { throw CollectorError.failed(MacTransferL10n.text("mt_c_04")) }
+      devices = rows.compactMap { row in
+        guard let udid = row["udid"] as? String, let model = row["model"] as? String,
+          model.hasPrefix("iPhone") || model.hasPrefix("iPad") else { return nil }
+        return ConnectedDevice(udid: udid, name: row["name"] as? String ?? model, model: model)
+      }
+    } catch { nativeError = error }
+
+    // RemotePairing discovery can time out on one unavailable peer. Still try
+    // the independent Wi-Fi lockdown discovery used by USB-trusted devices.
+    if let text = try? runCommand(["usbmux", "list", "--network", "--simple"], 20),
+      let data = text.data(using: .utf8),
+      let udids = try? JSONDecoder().decode([String].self, from: data) {
+      for udid in udids where !devices.contains(where: { $0.udid == udid }) {
+        guard let info = try? runCommand(["lockdown", "info", "--mobdev2", "--udid", udid], 20),
+          let data = info.data(using: .utf8),
+          let values = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+          let model = values["ProductType"] as? String,
+          model.hasPrefix("iPhone") || model.hasPrefix("iPad") else { continue }
+        devices.append(ConnectedDevice(udid: udid,
+          name: values["DeviceName"] as? String ?? model, model: model))
+      }
     }
-    // USB-trusted devices can be present on Wi-Fi lockdown without appearing
-    // in Apple's native RemotePairing browser. Include those devices on launch.
-    for udid in (try? usbmuxDeviceIDs("--network")) ?? [] {
-      guard !devices.contains(where: { $0.udid == udid }),
-        let info = try? run(["lockdown", "info", "--mobdev2", "--udid", udid], timeout: 20),
-        let data = info.data(using: .utf8),
-        let values = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-        let model = values["ProductType"] as? String,
-        model.hasPrefix("iPhone") || model.hasPrefix("iPad") else { continue }
-      devices.append(ConnectedDevice(udid: udid,
-        name: values["DeviceName"] as? String ?? model, model: model))
+    if devices.isEmpty, let nativeError {
+      if case CollectorError.timeout = nativeError { throw CollectorError.discoveryTimeout }
+      throw nativeError
     }
     return devices
   }
