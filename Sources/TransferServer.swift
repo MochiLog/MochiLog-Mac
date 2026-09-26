@@ -1,6 +1,7 @@
 import CryptoKit
 import Foundation
 import Network
+import Darwin
 
 private struct PullRequest: Decodable {
   let hostID: UUID
@@ -16,6 +17,7 @@ private struct PullRequest: Decodable {
 final class TransferServer: @unchecked Sendable {
   private let queue = DispatchQueue(label: "net.ryuya-dev.MochiLog.mac-transfer")
   private var listener: NWListener?
+  private var pathMonitor: NWPathMonitor?
   private var state: CompanionState
   private var nonces: [UUID: Date] = [:]
   var onStatus: ((String) -> Void)?
@@ -34,13 +36,72 @@ final class TransferServer: @unchecked Sendable {
     }
     listener.stateUpdateHandler = { [weak self] status in
       switch status {
-      case .ready: self?.onStatus?(MacTransferL10n.text("mt_m_15"))
+      case .ready:
+        self?.publishReachableAddresses()
+        self?.onStatus?(MacTransferL10n.text("mt_m_15"))
       case .failed(let error): self?.onStatus?(MacTransferL10n.format("mt_m_16", error.localizedDescription))
       default: break
       }
     }
     self.listener = listener
     listener.start(queue: queue)
+    let monitor = NWPathMonitor()
+    monitor.pathUpdateHandler = { [weak self] _ in
+      self?.publishReachableAddresses()
+    }
+    pathMonitor = monitor
+    monitor.start(queue: queue)
+  }
+
+  private func publishReachableAddresses() {
+    guard let listener, let port = listener.port else { return }
+    let wifiInterfaces = Set(pathMonitor?.currentPath.availableInterfaces
+      .filter { $0.type == .wifi }.map(\.name) ?? [])
+    let addresses = Self.localIPv4Addresses(wifiInterfaces: wifiInterfaces)
+    guard !addresses.isEmpty else { return }
+    let record = NWTXTRecord([
+      "v": "1",
+      "port": String(port.rawValue),
+      "ipv4": addresses.joined(separator: ",")
+    ])
+    listener.service = NWListener.Service(name: state.hostID.uuidString,
+      type: "_mochilog._tcp", txtRecord: record)
+  }
+
+  private static func localIPv4Addresses(wifiInterfaces: Set<String>) -> [String] {
+    var first: UnsafeMutablePointer<ifaddrs>?
+    guard getifaddrs(&first) == 0 else { return [] }
+    defer { freeifaddrs(first) }
+    var values: [(name: String, address: String)] = []
+    var current = first
+    while let entry = current?.pointee {
+      defer { current = entry.ifa_next }
+      guard let address = entry.ifa_addr,
+        address.pointee.sa_family == sa_family_t(AF_INET),
+        (entry.ifa_flags & UInt32(IFF_UP)) != 0,
+        (entry.ifa_flags & UInt32(IFF_LOOPBACK)) == 0 else { continue }
+      let name = String(cString: entry.ifa_name)
+      guard name.hasPrefix("en") else { continue }
+      var storage = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
+      var sockaddr = address.withMemoryRebound(to: sockaddr_in.self, capacity: 1) {
+        $0.pointee
+      }
+      let ipv4 = withUnsafePointer(to: &sockaddr.sin_addr) {
+        inet_ntop(AF_INET, $0, &storage, socklen_t(INET_ADDRSTRLEN))
+      }
+      guard ipv4 != nil else { continue }
+      let value = String(cString: storage)
+      let parts = value.split(separator: ".").compactMap { Int($0) }
+      if value.hasPrefix("10.") || value.hasPrefix("192.168.") ||
+        (parts.count == 4 && parts[0] == 172 && (16...31).contains(parts[1])) {
+        values.append((name, value))
+      }
+    }
+    return values.sorted {
+      let firstWiFi = wifiInterfaces.contains($0.name)
+      let secondWiFi = wifiInterfaces.contains($1.name)
+      return firstWiFi == secondWiFi ? $0.name < $1.name : firstWiFi
+    }.prefix(4).map(\.address)
   }
 
   private func handle(_ connection: NWConnection) {
