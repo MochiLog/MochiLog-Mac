@@ -65,15 +65,23 @@ private struct MacMenuBarContent: View {
   }
 }
 
+private enum OSPairingState {
+  case unavailable, checking, awaitingWireless, verified, failed
+}
+
 @MainActor
 final class CompanionModel: ObservableObject {
   @Published var devices: [ConnectedDevice] = []
+  @Published private var pendingUSBDevice: ConnectedDevice?
   @Published var selectedUDID: String?
   @Published var status = MacTransferL10n.text("mt_m_00") {
     didSet { if status != oldValue { SupportDiagnostics.record(status) } }
   }
   @Published var pairingCode: String?
   @Published var isPairingSystem = false
+  @Published var isPairingUSB = false
+  @Published fileprivate var osPairingState: OSPairingState = .unavailable
+  fileprivate var isRefreshing = false
   @Published var isBusy = false
   @Published var collectionDone = 0
   @Published var collectionTotal = 0
@@ -106,21 +114,69 @@ final class CompanionModel: ObservableObject {
     }
   }
 
-  var selected: ConnectedDevice? { devices.first { $0.udid == selectedUDID } }
+  var selectableDevices: [ConnectedDevice] {
+    var result = devices
+    if let pendingUSBDevice,
+      !result.contains(where: { $0.udid == pendingUSBDevice.udid }) {
+      result.append(pendingUSBDevice)
+    }
+    result += state.devices.filter { saved in
+      !result.contains(where: { $0.udid == saved.udid })
+    }.map { saved in
+      ConnectedDevice(udid: saved.udid, name: saved.name, model: saved.model)
+    }
+    return result
+  }
+  var selected: ConnectedDevice? { selectableDevices.first { $0.udid == selectedUDID } }
   var pairedSelected: PairedDevice? { state.devices.first { $0.udid == selectedUDID } }
+  var isOSPairingVerified: Bool {
+    if case .verified = osPairingState { return true }
+    return false
+  }
 
   func refresh() async {
+    guard !isRefreshing else { return }
+    isRefreshing = true
     isBusy = true
-    defer { isBusy = false }
+    defer { isBusy = false; isRefreshing = false }
     do {
       devices = try await Task.detached(priority: .utility) { try Collector.browse() }.value
+      if let pendingUSBDevice,
+        devices.contains(where: { $0.udid == pendingUSBDevice.udid }) {
+        self.pendingUSBDevice = nil
+      }
       status = MacTransferL10n.format("mt_m_03", devices.count)
-      if selectedUDID == nil { selectedUDID = devices.first?.udid }
+      if selectedUDID == nil { selectedUDID = selectableDevices.first?.udid }
+      await verifySelectedOSPairing()
     } catch { status = MacTransferL10n.format("mt_m_04", error.localizedDescription) }
   }
 
+  func verifySelectedOSPairing() async {
+    guard let udid = selectedUDID else {
+      osPairingState = .unavailable
+      return
+    }
+    osPairingState = .checking
+    do {
+      let isUSBConnected = try await Task.detached(priority: .utility) {
+        try Collector.isUSBConnected(udid: udid)
+      }.value
+      guard selectedUDID == udid else { return }
+      if isUSBConnected {
+        osPairingState = .awaitingWireless
+        return
+      }
+      try await Task.detached(priority: .utility) {
+        try Collector.verifyOSPairing(udid: udid)
+      }.value
+      if selectedUDID == udid { osPairingState = .verified }
+    } catch {
+      if selectedUDID == udid { osPairingState = .failed }
+    }
+  }
+
   func pairApp() {
-    guard let selected else { return }
+    guard let selected, isOSPairingVerified else { return }
     guard state.devices.first(where: { $0.udid == selected.udid }) == nil else { return }
     let new = PairedDevice(udid: selected.udid, name: selected.name, model: selected.model,
       physicalDeviceID: UUID(), secret: Data((0..<32).map { _ in UInt8.random(in: 0...255) }))
@@ -165,11 +221,13 @@ final class CompanionModel: ObservableObject {
           }
         }.value
         SupportDiagnostics.saveCollection(report, error: nil, for: device)
+        if selectedUDID == device.udid { osPairingState = .verified }
         status = report.failed == 0
           ? MacTransferL10n.format("mt_m_08", device.name, report.saved, report.skipped)
           : MacTransferL10n.format("mt_m_09", device.name, report.saved, report.skipped, report.failed, report.lastError ?? "")
       } catch {
         SupportDiagnostics.saveCollection(nil, error: error, for: device)
+        if selectedUDID == device.udid { osPairingState = .failed }
         status = "\(device.name): \(error.localizedDescription)"
       }
     }
@@ -226,6 +284,25 @@ final class CompanionModel: ObservableObject {
   }
 
   func stopSystemPairing() { pairProcess?.terminate() }
+
+  func prepareUSBPairing() async {
+    guard !isPairingUSB else { return }
+    isPairingUSB = true
+    status = MacTransferL10n.text("mt_usb_progress")
+    defer { isPairingUSB = false }
+    do {
+      let device = try await Task.detached(priority: .utility) {
+        try Collector.prepareUSBPairing()
+      }.value
+      pendingUSBDevice = device
+      selectedUDID = device.udid
+      await refresh()
+      osPairingState = .awaitingWireless
+      status = MacTransferL10n.format("mt_usb_success", device.name)
+    } catch {
+      status = MacTransferL10n.format("mt_usb_error", error.localizedDescription)
+    }
+  }
 }
 
 private struct CompanionView: View {
@@ -375,16 +452,34 @@ private struct CompanionView: View {
           Text(MacTransferL10n.text("mt_008"))
           Text(MacTransferL10n.text("mt_009"))
           Divider()
+          Label(MacTransferL10n.text("mt_usb_wireless_title"),
+            systemImage: "wifi")
+            .font(.headline)
+          Text(MacTransferL10n.text("mt_usb_wireless_detail"))
+            .foregroundStyle(.secondary)
           HStack {
             Button(model.isPairingSystem ? MacTransferL10n.text("mt_010")
               : MacTransferL10n.text("mt_011")) {
               model.isPairingSystem ? model.stopSystemPairing() : model.startSystemPairing()
             }
+            .disabled(model.isPairingUSB)
             if let code = model.pairingCode {
               Text(code).font(.system(.title2, design: .monospaced).bold())
                 .textSelection(.enabled)
             }
           }
+          Divider()
+          Label(MacTransferL10n.text("mt_usb_title"), systemImage: "cable.connector")
+            .font(.headline)
+          Text(MacTransferL10n.text("mt_usb_detail"))
+            .foregroundStyle(.secondary)
+          Button {
+            Task { await model.prepareUSBPairing() }
+          } label: {
+            if model.isPairingUSB { ProgressView().controlSize(.small) }
+            Text(MacTransferL10n.text("mt_usb_button"))
+          }
+          .disabled(model.isPairingUSB || model.isPairingSystem)
         }.frame(maxWidth: .infinity, alignment: .leading).padding(12)
       }
       GroupBox(MacTransferL10n.text("mt_012")) {
@@ -392,8 +487,13 @@ private struct CompanionView: View {
           HStack {
             Picker(MacTransferL10n.text("mt_013"), selection: $model.selectedUDID) {
               Text(MacTransferL10n.text("mt_014")).tag(String?.none)
-              ForEach(model.devices) { device in
+              ForEach(model.selectableDevices) { device in
                 Text("\(device.name) (\(device.model))").tag(Optional(device.udid))
+              }
+            }
+            .onChange(of: model.selectedUDID) { _, _ in
+              if !model.isRefreshing {
+                Task { await model.verifySelectedOSPairing() }
               }
             }
             Button {
@@ -401,7 +501,10 @@ private struct CompanionView: View {
             } label: { Image(systemName: "arrow.clockwise") }
               .help(MacTransferL10n.text("mt_015"))
           }
-          if let selected = model.selected {
+          if let selected = model.selected, model.isOSPairingVerified {
+            Label(MacTransferL10n.text("mt_os_paired"),
+              systemImage: "checkmark.circle.fill")
+              .foregroundStyle(.green)
             if model.pairedSelected == nil {
               Button(MacTransferL10n.text("mt_016")) { model.pairApp() }
                 .buttonStyle(.borderedProminent)
@@ -427,10 +530,28 @@ private struct CompanionView: View {
                 }
               }
             }
+          } else if case .checking = model.osPairingState {
+            HStack {
+              ProgressView().controlSize(.small)
+              Text(MacTransferL10n.text("mt_os_checking"))
+            }
+          } else if case .awaitingWireless = model.osPairingState {
+            Label(MacTransferL10n.text("mt_os_awaiting_wireless"),
+              systemImage: "wifi")
+              .foregroundStyle(.orange)
+          } else if case .failed = model.osPairingState {
+            Label(MacTransferL10n.text("mt_os_unreachable"),
+              systemImage: "wifi.exclamationmark")
+              .foregroundStyle(.orange)
+          } else {
+            Label(MacTransferL10n.text("mt_os_pair_first"),
+              systemImage: "exclamationmark.circle")
+              .foregroundStyle(.secondary)
           }
         }.frame(maxWidth: .infinity, alignment: .leading).padding(12)
       }
     }
+    .onAppear { Task { await model.refresh() } }
   }
 
   private var support: some View {

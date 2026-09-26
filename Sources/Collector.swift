@@ -140,8 +140,62 @@ enum Collector {
       guard let udid = row["udid"] as? String, let model = row["model"] as? String,
         model.hasPrefix("iPhone") || model.hasPrefix("iPad")
       else { return nil }
-      return ConnectedDevice(udid: udid, name: row["name"] as? String ?? model, model: model)
+      return ConnectedDevice(udid: udid, name: row["name"] as? String ?? model,
+        model: model)
     }
+  }
+
+  /// Request RemotePairing over an already trusted USB lockdown connection.
+  /// This records the USB setup attempt; wireless access is checked separately
+  /// after the cable is removed before the app pairing flow can continue.
+  static func prepareUSBPairing() throws -> ConnectedDevice {
+    let text = try run(["usbmux", "list", "--usb", "--simple"], timeout: 20)
+    guard let data = text.data(using: .utf8),
+      let udids = try JSONSerialization.jsonObject(with: data) as? [String]
+    else { throw CollectorError.failed(MacTransferL10n.text("mt_c_04")) }
+    guard udids.count == 1, let udid = udids.first else {
+      throw CollectorError.failed(MacTransferL10n.text(
+        udids.isEmpty ? "mt_usb_no_device" : "mt_usb_multiple_devices"))
+    }
+    if (try? run(["lockdown", "info", "--udid", udid], timeout: 20)) == nil {
+      _ = try run(["lockdown", "pair", "--udid", udid], timeout: 90)
+    }
+    let info = try run(["lockdown", "info", "--udid", udid], timeout: 20)
+    guard let infoData = info.data(using: .utf8),
+      let values = try JSONSerialization.jsonObject(with: infoData) as? [String: Any],
+      let model = values["ProductType"] as? String,
+      let version = values["ProductVersion"] as? String,
+      (Int(version.split(separator: ".").first ?? "0") ?? 0) >= 27,
+      model.hasPrefix("iPhone") || model.hasPrefix("iPad") else {
+      throw CollectorError.failed(MacTransferL10n.text("mt_usb_unsupported"))
+    }
+    _ = try run(["lockdown", "wifi-connections", "on", "--udid", udid], timeout: 20)
+    let state = try run(["lockdown", "wifi-connections", "--udid", udid], timeout: 20)
+    guard let stateData = state.data(using: .utf8),
+      let settings = try JSONSerialization.jsonObject(with: stateData) as? [String: Any],
+      settings["EnableWifiConnections"] as? Bool == true else {
+      throw CollectorError.failed(MacTransferL10n.text("mt_usb_wifi_failed"))
+    }
+    // This creates a pymobiledevice3 RemotePairing record. The collector uses
+    // Apple's native route, so USB command success alone must not unlock QR.
+    _ = try run(["lockdown", "remotepairing", "--pair", "--udid", udid], timeout: 45)
+    return ConnectedDevice(udid: udid, name: values["DeviceName"] as? String ?? model,
+      model: model)
+  }
+
+  /// A live read of the diagnostics service, not just a cached pair record.
+  /// Listing the root avoids downloading any analytics content.
+  static func verifyOSPairing(udid: String) throws {
+    _ = try run(["crash", "ls", "--native", "--udid", udid,
+      "--remote-file", "/", "--depth", "1"], timeout: 45)
+  }
+
+  static func isUSBConnected(udid: String) throws -> Bool {
+    let text = try run(["usbmux", "list", "--usb", "--simple"], timeout: 20)
+    guard let data = text.data(using: .utf8),
+      let udids = try JSONSerialization.jsonObject(with: data) as? [String]
+    else { throw CollectorError.failed(MacTransferL10n.text("mt_c_04")) }
+    return udids.contains(udid)
   }
 
   static func directory(for device: PairedDevice) throws -> URL {
