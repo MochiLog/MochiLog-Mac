@@ -8,7 +8,9 @@ enum SupportDiagnostics {
     var events = (try? JSONDecoder().decode([String].self,
       from: Data(contentsOf: eventsURL))) ?? []
     guard events.last?.hasSuffix(" | \(normalized)") != true else { return }
-    events.append("\(ISO8601DateFormatter().string(from: Date())) | \(normalized)")
+    let formatter = ISO8601DateFormatter()
+    formatter.timeZone = .autoupdatingCurrent
+    events.append("\(formatter.string(from: Date())) | \(normalized)")
     if events.count > 80 { events.removeFirst(events.count - 80) }
     try? JSONEncoder().encode(events).write(to: eventsURL, options: .atomic)
   }
