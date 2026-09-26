@@ -466,6 +466,20 @@ private struct CompanionView: View {
 
   private var overview: some View {
     VStack(alignment: .leading, spacing: 22) {
+      GroupBox(MacTransferL10n.text("mt_guide_title")) {
+        VStack(alignment: .leading, spacing: 16) {
+          guidePoint("mt_guide_collect_title", "mt_guide_collect_detail",
+            symbol: "macbook.and.iphone")
+          guidePoint("mt_guide_import_title", "mt_guide_import_detail",
+            symbol: "arrow.down.doc")
+          guidePoint("mt_guide_without_title", "mt_guide_without_detail",
+            symbol: "iphone")
+          Text(MacTransferL10n.text("mt_guide_footer"))
+            .font(.caption).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+      }
       GroupBox(MacTransferL10n.text("mt_nav_activity")) {
         VStack(alignment: .leading, spacing: 18) {
           Text(model.status).textSelection(.enabled)
@@ -532,6 +546,23 @@ private struct CompanionView: View {
           Button(MacTransferL10n.text("mt_nav_manage_devices")) { page = .devices }
             .buttonStyle(.link)
         }.frame(maxWidth: .infinity, alignment: .leading).padding(12)
+      }
+    }
+  }
+
+  private func guidePoint(_ titleKey: String, _ detailKey: String,
+    symbol: String) -> some View {
+    HStack(alignment: .top, spacing: 12) {
+      Image(systemName: symbol)
+        .font(.title3.weight(.medium))
+        .foregroundStyle(.green)
+        .frame(width: 26)
+        .accessibilityHidden(true)
+      VStack(alignment: .leading, spacing: 4) {
+        Text(MacTransferL10n.text(titleKey)).font(.headline)
+        Text(MacTransferL10n.text(detailKey))
+          .foregroundStyle(.secondary)
+          .fixedSize(horizontal: false, vertical: true)
       }
     }
   }

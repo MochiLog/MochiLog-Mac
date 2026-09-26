@@ -2,6 +2,12 @@
 
 MochiLogのiOS/iPadOS 27向けワイヤレスログ転送機能のMac用ベータアプリです。macOS 27以降に対応します。Macが解析ログを取得して保持し、iPhone/iPadでMochiLogを開いたときにローカルネットワークで暗号化して転送します。解析と記録はiPhone/iPad側で行います。
 
+## Mac連携でできること
+
+Macアプリを起動して端末をペアリングすると、端末のロック解除中にバッテリー解析ログをWi-Fiで収集し、転送待ちとして保管します。iPhone/iPadでMochiLogを開くと、保管したログを暗号化して受け取り、アプリ側で解析・記録します。ペアリング済みApple Watchのログも、iPhone内にあるものは収集対象です。iCloud同期はこれとは別の任意設定です。
+
+Mac連携を設定しなくても、iPhone/iPadのMochiLogは従来どおり使えます。設定アプリから解析ログを手動で共有し、記録・分析・グラフを利用できます。Mac連携は手動共有の手間を減らすためのベータ機能です。
+
 ## 利用手順
 
 1. 署名済みDMGを開き、`MochiLog Mac.app`をApplicationsへコピーします。Python、Xcode、Homebrewの追加インストールは不要です。
