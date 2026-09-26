@@ -136,13 +136,26 @@ enum Collector {
     guard let data = text.data(using: .utf8),
       let rows = try JSONSerialization.jsonObject(with: data) as? [[String: Any]]
     else { throw CollectorError.failed(MacTransferL10n.text("mt_c_04")) }
-    return rows.compactMap { row in
+    var devices: [ConnectedDevice] = rows.compactMap { row in
       guard let udid = row["udid"] as? String, let model = row["model"] as? String,
         model.hasPrefix("iPhone") || model.hasPrefix("iPad")
       else { return nil }
       return ConnectedDevice(udid: udid, name: row["name"] as? String ?? model,
         model: model)
     }
+    // USB-trusted devices can be present on Wi-Fi lockdown without appearing
+    // in Apple's native RemotePairing browser. Include those devices on launch.
+    for udid in (try? usbmuxDeviceIDs("--network")) ?? [] {
+      guard !devices.contains(where: { $0.udid == udid }),
+        let info = try? run(["lockdown", "info", "--mobdev2", "--udid", udid], timeout: 20),
+        let data = info.data(using: .utf8),
+        let values = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+        let model = values["ProductType"] as? String,
+        model.hasPrefix("iPhone") || model.hasPrefix("iPad") else { continue }
+      devices.append(ConnectedDevice(udid: udid,
+        name: values["DeviceName"] as? String ?? model, model: model))
+    }
+    return devices
   }
 
   /// Request RemotePairing over an already trusted USB lockdown connection.
@@ -184,18 +197,33 @@ enum Collector {
   }
 
   /// A live read of the diagnostics service, not just a cached pair record.
-  /// Listing the root avoids downloading any analytics content.
+  /// A trusted USB setup can use Wi-Fi lockdown even when Apple's native
+  /// RemotePairing route remains unauthenticated. Both paths are wireless.
   static func verifyOSPairing(udid: String) throws {
-    _ = try run(["crash", "ls", "--native", "--udid", udid,
-      "--remote-file", "/", "--depth", "1"], timeout: 45)
+    _ = try remoteRootListing(udid: udid)
   }
 
-  static func isUSBConnected(udid: String) throws -> Bool {
-    let text = try run(["usbmux", "list", "--usb", "--simple"], timeout: 20)
+  private static func usbmuxDeviceIDs(_ connection: String) throws -> [String] {
+    let text = try run(["usbmux", "list", connection, "--simple"], timeout: 20)
     guard let data = text.data(using: .utf8),
       let udids = try JSONSerialization.jsonObject(with: data) as? [String]
     else { throw CollectorError.failed(MacTransferL10n.text("mt_c_04")) }
-    return udids.contains(udid)
+    return udids
+  }
+
+  static func isUSBConnected(udid: String) throws -> Bool {
+    try usbmuxDeviceIDs("--usb").contains(udid)
+  }
+
+  private static func remoteRootListing(udid: String) throws -> (String, [String]) {
+    let native = ["--native", "--udid", udid]
+    let network = ["--mobdev2", "--udid", udid]
+    let root = ["--remote-file", "/", "--depth", "1"]
+    if (try? usbmuxDeviceIDs("--network").contains(udid)) == true,
+      let listing = try? run(["crash", "ls"] + network + root, timeout: 45) {
+      return (listing, network)
+    }
+    return (try run(["crash", "ls"] + native + root, timeout: 45), native)
   }
 
   static func directory(for device: PairedDevice) throws -> URL {
@@ -311,22 +339,21 @@ enum Collector {
 
   static func collect(_ device: PairedDevice,
     progress: ((Int, Int) -> Void)? = nil) throws -> CollectionReport {
-    let rootListing = try run(["crash", "ls", "--native", "--udid", device.udid,
-      "--remote-file", "/", "--depth", "1"], timeout: 90)
+    let (rootListing, connection) = try remoteRootListing(udid: device.udid)
     let proxiedSources = rootListing.split(separator: "\n").map(String.init).filter {
       $0.range(of: #"^/ProxiedDevice-[a-fA-F0-9]+$"#,
         options: .regularExpression) != nil
     }
-    let listing = try run(["crash", "ls", "--native", "--udid", device.udid,
-      "--remote-file", "/Retired", "--depth", "1"], timeout: 90)
+    let listing = try run(["crash", "ls"] + connection +
+      ["--remote-file", "/Retired", "--depth", "1"], timeout: 90)
     var remoteFiles = listing.split(separator: "\n").map {
       RemoteLog(path: String($0), source: nil)
     }
     for sourcePath in proxiedSources {
       let source = String(sourcePath.dropFirst())
       do {
-        let listed = try run(["crash", "ls", "--native", "--udid", device.udid,
-          "--remote-file", "\(sourcePath)/Retired", "--depth", "1"], timeout: 90)
+        let listed = try run(["crash", "ls"] + connection +
+          ["--remote-file", "\(sourcePath)/Retired", "--depth", "1"], timeout: 90)
         remoteFiles += listed.split(separator: "\n").map {
           RemoteLog(path: String($0), source: source)
         }
@@ -375,8 +402,8 @@ enum Collector {
         var pullError: Error?
         for attempt in 0..<2 {
           do {
-            _ = try run(["crash", "pull", staging.path, "--remote-file", remote.path,
-              "--native", "--udid", device.udid], timeout: 180)
+            _ = try run(["crash", "pull", staging.path, "--remote-file", remote.path]
+              + connection, timeout: 180)
             pullError = nil
             break
           } catch {
