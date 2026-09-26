@@ -6891,6 +6891,97 @@
         }
       }
     },
+    "mt_send_now": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Send now" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "今すぐ送信" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Jetzt senden" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Enviar ahora" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Envoyer maintenant" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "지금 보내기" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "立即发送" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "立即傳送" } }
+      }
+    },
+    "mt_send_empty": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "No logs are queued. Collect logs first." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "送信待ちのログはありません。先にログを収集してください。" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Keine Logs in der Warteschlange. Sammle zuerst Logs." } },
+        "es": { "stringUnit": { "state": "translated", "value": "No hay registros pendientes. Recopila los registros primero." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Aucun journal en attente. Collectez-les d’abord." } },
+        "ko": { "stringUnit": { "state": "translated", "value": "전송 대기 중인 로그가 없습니다. 먼저 로그를 수집하세요." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "没有待发送日志。请先收集日志。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "沒有待傳送日誌。請先收集日誌。" } }
+      }
+    },
+    "mt_send_queued": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Queued logs: %d. Open MochiLog on the iPhone or iPad to receive them." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "送信待ちのログ: %d件。iPhoneまたはiPadでMochiLogを開くと受信します。" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Logs in der Warteschlange: %d. Öffne MochiLog auf dem iPhone oder iPad, um sie zu empfangen." } },
+        "es": { "stringUnit": { "state": "translated", "value": "Registros pendientes: %d. Abre MochiLog en el iPhone o iPad para recibirlos." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Journaux en attente : %d. Ouvrez MochiLog sur l’iPhone ou l’iPad pour les recevoir." } },
+        "ko": { "stringUnit": { "state": "translated", "value": "전송 대기 로그: %d개. iPhone 또는 iPad에서 MochiLog를 열어 받으세요." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "待发送日志：%d 个。请在 iPhone 或 iPad 上打开 MochiLog 接收。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "待傳送日誌：%d 個。請在 iPhone 或 iPad 上開啟 MochiLog 接收。" } }
+      }
+    },
+    "mt_send_hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Send now announces queued logs on the local network. The iPhone or iPad app must be open to receive them. Over Tailscale, receipt starts at the next periodic check. A closed app cannot be woken by the Mac." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "「今すぐ送信」はローカルネットワーク上で送信待ちのログを通知します。受信にはiPhoneまたはiPadでアプリを開く必要があります。Tailscale経由では次の定期確認時に受信します。Macから閉じたアプリを起動することはできません。" } },
+        "de": { "stringUnit": { "state": "translated", "value": "„Jetzt senden“ kündigt wartende Logs im lokalen Netzwerk an. Die iPhone- oder iPad-App muss geöffnet sein. Über Tailscale beginnt der Empfang bei der nächsten regelmäßigen Prüfung. Der Mac kann eine geschlossene App nicht wecken." } },
+        "es": { "stringUnit": { "state": "translated", "value": "«Enviar ahora» anuncia los registros pendientes en la red local. La app del iPhone o iPad debe estar abierta. Con Tailscale se recibirán en la siguiente comprobación periódica. El Mac no puede abrir una app cerrada." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "«Envoyer maintenant» annonce les journaux en attente sur le réseau local. L’app iPhone ou iPad doit être ouverte. Via Tailscale, la réception commence lors de la prochaine vérification périodique. Le Mac ne peut pas réveiller une app fermée." } },
+        "ko": { "stringUnit": { "state": "translated", "value": "지금 보내기는 로컬 네트워크에 대기 중인 로그를 알립니다. iPhone 또는 iPad 앱을 열어야 받을 수 있습니다. Tailscale에서는 다음 정기 확인 때 받습니다. Mac은 종료된 앱을 깨울 수 없습니다." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "“立即发送”会在本地网络发布待发送日志。iPhone 或 iPad App 必须处于打开状态。通过 Tailscale 时，将在下次定期检查时接收。Mac 无法唤醒已关闭的 App。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "「立即傳送」會在區域網絡發佈待傳送日誌。iPhone 或 iPad App 必須保持開啟。透過 Tailscale 時，會在下次定期檢查時接收。Mac 無法喚醒已關閉的 App。" } }
+      }
+    },
+    "mt_last_request": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Last app request: %@" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "アプリからの最終通信: %@" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Letzte App-Anfrage: %@" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Última solicitud de la app: %@" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Dernière requête de l’app : %@" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "마지막 앱 요청: %@" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "App 上次请求：%@" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "App 上次請求：%@" } }
+      }
+    },
+    "mt_no_request": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "No app request in this Mac session yet" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "このMacの起動後、アプリからの通信はまだありません" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Noch keine App-Anfrage in dieser Mac-Sitzung" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Aún no hay solicitudes de la app en esta sesión" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Aucune requête de l’app pendant cette session" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "이번 Mac 실행 중 앱 요청 없음" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "本次 Mac 会话中尚无 App 请求" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "本次 Mac 工作階段中尚無 App 請求" } }
+      }
+    },
+    "mt_paired": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Paired; not necessarily connected now" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ペアリング済み。現在接続中とは限りません" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Gekoppelt; derzeit nicht unbedingt verbunden" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Enlazado; puede que no esté conectado ahora" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Jumelé ; pas forcément connecté actuellement" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "페어링됨. 현재 연결된 상태는 아닐 수 있습니다" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已配对；当前不一定已连接" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "已配對；目前不一定已連線" } }
+      }
+    },
     "mt_nav_connected": {
       "extractionState": "manual",
       "localizations": {
@@ -6903,7 +6994,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "連携中の端末"
+            "value": "ペアリング済みの端末"
           }
         },
         "de": {

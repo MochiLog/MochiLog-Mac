@@ -164,13 +164,40 @@ struct TransferProtocolTests {
     try watchContent.write(to: Collector.directory(for: device, kind: .watch,
       source: source).appendingPathComponent(filename))
     let server = TransferServer(state: state)
+    var authenticatedRequests = 0
+    server.onAuthenticatedRequest = { _, _ in authenticatedRequests += 1 }
     try server.start()
     let endpoint = try discover(hostID.uuidString)
+
+    print("Checking immediate-send announcement")
+    let announcement = DispatchSemaphore(value: 0)
+    let browserReady = DispatchSemaphore(value: 0)
+    let announcementBrowser = NWBrowser(
+      for: .bonjourWithTXTRecord(type: "_mochilog._tcp", domain: nil), using: .tcp)
+    announcementBrowser.stateUpdateHandler = { state in
+      if case .ready = state { browserReady.signal() }
+    }
+    announcementBrowser.browseResultsChangedHandler = { results, _ in
+      if results.contains(where: { result in
+        guard case .service(let name, _, _, _) = result.endpoint,
+          name == hostID.uuidString,
+          case .bonjour(let record) = result.metadata else { return false }
+        return record["revision"] == "1"
+      }) { announcement.signal() }
+    }
+    announcementBrowser.start(queue: DispatchQueue(label: "mochilog.transfer.test.announcement"))
+    try check(browserReady.wait(timeout: .now() + 5) == .success,
+      "Announcement browser did not start")
+    server.announceQueuedFiles()
+    try check(announcement.wait(timeout: .now() + 10) == .success,
+      "Send-now did not notify the Bonjour browser")
+    announcementBrowser.cancel()
 
     print("Checking invalid MAC")
     let rejected = try request(endpoint, hostID: hostID, device: device,
       validMAC: false, expectNoResponse: true)
     try check(rejected.isEmpty, "Invalid MAC was accepted")
+    try check(authenticatedRequests == 0, "Invalid MAC appeared as a connected app")
     let afterInvalidMAC = try Collector.pending(for: device)
     try check(afterInvalidMAC.count == 2, "Invalid MAC changed the queue")
 
@@ -181,6 +208,7 @@ struct TransferProtocolTests {
       nonce: firstNonce, diagnostics: phoneReport), secret: device.secret)
     try check(first.0 == hostToken && first.1 == hostContent,
       "Host payload or token was incorrect")
+    try check(authenticatedRequests == 1, "Authenticated app contact was not recorded")
     try check(Collector.loadState().devices.first?.confirmedAt != nil,
       "First valid request did not confirm pairing")
     try check(SupportDiagnostics.phoneReport(for: device) != nil,
@@ -190,6 +218,7 @@ struct TransferProtocolTests {
     let replay = try request(endpoint, hostID: hostID, device: device,
       nonce: firstNonce, expectNoResponse: true)
     try check(replay.isEmpty, "Replayed nonce was accepted")
+    try check(authenticatedRequests == 1, "Replay appeared as a new app contact")
     print("Checking host ACK and Watch transfer")
     let second = try opened(request(endpoint, hostID: hostID, device: device,
       ack: hostToken), secret: device.secret)

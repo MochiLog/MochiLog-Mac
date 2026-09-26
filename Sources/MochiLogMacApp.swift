@@ -55,6 +55,9 @@ private struct MacMenuBarContent: View {
     Button(MacTransferL10n.text("mt_001")) {
       Task { await model.collectAll() }
     }.disabled(model.isBusy || model.state.devices.isEmpty)
+    Button(MacTransferL10n.text("mt_send_now")) {
+      model.sendQueuedNow()
+    }.disabled(model.isBusy || !model.state.devices.contains(where: { $0.confirmedAt != nil }))
     Button(MacTransferL10n.text("mt_002")) {
       checkForUpdates()
     }
@@ -85,6 +88,7 @@ final class CompanionModel: ObservableObject {
   @Published var isBusy = false
   @Published var collectionDone = 0
   @Published var collectionTotal = 0
+  @Published var lastAppRequestAt: [UUID: Date] = [:]
   @Published var showPairingQR = false
   @Published var state = Collector.loadState()
   private var server: TransferServer?
@@ -102,6 +106,9 @@ final class CompanionModel: ObservableObject {
         self?.showPairingQR = false
         self?.status = MacTransferL10n.text("mt_m_01")
       }
+    }
+    server.onAuthenticatedRequest = { [weak self] deviceID, date in
+      Task { @MainActor in self?.lastAppRequestAt[deviceID] = date }
     }
     do { try server.start() }
     catch { status = MacTransferL10n.format("mt_m_02", error.localizedDescription) }
@@ -211,6 +218,7 @@ final class CompanionModel: ObservableObject {
     guard !state.devices.isEmpty, !isBusy else { return }
     isBusy = true
     defer { isBusy = false }
+    var savedAny = false
     for device in state.devices {
       do {
         collectionDone = 0
@@ -225,6 +233,7 @@ final class CompanionModel: ObservableObject {
           }
         }.value
         SupportDiagnostics.saveCollection(report, error: nil, for: device)
+        savedAny = savedAny || report.saved > 0
         if selectedUDID == device.udid { osPairingState = .verified }
         status = report.failed == 0
           ? MacTransferL10n.format("mt_m_08", device.name, report.saved, report.skipped)
@@ -235,6 +244,26 @@ final class CompanionModel: ObservableObject {
         status = "\(device.name): \(error.localizedDescription)"
       }
     }
+    if savedAny { server?.announceQueuedFiles() }
+  }
+
+  func sendQueuedNow() {
+    guard !isBusy else { return }
+    let queued: Int
+    do {
+      queued = try state.devices.filter { $0.confirmedAt != nil }.reduce(0) {
+        try $0 + Collector.pending(for: $1).count
+      }
+    } catch {
+      status = error.localizedDescription
+      return
+    }
+    guard queued > 0 else {
+      status = MacTransferL10n.text("mt_send_empty")
+      return
+    }
+    server?.announceQueuedFiles()
+    status = MacTransferL10n.format("mt_send_queued", queued)
   }
 
   func startSystemPairing() {
@@ -418,6 +447,12 @@ private struct CompanionView: View {
           }
           .buttonStyle(.borderedProminent)
           .disabled(model.isBusy || model.state.devices.isEmpty)
+          Button { model.sendQueuedNow() } label: {
+            Label(MacTransferL10n.text("mt_send_now"), systemImage: "paperplane")
+          }
+          .disabled(model.isBusy || !model.state.devices.contains(where: { $0.confirmedAt != nil }))
+          Text(MacTransferL10n.text("mt_send_hint"))
+            .font(.caption).foregroundStyle(.secondary)
         }.padding(12)
       }
       GroupBox(MacTransferL10n.text("mt_nav_connected")) {
@@ -432,10 +467,20 @@ private struct CompanionView: View {
                 VStack(alignment: .leading) {
                   Text(device.name).fontWeight(.medium)
                   Text(device.model).font(.caption).foregroundStyle(.secondary)
+                  if let lastRequest = model.lastAppRequestAt[device.physicalDeviceID] {
+                    Text(MacTransferL10n.format("mt_last_request",
+                      DateFormatter.localizedString(from: lastRequest,
+                        dateStyle: .short, timeStyle: .short)))
+                      .font(.caption).foregroundStyle(.secondary)
+                  } else {
+                    Text(MacTransferL10n.text("mt_no_request"))
+                      .font(.caption).foregroundStyle(.secondary)
+                  }
                 }
                 Spacer()
                 if device.confirmedAt != nil {
-                  Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                  Image(systemName: "checkmark.circle").foregroundStyle(.secondary)
+                    .help(MacTransferL10n.text("mt_paired"))
                 }
               }
             }

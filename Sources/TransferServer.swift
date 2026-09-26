@@ -29,12 +29,21 @@ final class TransferServer: @unchecked Sendable {
   private var activeTailnetClients = 0
   private var state: CompanionState
   private var nonces: [UUID: Date] = [:]
+  private var announcementRevision = 0
   var onStatus: ((String) -> Void)?
   var onConfirmed: ((UUID) -> Void)?
+  var onAuthenticatedRequest: ((UUID, Date) -> Void)?
 
   init(state: CompanionState) { self.state = state }
 
   func update(state: CompanionState) { queue.async { self.state = state } }
+
+  func announceQueuedFiles() {
+    queue.async {
+      self.announcementRevision &+= 1
+      self.publishReachableAddresses()
+    }
+  }
 
   var activeTailnetAddress: String? { queue.sync { tailnetAddress } }
 
@@ -76,7 +85,8 @@ final class TransferServer: @unchecked Sendable {
     var fields = [
       "v": "1",
       "port": String(port.rawValue),
-      "ipv4": routes.lan.joined(separator: ",")
+      "ipv4": routes.lan.joined(separator: ","),
+      "revision": String(announcementRevision)
     ]
     if let tailnetAddress {
       fields["tailnet"] = tailnetAddress
@@ -278,6 +288,7 @@ final class TransferServer: @unchecked Sendable {
     let expected = Data(HMAC<SHA256>.authenticationCode(for: Data(message.utf8),
       using: SymmetricKey(data: device.secret)))
     guard let received = Data(hex: request.mac), received == expected else { return nil }
+    onAuthenticatedRequest?(device.physicalDeviceID, Date())
     if let index = state.devices.firstIndex(where: {
       $0.physicalDeviceID == request.physicalDeviceID
     }), state.devices[index].confirmedAt == nil {
