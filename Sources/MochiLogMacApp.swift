@@ -603,7 +603,7 @@ private struct CompanionView: View {
 
   private var workflowDiagram: some View {
     ViewThatFits(in: .horizontal) {
-      HStack(alignment: .top, spacing: 8) {
+      HStack(alignment: .top, spacing: 6) {
         flowNode("macbook", "mt_guide_collect_title", tint: .green)
         flowArrow
         flowNode("lock.shield", "mt_flow_secure", tint: .blue)
@@ -622,7 +622,7 @@ private struct CompanionView: View {
         compactFlowNode("icloud", "mt_flow_cloud", tint: .secondary)
       }
     }
-    .frame(maxWidth: .infinity)
+    .frame(maxWidth: .infinity, alignment: .leading)
     .padding(14)
     .background(Color(nsColor: .controlBackgroundColor),
       in: RoundedRectangle(cornerRadius: 16))
@@ -647,7 +647,7 @@ private struct CompanionView: View {
         .multilineTextAlignment(.center)
         .fixedSize(horizontal: false, vertical: true)
     }
-    .frame(width: 132, alignment: .top)
+    .frame(width: 108, alignment: .top)
     .accessibilityElement(children: .combine)
   }
 
@@ -679,7 +679,7 @@ private struct CompanionView: View {
 
   private var pairingDiagram: some View {
     ViewThatFits(in: .horizontal) {
-      HStack(alignment: .top, spacing: 10) {
+      HStack(alignment: .top, spacing: 8) {
         pairingStage(1, "wifi", "mt_pair_os_short")
         Image(systemName: "chevron.right").foregroundStyle(.tertiary)
           .frame(height: 56).accessibilityHidden(true)
@@ -696,7 +696,7 @@ private struct CompanionView: View {
         compactFlowNode("checkmark.circle", "mt_pair_ready_short", tint: .green)
       }
     }
-    .frame(maxWidth: .infinity)
+    .frame(maxWidth: .infinity, alignment: .leading)
     .padding(14)
     .background(Color(nsColor: .controlBackgroundColor),
       in: RoundedRectangle(cornerRadius: 16))
@@ -718,7 +718,7 @@ private struct CompanionView: View {
         .font(.caption.weight(.semibold)).multilineTextAlignment(.center)
         .fixedSize(horizontal: false, vertical: true)
     }
-    .frame(width: 182, alignment: .top)
+    .frame(width: 150, alignment: .top)
     .accessibilityElement(children: .combine)
   }
 
@@ -737,7 +737,7 @@ private struct CompanionView: View {
         helpStage(3, "iphone.gen3", "mt_help_import_title", "mt_help_import_detail")
       }
     }
-    .frame(maxWidth: .infinity)
+    .frame(maxWidth: .infinity, alignment: .leading)
   }
 
   private func helpStage(_ number: Int, _ symbol: String,
@@ -760,7 +760,7 @@ private struct CompanionView: View {
           .fixedSize(horizontal: false, vertical: true)
       }
     }
-    .frame(minWidth: 170, alignment: .topLeading)
+    .frame(minWidth: 150, alignment: .topLeading)
     .padding(12)
     .background(Color(nsColor: .controlBackgroundColor),
       in: RoundedRectangle(cornerRadius: 14))
