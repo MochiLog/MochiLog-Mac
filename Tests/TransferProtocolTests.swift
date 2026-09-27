@@ -218,6 +218,11 @@ struct TransferProtocolTests {
       .appendingPathComponent(filename))
     try watchContent.write(to: Collector.directory(for: device, kind: .watch,
       source: source).appendingPathComponent(filename))
+    let unfinished = try Collector.directory(for: device)
+      .appendingPathComponent(".staging-test", isDirectory: true)
+    try FileManager.default.createDirectory(at: unfinished, withIntermediateDirectories: true)
+    try Data("unfinished diagnostic".utf8).write(to: unfinished
+      .appendingPathComponent("Analytics-2026-09-01-000000.ips.ca.synced"))
     let server = TransferServer(state: state)
     var authenticatedRequests = 0
     var presenceEvents: [Bool] = []
