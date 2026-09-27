@@ -4,6 +4,8 @@ The DMG bundles `pymobiledevice3` 11.19.1 (GPL-3.0-or-later) and its runtime dep
 
 The bundled Sparkle update framework is licensed under the MIT License. Its license is included as `LICENSE-Sparkle.txt` inside the app. Project source: https://github.com/sparkle-project/Sparkle
 
+The collector bundles Python 3.13. The Python Software Foundation license is included as `LICENSE-Python-Runtime.txt` inside the app. Source: https://github.com/python/cpython/blob/v3.13.5/LICENSE
+
 License texts and package metadata for the Python environment used to build the collector are included as `LICENSE-Python-Dependencies.txt` and individually under `PythonLicenses/` inside the app. The in-app viewer lists each package separately. This report includes build-time packages as well as runtime packages so that the complete bundled environment is documented. Some upstream packages declare a license but do not ship a license text in their distribution; their declaration and project URL are shown without inventing a notice.
 
 `pymobiledevice3` talks to iOS device services through macOS's `remoted` facility. End users do not need to install Python, Xcode, Homebrew, or a separate command-line helper.

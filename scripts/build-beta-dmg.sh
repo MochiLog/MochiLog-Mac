@@ -30,6 +30,8 @@ xcodebuild -project MochiLogMac.xcodeproj -scheme MochiLogMac \
 mkdir -p "$app/Contents/Resources/Collector" Build/Stage
 cp Build/Collector/pymobiledevice3 "$app/Contents/Resources/Collector/pymobiledevice3"
 cp LICENSE "$app/Contents/Resources/LICENSE-MochiLog.txt"
+cp Resources/RuntimeLicenses/Python-3.13-LICENSE.txt \
+  "$app/Contents/Resources/LICENSE-Python-Runtime.txt"
 license_file="$(find Build/venv/lib -path '*/pymobiledevice3-*.dist-info/licenses/LICENSE' -type f -print -quit)"
 test -n "$license_file"
 cp "$license_file" "$app/Contents/Resources/LICENSE-pymobiledevice3.txt"
