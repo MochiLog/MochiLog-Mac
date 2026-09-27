@@ -5,14 +5,20 @@ from importlib import metadata
 from pathlib import Path
 import sys
 
+ROOT = Path(__file__).resolve().parents[1]
+UPSTREAM_LICENSES = {
+    "loguru": (ROOT / "Resources/PythonLicenses/loguru-LICENSE.txt",
+               "https://github.com/Delgan/loguru/blob/master/LICENSE"),
+}
+
 
 def license_files(distribution):
     for entry in distribution.files or []:
         path = Path(str(entry))
         name = path.name.lower()
-        if name in {"license", "license.txt", "license.md", "copying", "copying.txt", "notice", "notice.txt"}:
+        if name.startswith(("license", "licence", "copying", "notice")):
             actual = Path(distribution.locate_file(entry))
-            if actual.is_file():
+            if actual.is_file() and actual.stat().st_size <= 500_000:
                 yield actual
 
 
@@ -36,7 +42,13 @@ def main(output):
             seen.add(content)
             sections.append(f"\n--- {file.name} ---\n{content.rstrip()}\n")
         if not seen:
-            sections.append("No license text was included in this package metadata. See the project URL above.\n")
+            upstream = UPSTREAM_LICENSES.get(name.lower())
+            if upstream:
+                source, url = upstream
+                sections.append(f"\n--- LICENSE (upstream: {url}) ---\n"
+                                f"{source.read_text(encoding='utf-8').rstrip()}\n")
+            else:
+                sections.append("No license text was included in this package metadata. See the project URL above.\n")
     Path(output).write_text("".join(sections), encoding="utf-8")
 
 
