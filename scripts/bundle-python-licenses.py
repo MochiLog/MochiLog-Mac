@@ -4,6 +4,7 @@
 from importlib import metadata
 from pathlib import Path
 import re
+import shutil
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -26,6 +27,8 @@ def license_files(distribution):
 def main(output):
     sections = ["Python dependencies bundled with MochiLog Mac\n"]
     individual = Path(output).parent / "PythonLicenses"
+    if individual.exists():
+        shutil.rmtree(individual)
     individual.mkdir(parents=True, exist_ok=True)
     for distribution in sorted(metadata.distributions(), key=lambda item: (item.metadata.get("Name") or "").lower()):
         name = distribution.metadata.get("Name") or "Unknown package"
