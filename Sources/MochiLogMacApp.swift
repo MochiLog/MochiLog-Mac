@@ -236,15 +236,18 @@ final class CompanionModel: ObservableObject {
     components.scheme = "mochilog-mac"
     components.host = "pair"
     components.queryItems = [
-      .init(name: "v", value: "2"),
+      .init(name: "v", value: "3"),
+      .init(name: "platform", value: "macOS"),
       .init(name: "host", value: invitation.hostID.uuidString),
-      .init(name: "device", value: invitation.physicalDeviceID.uuidString),
       .init(name: "model", value: invitation.model),
       .init(name: "session", value: invitation.sessionID.uuidString),
       .init(name: "public", value: invitation.publicKey.base64EncodedString()),
       .init(name: "ipv4", value: invitation.lanAddresses.joined(separator: ",")),
       .init(name: "port", value: String(invitation.lanPort))
     ]
+    if let existingID = invitation.existingPhysicalDeviceID {
+      components.queryItems?.append(.init(name: "device", value: existingID.uuidString))
+    }
     if let tailnet = invitation.tailnetAddress {
       components.queryItems?.append(.init(name: "tailnet", value: tailnet))
       components.queryItems?.append(.init(name: "tailnetPort",

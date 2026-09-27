@@ -24,6 +24,7 @@ struct PairingInvitation {
   let sessionID: UUID
   let hostID: UUID
   let physicalDeviceID: UUID
+  let existingPhysicalDeviceID: UUID?
   let model: String
   let publicKey: Data
   let code: String
@@ -38,6 +39,8 @@ private struct PairingRequest: Decodable {
   let sessionID: UUID
   let clientPublicKey: String
   let confirmationMAC: String?
+  let version: String?
+  let physicalDeviceID: UUID?
 }
 
 private struct PairingSession {
@@ -49,6 +52,7 @@ private struct PairingSession {
   var key: Data?
   var attempts = 0
   var confirmed = false
+  var negotiatedPhysicalDeviceID: UUID?
 }
 
 /// Local-only, authenticated pull server. The full filename and log are encrypted.
@@ -85,7 +89,8 @@ final class TransferServer: @unchecked Sendable {
       let privateKey = Curve25519.KeyAgreement.PrivateKey()
       let routes = Self.localIPv4Addresses(wifiInterfaces: [])
       let invitation = PairingInvitation(sessionID: UUID(), hostID: state.hostID,
-        physicalDeviceID: existing?.physicalDeviceID ?? UUID(), model: selected.model,
+        physicalDeviceID: existing?.physicalDeviceID ?? UUID(),
+        existingPhysicalDeviceID: existing?.physicalDeviceID, model: selected.model,
         publicKey: privateKey.publicKey.rawRepresentation,
         code: String(format: "%06d", Int.random(in: 0...999_999)),
         lanAddresses: routes.lan, lanPort: Self.servicePort.rawValue,
@@ -374,6 +379,16 @@ final class TransferServer: @unchecked Sendable {
     else { return nil }
     guard session.clientPublicKey == nil || session.clientPublicKey == publicData else { return nil }
     let invitation = session.invitation
+    let version = request.version ?? "2"
+    guard ["2", "3"].contains(version) else { return nil }
+    let physicalDeviceID: UUID
+    if version == "3" {
+      guard let supplied = request.physicalDeviceID,
+        invitation.existingPhysicalDeviceID == nil || invitation.existingPhysicalDeviceID == supplied,
+        session.negotiatedPhysicalDeviceID == nil || session.negotiatedPhysicalDeviceID == supplied
+      else { return nil }
+      physicalDeviceID = supplied
+    } else { physicalDeviceID = invitation.physicalDeviceID }
     let key: Data
     if let existing = session.key {
       key = existing
@@ -382,11 +397,12 @@ final class TransferServer: @unchecked Sendable {
         with: publicKey) else { return nil }
       let derived = shared.hkdfDerivedSymmetricKey(using: SHA256.self,
         salt: Data(request.sessionID.uuidString.utf8),
-        sharedInfo: Data("MochiLog pair v2|\(invitation.hostID.uuidString)|\(invitation.physicalDeviceID.uuidString)".utf8),
+        sharedInfo: Data("MochiLog pair v\(version)|\(invitation.hostID.uuidString)|\(physicalDeviceID.uuidString)".utf8),
         outputByteCount: 32)
       key = derived.withUnsafeBytes { Data($0) }
       session.clientPublicKey = publicData
       session.key = key
+      session.negotiatedPhysicalDeviceID = physicalDeviceID
     }
     let secret = SymmetricKey(data: key)
     if request.type == "pair-init" {
@@ -412,7 +428,7 @@ final class TransferServer: @unchecked Sendable {
     if !session.confirmed {
       var updated = state
       let newDevice = PairedDevice(udid: session.selected.udid, name: session.selected.name,
-        model: session.selected.model, physicalDeviceID: invitation.physicalDeviceID,
+        model: session.selected.model, physicalDeviceID: physicalDeviceID,
         secret: key)
       if let index = updated.devices.firstIndex(where: { $0.udid == session.selected.udid }) {
         updated.devices[index] = newDevice

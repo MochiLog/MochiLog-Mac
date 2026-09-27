@@ -431,6 +431,40 @@ struct TransferProtocolTests {
       secret: pairingKey,
       context: (hostID, invitation.physicalDeviceID, pairedNonce))
     try check(pairedReply.0.isEmpty, "Newly paired client could not pull securely")
+    print("Checking v3 pairing preserves the mobile device's existing physical ID")
+    let mobilePhysicalID = UUID()
+    let secondPhone = ConnectedDevice(udid: "v3-iphone", name: "Existing iPhone",
+      model: "iPhone18,3")
+    let v3Invitation = server.beginPairing(for: secondPhone, existing: nil)
+    let v3Private = Curve25519.KeyAgreement.PrivateKey()
+    let v3Public = v3Private.publicKey.rawRepresentation
+    let v3MacPublic = try Curve25519.KeyAgreement.PublicKey(
+      rawRepresentation: v3Invitation.publicKey)
+    let v3Shared = try v3Private.sharedSecretFromKeyAgreement(with: v3MacPublic)
+    let v3Key = v3Shared.hkdfDerivedSymmetricKey(using: SHA256.self,
+      salt: Data(v3Invitation.sessionID.uuidString.utf8),
+      sharedInfo: Data("MochiLog pair v3|\(hostID.uuidString)|\(mobilePhysicalID.uuidString)".utf8),
+      outputByteCount: 32).withUnsafeBytes { Data($0) }
+    let v3Base = ["sessionID": v3Invitation.sessionID.uuidString,
+      "version": "3", "physicalDeviceID": mobilePhysicalID.uuidString,
+      "clientPublicKey": v3Public.base64EncodedString()]
+    let v3Init = try request(endpoint, hostID: hostID, device: device,
+      overridePayload: v3Base.merging(["type": "pair-init"]) { _, new in new })
+    let v3Challenge = try JSONSerialization.jsonObject(with: v3Init) as! [String: String]
+    let v3Proof = HMAC<SHA256>.authenticationCode(
+      for: Data("pair-challenge|\(v3Invitation.sessionID.uuidString)".utf8),
+      using: SymmetricKey(data: v3Key)).map { String(format: "%02x", $0) }.joined()
+    try check(v3Challenge["proof"] == v3Proof, "V3 challenge failed")
+    let v3CodeMAC = HMAC<SHA256>.authenticationCode(
+      for: Data("pair-confirm|\(v3Invitation.sessionID.uuidString)|\(v3Invitation.code)".utf8),
+      using: SymmetricKey(data: v3Key)).map { String(format: "%02x", $0) }.joined()
+    let v3Complete = try request(endpoint, hostID: hostID, device: device,
+      overridePayload: v3Base.merging(["type": "pair-confirm",
+        "confirmationMAC": v3CodeMAC]) { _, new in new })
+    try check(!v3Complete.isEmpty, "V3 pairing was not confirmed")
+    let v3Paired = try checkPairedDevice(secondPhone.udid, key: v3Key)
+    try check(v3Paired.physicalDeviceID == mobilePhysicalID,
+      "V3 pairing replaced the mobile device's physical ID")
     print("PASS: authenticated transfer, replay rejection, host/Watch separation, acknowledgements, diagnostics, and repeat pull")
   }
 }
