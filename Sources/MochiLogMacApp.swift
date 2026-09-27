@@ -477,12 +477,17 @@ private struct CompanionView: View {
     VStack(alignment: .leading, spacing: 22) {
       GroupBox(MacTransferL10n.text("mt_guide_title")) {
         VStack(alignment: .leading, spacing: 16) {
-          guidePoint("mt_guide_collect_title", "mt_guide_collect_detail",
-            symbol: "macbook.and.iphone")
-          guidePoint("mt_guide_import_title", "mt_guide_import_detail",
-            symbol: "arrow.down.doc")
-          guidePoint("mt_guide_without_title", "mt_guide_without_detail",
-            symbol: "iphone")
+          workflowDiagram
+          DisclosureGroup(MacTransferL10n.text("mt_flow_details")) {
+            VStack(alignment: .leading, spacing: 14) {
+              guidePoint("mt_guide_collect_title", "mt_guide_collect_detail",
+                symbol: "macbook.and.iphone")
+              guidePoint("mt_guide_import_title", "mt_guide_import_detail",
+                symbol: "arrow.down.doc")
+              guidePoint("mt_guide_without_title", "mt_guide_without_detail",
+                symbol: "iphone")
+            }.padding(.top, 8)
+          }
           Text(MacTransferL10n.text("mt_guide_footer"))
             .font(.caption).foregroundStyle(.secondary)
         }
@@ -566,14 +571,11 @@ private struct CompanionView: View {
       }
       GroupBox(MacTransferL10n.text("mt_help_title")) {
         VStack(alignment: .leading, spacing: 14) {
-          guidePoint("mt_help_missing_title", "mt_help_missing_detail",
-            symbol: "doc.text.magnifyingglass")
-          guidePoint("mt_help_collect_title", "mt_help_collect_detail",
-            symbol: "lock.open")
-          guidePoint("mt_help_import_title", "mt_help_import_detail",
-            symbol: "arrow.down.doc")
-          guidePoint("mt_help_remote_title", "mt_help_remote_detail",
-            symbol: "network")
+          helpDiagram
+          DisclosureGroup(MacTransferL10n.text("mt_help_remote_title")) {
+            Text(MacTransferL10n.text("mt_help_remote_detail"))
+              .foregroundStyle(.secondary).padding(.top, 8)
+          }
           Button(MacTransferL10n.text("mt_help_support")) { page = .support }
             .buttonStyle(.link)
         }
@@ -597,6 +599,171 @@ private struct CompanionView: View {
           .fixedSize(horizontal: false, vertical: true)
       }
     }
+  }
+
+  private var workflowDiagram: some View {
+    ViewThatFits(in: .horizontal) {
+      HStack(alignment: .top, spacing: 8) {
+        flowNode("macbook", "mt_guide_collect_title", tint: .green)
+        flowArrow
+        flowNode("lock.shield", "mt_flow_secure", tint: .blue)
+        flowArrow
+        flowNode("iphone.gen3", "mt_guide_import_title", tint: .orange)
+        flowArrow
+        flowNode("icloud", "mt_flow_cloud", tint: .secondary, optional: true)
+      }
+      VStack(alignment: .leading, spacing: 7) {
+        compactFlowNode("macbook", "mt_guide_collect_title", tint: .green)
+        compactFlowArrow
+        compactFlowNode("lock.shield", "mt_flow_secure", tint: .blue)
+        compactFlowArrow
+        compactFlowNode("iphone.gen3", "mt_guide_import_title", tint: .orange)
+        compactFlowArrow
+        compactFlowNode("icloud", "mt_flow_cloud", tint: .secondary)
+      }
+    }
+    .frame(maxWidth: .infinity)
+    .padding(14)
+    .background(Color(nsColor: .controlBackgroundColor),
+      in: RoundedRectangle(cornerRadius: 16))
+  }
+
+  private func flowNode(_ symbol: String, _ titleKey: String,
+    tint: Color, optional: Bool = false) -> some View {
+    VStack(spacing: 9) {
+      Image(systemName: symbol)
+        .font(.title2.weight(.medium))
+        .foregroundStyle(tint)
+        .frame(width: 54, height: 54)
+        .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 15))
+        .overlay {
+          if optional {
+            RoundedRectangle(cornerRadius: 15)
+              .strokeBorder(tint.opacity(0.55), style: StrokeStyle(dash: [4, 4]))
+          }
+        }
+      Text(MacTransferL10n.text(titleKey))
+        .font(.caption.weight(.semibold))
+        .multilineTextAlignment(.center)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+    .frame(width: 132, alignment: .top)
+    .accessibilityElement(children: .combine)
+  }
+
+  private var flowArrow: some View {
+    Image(systemName: "arrow.right")
+      .font(.caption.weight(.bold))
+      .foregroundStyle(.tertiary)
+      .frame(width: 18, height: 54)
+      .accessibilityHidden(true)
+  }
+
+  private func compactFlowNode(_ symbol: String, _ titleKey: String,
+    tint: Color) -> some View {
+    HStack(spacing: 12) {
+      Image(systemName: symbol)
+        .font(.title3).foregroundStyle(tint)
+        .frame(width: 44, height: 44)
+        .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+      Text(MacTransferL10n.text(titleKey)).font(.subheadline.weight(.semibold))
+    }
+    .accessibilityElement(children: .combine)
+  }
+
+  private var compactFlowArrow: some View {
+    Image(systemName: "arrow.down")
+      .font(.caption.bold()).foregroundStyle(.tertiary)
+      .frame(width: 44).accessibilityHidden(true)
+  }
+
+  private var pairingDiagram: some View {
+    ViewThatFits(in: .horizontal) {
+      HStack(alignment: .top, spacing: 10) {
+        pairingStage(1, "wifi", "mt_pair_os_short")
+        Image(systemName: "chevron.right").foregroundStyle(.tertiary)
+          .frame(height: 56).accessibilityHidden(true)
+        pairingStage(2, "qrcode", "mt_pair_qr_short")
+        Image(systemName: "chevron.right").foregroundStyle(.tertiary)
+          .frame(height: 56).accessibilityHidden(true)
+        pairingStage(3, "checkmark.circle", "mt_pair_ready_short")
+      }
+      VStack(alignment: .leading, spacing: 7) {
+        compactFlowNode("wifi", "mt_pair_os_short", tint: .green)
+        compactFlowArrow
+        compactFlowNode("qrcode", "mt_pair_qr_short", tint: .green)
+        compactFlowArrow
+        compactFlowNode("checkmark.circle", "mt_pair_ready_short", tint: .green)
+      }
+    }
+    .frame(maxWidth: .infinity)
+    .padding(14)
+    .background(Color(nsColor: .controlBackgroundColor),
+      in: RoundedRectangle(cornerRadius: 16))
+  }
+
+  private func pairingStage(_ number: Int, _ symbol: String,
+    _ titleKey: String) -> some View {
+    VStack(spacing: 8) {
+      Image(systemName: symbol)
+        .font(.title2).foregroundStyle(.green)
+        .frame(width: 54, height: 54)
+        .background(.green.opacity(0.10), in: RoundedRectangle(cornerRadius: 14))
+        .overlay(alignment: .topTrailing) {
+          Text("\(number)").font(.caption2.bold()).foregroundStyle(.white)
+            .frame(width: 20, height: 20).background(.green, in: Circle())
+            .offset(x: 7, y: -7)
+        }
+      Text(MacTransferL10n.text(titleKey))
+        .font(.caption.weight(.semibold)).multilineTextAlignment(.center)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+    .frame(width: 182, alignment: .top)
+    .accessibilityElement(children: .combine)
+  }
+
+  private var helpDiagram: some View {
+    ViewThatFits(in: .horizontal) {
+      HStack(alignment: .top, spacing: 8) {
+        helpStage(1, "doc.text.magnifyingglass", "mt_help_missing_title",
+          "mt_help_missing_detail")
+        helpStage(2, "macbook", "mt_help_collect_title", "mt_help_collect_detail")
+        helpStage(3, "iphone.gen3", "mt_help_import_title", "mt_help_import_detail")
+      }
+      VStack(alignment: .leading, spacing: 8) {
+        helpStage(1, "doc.text.magnifyingglass", "mt_help_missing_title",
+          "mt_help_missing_detail")
+        helpStage(2, "macbook", "mt_help_collect_title", "mt_help_collect_detail")
+        helpStage(3, "iphone.gen3", "mt_help_import_title", "mt_help_import_detail")
+      }
+    }
+    .frame(maxWidth: .infinity)
+  }
+
+  private func helpStage(_ number: Int, _ symbol: String,
+    _ titleKey: String, _ detailKey: String) -> some View {
+    DisclosureGroup {
+      Text(MacTransferL10n.text(detailKey))
+        .font(.caption).foregroundStyle(.secondary)
+        .padding(.top, 8)
+    } label: {
+      VStack(alignment: .leading, spacing: 10) {
+        HStack {
+          Image(systemName: symbol).font(.title3).foregroundStyle(.green)
+          Spacer(minLength: 4)
+          Text("\(number)")
+            .font(.caption2.bold()).foregroundStyle(.white)
+            .frame(width: 22, height: 22).background(.green, in: Circle())
+        }
+        Text(MacTransferL10n.text(titleKey))
+          .font(.subheadline.weight(.semibold))
+          .fixedSize(horizontal: false, vertical: true)
+      }
+    }
+    .frame(minWidth: 170, alignment: .topLeading)
+    .padding(12)
+    .background(Color(nsColor: .controlBackgroundColor),
+      in: RoundedRectangle(cornerRadius: 14))
   }
 
   private func presenceTitle(for state: AppPresenceDisplay) -> String {
@@ -631,10 +798,15 @@ private struct CompanionView: View {
     VStack(alignment: .leading, spacing: 22) {
       GroupBox(MacTransferL10n.text("mt_005")) {
         VStack(alignment: .leading, spacing: 10) {
-          Text(MacTransferL10n.text("mt_006"))
-          Text(MacTransferL10n.text("mt_007"))
-          Text(MacTransferL10n.text("mt_008"))
-          Text(MacTransferL10n.text("mt_009"))
+          pairingDiagram
+          DisclosureGroup(MacTransferL10n.text("mt_pair_details")) {
+            VStack(alignment: .leading, spacing: 10) {
+              Text(MacTransferL10n.text("mt_006"))
+              Text(MacTransferL10n.text("mt_007"))
+              Text(MacTransferL10n.text("mt_008"))
+              Text(MacTransferL10n.text("mt_009"))
+            }.padding(.top, 8)
+          }
           Divider()
           Label(MacTransferL10n.text("mt_usb_wireless_title"),
             systemImage: "wifi")
