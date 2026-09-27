@@ -15,20 +15,22 @@ struct PairedDevice: Codable, Identifiable {
   let physicalDeviceID: UUID
   let secret: Data
   var confirmedAt: Date? = nil
+  var manualAddress: String? = nil
   var id: String { udid }
 
   private enum CodingKeys: String, CodingKey {
-    case udid, name, model, physicalDeviceID, secret, confirmedAt
+    case udid, name, model, physicalDeviceID, secret, confirmedAt, manualAddress
   }
 
   init(udid: String, name: String, model: String, physicalDeviceID: UUID,
-    secret: Data, confirmedAt: Date? = nil) {
+    secret: Data, confirmedAt: Date? = nil, manualAddress: String? = nil) {
     self.udid = udid
     self.name = name
     self.model = model
     self.physicalDeviceID = physicalDeviceID
     self.secret = secret
     self.confirmedAt = confirmedAt
+    self.manualAddress = manualAddress
   }
 
   init(from decoder: Decoder) throws {
@@ -40,6 +42,7 @@ struct PairedDevice: Codable, Identifiable {
     // Read the first beta's plaintext key only for the one-time Keychain migration.
     secret = try values.decodeIfPresent(Data.self, forKey: .secret) ?? Data()
     confirmedAt = try values.decodeIfPresent(Date.self, forKey: .confirmedAt)
+    manualAddress = try values.decodeIfPresent(String.self, forKey: .manualAddress)
   }
 
   func encode(to encoder: Encoder) throws {
@@ -49,6 +52,7 @@ struct PairedDevice: Codable, Identifiable {
     try values.encode(model, forKey: .model)
     try values.encode(physicalDeviceID, forKey: .physicalDeviceID)
     try values.encodeIfPresent(confirmedAt, forKey: .confirmedAt)
+    try values.encodeIfPresent(manualAddress, forKey: .manualAddress)
   }
 }
 
@@ -126,7 +130,8 @@ enum Collector {
       } else if let secret = PairingKeyStore.load(for: device.physicalDeviceID) {
         state.devices[index] = PairedDevice(udid: device.udid, name: device.name,
           model: device.model, physicalDeviceID: device.physicalDeviceID,
-          secret: secret, confirmedAt: device.confirmedAt)
+          secret: secret, confirmedAt: device.confirmedAt,
+          manualAddress: device.manualAddress)
       }
     }
     if needsMigration { try? saveState(state) }
@@ -416,27 +421,44 @@ enum Collector {
 
   static func collect(_ device: PairedDevice,
     progress: ((Int, Int) -> Void)? = nil) throws -> CollectionReport {
-    let (rootListing, connection) = try remoteRootListing(udid: device.udid)
-    let proxiedSources = rootListing.split(separator: "\n").map(String.init).filter {
-      $0.range(of: #"^/ProxiedDevice-[a-fA-F0-9]+$"#,
-        options: .regularExpression) != nil
-    }
-    let listing = try run(["crash", "ls"] + connection +
-      ["--remote-file", "/Retired", "--depth", "1"], timeout: 90)
-    var remoteFiles = listing.split(separator: "\n").map {
-      RemoteLog(path: String($0), source: nil)
-    }
-    for sourcePath in proxiedSources {
-      let source = String(sourcePath.dropFirst())
-      do {
-        let listed = try run(["crash", "ls"] + connection +
-          ["--remote-file", "\(sourcePath)/Retired", "--depth", "1"], timeout: 90)
-        remoteFiles += listed.split(separator: "\n").map {
-          RemoteLog(path: String($0), source: source)
+    var remoteFiles: [RemoteLog] = []
+    var connection: [String] = []
+    if let address = device.manualAddress {
+      let text = try run(["direct-rsd", "scan", "--udid", device.udid,
+        "--host", address, "--port", "49152"], timeout: 120)
+      guard let data = text.data(using: .utf8),
+        let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+        let files = object["files"] as? [[String: Any]] else {
+        throw CollectorError.failed("Invalid direct diagnostic listing")
+      }
+      remoteFiles = files.compactMap { item in
+        guard let path = item["path"] as? String else { return nil }
+        return RemoteLog(path: path, source: item["source"] as? String)
+      }
+    } else {
+      let (rootListing, chosenConnection) = try remoteRootListing(udid: device.udid)
+      connection = chosenConnection
+      let proxiedSources = rootListing.split(separator: "\n").map(String.init).filter {
+        $0.range(of: #"^/ProxiedDevice-[a-fA-F0-9]+$"#,
+          options: .regularExpression) != nil
+      }
+      let listing = try run(["crash", "ls"] + connection +
+        ["--remote-file", "/Retired", "--depth", "1"], timeout: 90)
+      remoteFiles = listing.split(separator: "\n").map {
+        RemoteLog(path: String($0), source: nil)
+      }
+      for sourcePath in proxiedSources {
+        let source = String(sourcePath.dropFirst())
+        do {
+          let listed = try run(["crash", "ls"] + connection +
+            ["--remote-file", "\(sourcePath)/Retired", "--depth", "1"], timeout: 90)
+          remoteFiles += listed.split(separator: "\n").map {
+            RemoteLog(path: String($0), source: source)
+          }
+        } catch {
+          // One unavailable paired accessory must not block the host's logs.
+          continue
         }
-      } catch {
-        // One unavailable paired accessory must not block the host's logs.
-        continue
       }
     }
     remoteFiles = remoteFiles.filter { remote in
@@ -472,6 +494,19 @@ enum Collector {
       }
     }
     progress?(0, newFiles.count)
+    var directStaging: URL?
+    defer { if let directStaging { try? FileManager.default.removeItem(at: directStaging) } }
+    if let address = device.manualAddress, !newFiles.isEmpty {
+      let staging = destination.appendingPathComponent(".direct-\(UUID().uuidString)")
+      try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
+      directStaging = staging
+      let manifest = staging.appendingPathComponent("manifest.json")
+      let items = newFiles.map { ["path": $0.path] }
+      try JSONSerialization.data(withJSONObject: items).write(to: manifest)
+      _ = try run(["direct-rsd", "pull-batch", "--udid", device.udid,
+        "--host", address, "--port", "49152", "--manifest", manifest.path,
+        "--output", staging.path], timeout: TimeInterval(min(1800, max(180, newFiles.count * 180))))
+    }
     var saved = 0
     var skipped = 0
     var failed = 0
@@ -482,9 +517,10 @@ enum Collector {
         let staging = destination.appendingPathComponent(".staging-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: staging) }
-        let downloaded = staging.appendingPathComponent(name)
+        let downloaded = (directStaging?.appendingPathComponent(String(index)) ?? staging)
+          .appendingPathComponent(name)
         var pullError: Error?
-        for attempt in 0..<2 {
+        for attempt in 0..<(directStaging == nil ? 2 : 0) {
           do {
             _ = try run(["crash", "pull", staging.path, "--remote-file", remote.path]
               + connection, timeout: 180)

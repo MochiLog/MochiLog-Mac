@@ -434,7 +434,8 @@ final class TransferServer: @unchecked Sendable {
       var updated = state
       let newDevice = PairedDevice(udid: session.selected.udid, name: session.selected.name,
         model: session.selected.model, physicalDeviceID: physicalDeviceID,
-        secret: key)
+        secret: key, manualAddress: state.devices.first(where: {
+          $0.udid == session.selected.udid })?.manualAddress)
       if let index = updated.devices.firstIndex(where: { $0.udid == session.selected.udid }) {
         updated.devices[index] = newDevice
       } else { updated.devices.append(newDevice) }

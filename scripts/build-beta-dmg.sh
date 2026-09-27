@@ -4,11 +4,13 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 identity="Developer ID Application: ryuya watanabe (FZ35ZF3CZV)"
 python_bin="${MOCHILOG_PYTHON_BIN:-python3}"
+"$python_bin" -c 'import sys; assert sys.version_info >= (3, 13), "Python 3.13 or later is required for wireless diagnostics"'
 mkdir -p Build
 "$python_bin" -m venv Build/venv
 Build/venv/bin/python -m pip install --disable-pip-version-check -r requirements-build.txt
 Build/venv/bin/pyinstaller --onefile --noconfirm --clean \
   --name pymobiledevice3 --collect-all pymobiledevice3 \
+  --hidden-import DirectRsd \
   --recursive-copy-metadata pymobiledevice3 \
   --codesign-identity "$identity" --osx-entitlements-file MacCompanion.entitlements \
   --distpath Build/Collector --workpath Build/PyInstaller CollectorEntry.py

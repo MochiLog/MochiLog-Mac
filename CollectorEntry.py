@@ -10,7 +10,11 @@ from pymobiledevice3.__main__ import main
 
 if __name__ == "__main__":
     try:
-        main()
+        if len(sys.argv) > 1 and sys.argv[1] == "direct-rsd":
+            from DirectRsd import main as direct_main
+            direct_main(sys.argv[2:])
+        else:
+            main()
     except SystemExit as error:
         code = 0 if error.code is None else (error.code if isinstance(error.code, int) else 1)
     except BaseException:

@@ -1,0 +1,107 @@
+"""Direct RemotePairing diagnostic access when Apple Devices omits Wi-Fi discovery.
+
+The mobile app supplies the IP only after its authenticated pairing exchange.
+RemotePairing still verifies the device using the OS pairing record for its UDID.
+"""
+
+import argparse
+import asyncio
+import json
+import os
+import re
+import sys
+
+from pymobiledevice3.remote import userspace_tunnel
+from pymobiledevice3.remote.tunnel_service import (
+    create_core_device_tunnel_service_using_remotepairing,
+)
+from pymobiledevice3.services.crash_reports import CrashReportsManager
+
+
+async def run(arguments):
+    async def direct_provider(serial, autopair, remotepairing_fallback=True):
+        provider = await create_core_device_tunnel_service_using_remotepairing(
+            arguments.udid, arguments.host, arguments.port, autopair=False
+        )
+        return provider, None
+
+    # The upstream userspace tunnel discovers RemotePairing through Bonjour.
+    # Apple Devices on Windows does not expose that advertisement, although the
+    # device's authenticated RemotePairing endpoint is reachable by IP.
+    userspace_tunnel._create_no_root_tunnel_provider = direct_provider
+    tunnel = userspace_tunnel.UserspaceRsdTunnel(serial=arguments.udid, autopair=False)
+    try:
+        rsd = await asyncio.wait_for(tunnel.aopen(), timeout=45)
+        async with CrashReportsManager(rsd) as reports:
+            if arguments.action == "verify":
+                entries = await asyncio.wait_for(reports.ls("/", depth=1), timeout=30)
+                if "/Retired" not in entries:
+                    raise RuntimeError("Diagnostic reports are not available")
+                print(json.dumps({"verified": True}))
+            elif arguments.action == "scan":
+                root = await asyncio.wait_for(reports.ls("/", depth=1), timeout=30)
+                directories = [("/Retired", None)]
+                for entry in root:
+                    if re.fullmatch(r"/ProxiedDevice-[a-fA-F0-9]+", entry):
+                        directories.append((entry + "/Retired", entry[1:]))
+                files = []
+                for directory, source in directories:
+                    try:
+                        entries = await asyncio.wait_for(reports.ls(directory, depth=1), timeout=60)
+                    except Exception:
+                        if source is None:
+                            raise
+                        continue
+                    for entry in entries:
+                        name = entry.rsplit("/", 1)[-1]
+                        if (entry.startswith(directory + "/Analytics-")
+                            and re.fullmatch(r"Analytics-\d{4}-\d{2}-\d{2}-\d{6}.*\.ips\.ca\.synced", name)
+                            and "session" not in name.lower()
+                            and not name.startswith("Analytics-Census-")):
+                            files.append({"path": entry, "source": source})
+                print(json.dumps({"files": files}))
+            elif arguments.action == "pull-batch":
+                with open(arguments.manifest, encoding="utf-8") as stream:
+                    items = json.load(stream)
+                if not isinstance(items, list) or len(items) > 1000:
+                    raise ValueError("Invalid download manifest")
+                results = []
+                for index, item in enumerate(items):
+                    path = item["path"]
+                    if not isinstance(path, str) or not path.startswith("/Retired/Analytics-") and not re.match(
+                        r"^/ProxiedDevice-[a-fA-F0-9]+/Retired/Analytics-", path
+                    ):
+                        raise ValueError("Invalid report path")
+                    target_dir = os.path.join(arguments.output, str(index))
+                    os.makedirs(target_dir, exist_ok=True)
+                    try:
+                        await asyncio.wait_for(reports.pull(target_dir, entry=path, progress_bar=False), timeout=180)
+                        target = os.path.join(target_dir, path.rsplit("/", 1)[-1])
+                        if not os.path.isfile(target):
+                            raise FileNotFoundError("Report was not downloaded")
+                        results.append({"index": index, "ok": True})
+                    except Exception as error:
+                        results.append({"index": index, "ok": False, "error": str(error)[:200]})
+                print(json.dumps({"results": results}))
+    finally:
+        await tunnel.aclose()
+
+
+def main(argv):
+    parser = argparse.ArgumentParser()
+    parser.add_argument("action", choices=("verify", "scan", "pull-batch"))
+    parser.add_argument("--udid", required=True)
+    parser.add_argument("--host", required=True)
+    parser.add_argument("--port", type=int, default=49152)
+    parser.add_argument("--manifest")
+    parser.add_argument("--output")
+    arguments = parser.parse_args(argv)
+    if arguments.action == "pull-batch" and (not arguments.manifest or not arguments.output):
+        parser.error("pull-batch requires --manifest and --output")
+    if sys.platform == "win32":
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    asyncio.run(run(arguments))
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

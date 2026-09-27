@@ -1,6 +1,7 @@
 import AppKit
 import CoreImage.CIFilterBuiltins
 import CryptoKit
+import Network
 import Sparkle
 import SwiftUI
 
@@ -177,6 +178,22 @@ final class CompanionModel: ObservableObject {
   }
   var selected: ConnectedDevice? { selectableDevices.first { $0.udid == selectedUDID } }
   var pairedSelected: PairedDevice? { state.devices.first { $0.udid == selectedUDID } }
+
+  func setManualDeviceAddress(_ address: String?) throws {
+    guard let udid = selectedUDID,
+      let index = state.devices.firstIndex(where: { $0.udid == udid }) else { return }
+    let value = address?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    if !value.isEmpty {
+      guard IPv4Address(value) != nil, value != "0.0.0.0",
+        !value.hasPrefix("127.") else {
+        throw CollectorError.failed("Enter a valid iPhone or iPad IPv4 address")
+      }
+    }
+    var updated = state
+    updated.devices[index].manualAddress = value.isEmpty ? nil : value
+    try Collector.saveState(updated)
+    state = updated
+  }
   var isOSPairingVerified: Bool {
     if case .verified = osPairingState { return true }
     return false
@@ -419,6 +436,7 @@ private struct CompanionView: View {
   @State private var supportDeviceID: String?
   @State private var launchesAtLogin = MacAppPreferences.launchesAtLogin
   @State private var preferencesError: String?
+  @State private var manualDeviceAddress = ""
   @AppStorage(MacAppPreferences.menuBarKey) private var showMenuBar = false
   @AppStorage(MacAppPreferences.hideDockKey) private var hideDock = false
   private var supportDevice: PairedDevice? {
@@ -851,6 +869,7 @@ private struct CompanionView: View {
               }
             }
             .onChange(of: model.selectedUDID) { _, _ in
+              manualDeviceAddress = model.pairedSelected?.manualAddress ?? ""
               if !model.isRefreshing {
                 Task { await model.verifySelectedOSPairing() }
               }
@@ -859,6 +878,28 @@ private struct CompanionView: View {
               Task { await model.refresh() }
             } label: { Image(systemName: "arrow.clockwise") }
               .help(MacTransferL10n.text("mt_015"))
+          }
+          if model.pairedSelected != nil {
+            Divider()
+            Text(MacTransferL10n.text("mt_manual_device_ip_title"))
+              .font(.headline)
+            Text(MacTransferL10n.text("mt_manual_device_ip_detail"))
+              .font(.caption).foregroundStyle(.secondary)
+            HStack {
+              TextField("192.168.1.20", text: $manualDeviceAddress)
+                .textFieldStyle(.roundedBorder).frame(maxWidth: 220)
+              Button(MacTransferL10n.text("mt_manual_device_ip_save")) {
+                do { try model.setManualDeviceAddress(manualDeviceAddress) }
+                catch { preferencesError = error.localizedDescription }
+              }
+              Button(MacTransferL10n.text("mt_manual_device_ip_clear")) {
+                do {
+                  try model.setManualDeviceAddress(nil)
+                  manualDeviceAddress = ""
+                } catch { preferencesError = error.localizedDescription }
+              }
+            }
+            if let preferencesError { Text(preferencesError).foregroundStyle(.red) }
           }
           if let selected = model.selected, model.isOSPairingVerified {
             Label(MacTransferL10n.text("mt_os_paired"),
@@ -916,7 +957,10 @@ private struct CompanionView: View {
         }.frame(maxWidth: .infinity, alignment: .leading).padding(12)
       }
     }
-    .onAppear { Task { await model.refresh() } }
+    .onAppear {
+      manualDeviceAddress = model.pairedSelected?.manualAddress ?? ""
+      Task { await model.refresh() }
+    }
   }
 
   private var support: some View {
