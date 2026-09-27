@@ -59,6 +59,25 @@ struct PairedDevice: Codable, Identifiable {
 struct CompanionState: Codable {
   var hostID: UUID = UUID()
   var devices: [PairedDevice] = []
+  // Retain the old key only to authenticate an offline device's eventual
+  // revocation request. Revoked devices are never collected or sent logs.
+  var revokedDevices: [PairedDevice] = []
+
+  private enum CodingKeys: String, CodingKey { case hostID, devices, revokedDevices }
+
+  init(hostID: UUID = UUID(), devices: [PairedDevice] = [],
+    revokedDevices: [PairedDevice] = []) {
+    self.hostID = hostID
+    self.devices = devices
+    self.revokedDevices = revokedDevices
+  }
+
+  init(from decoder: Decoder) throws {
+    let values = try decoder.container(keyedBy: CodingKeys.self)
+    hostID = try values.decode(UUID.self, forKey: .hostID)
+    devices = try values.decodeIfPresent([PairedDevice].self, forKey: .devices) ?? []
+    revokedDevices = try values.decodeIfPresent([PairedDevice].self, forKey: .revokedDevices) ?? []
+  }
 }
 
 enum CollectorError: LocalizedError {
@@ -120,18 +139,20 @@ enum Collector {
       var state = try? JSONDecoder().decode(CompanionState.self, from: data)
     else { return CompanionState() }
     var needsMigration = false
-    for index in state.devices.indices {
-      let device = state.devices[index]
+    for index in (state.devices + state.revokedDevices).indices {
+      let device = (state.devices + state.revokedDevices)[index]
       if device.secret.count == 32 {
         // Do not remove the old copy unless every key reaches the Keychain.
         guard (try? PairingKeyStore.save(device.secret, for: device.physicalDeviceID)) != nil
         else { return state }
         needsMigration = true
       } else if let secret = PairingKeyStore.load(for: device.physicalDeviceID) {
-        state.devices[index] = PairedDevice(udid: device.udid, name: device.name,
+        let restored = PairedDevice(udid: device.udid, name: device.name,
           model: device.model, physicalDeviceID: device.physicalDeviceID,
           secret: secret, confirmedAt: device.confirmedAt,
           manualAddress: device.manualAddress)
+        if index < state.devices.count { state.devices[index] = restored }
+        else { state.revokedDevices[index - state.devices.count] = restored }
       }
     }
     if needsMigration { try? saveState(state) }
@@ -139,7 +160,7 @@ enum Collector {
   }
 
   static func saveState(_ state: CompanionState) throws {
-    for device in state.devices {
+    for device in state.devices + state.revokedDevices {
       guard device.secret.count == 32 else { throw CollectorError.failed("Pairing key unavailable") }
       try PairingKeyStore.save(device.secret, for: device.physicalDeviceID)
     }

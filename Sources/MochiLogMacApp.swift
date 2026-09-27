@@ -126,6 +126,9 @@ final class CompanionModel: ObservableObject {
     server.onPairingCompleted = { [weak self] in
       Task { @MainActor in self?.state = Collector.loadState() }
     }
+    server.onPairingRevoked = { [weak self] in
+      Task { @MainActor in self?.state = Collector.loadState() }
+    }
     server.onAuthenticatedRequest = { [weak self] deviceID, date in
       Task { @MainActor in self?.lastAppRequestAt[deviceID] = date }
     }
@@ -178,6 +181,15 @@ final class CompanionModel: ObservableObject {
   }
   var selected: ConnectedDevice? { selectableDevices.first { $0.udid == selectedUDID } }
   var pairedSelected: PairedDevice? { state.devices.first { $0.udid == selectedUDID } }
+
+  func unpairSelected() throws {
+    guard let device = pairedSelected else { return }
+    try server?.revoke(device.physicalDeviceID)
+    state = Collector.loadState()
+    pairingInvitation = nil
+    showPairingQR = false
+    status = MacTransferL10n.text("mt_unpair_pending")
+  }
 
   func setManualDeviceAddress(_ address: String?) throws {
     guard let udid = selectedUDID,
@@ -437,6 +449,7 @@ private struct CompanionView: View {
   @State private var launchesAtLogin = MacAppPreferences.launchesAtLogin
   @State private var preferencesError: String?
   @State private var manualDeviceAddress = ""
+  @State private var showingUnpairConfirmation = false
   @AppStorage(MacAppPreferences.menuBarKey) private var showMenuBar = false
   @AppStorage(MacAppPreferences.hideDockKey) private var hideDock = false
   private var supportDevice: PairedDevice? {
@@ -870,6 +883,12 @@ private struct CompanionView: View {
               .help(MacTransferL10n.text("mt_015"))
           }
           if model.pairedSelected != nil {
+            Button(role: .destructive) {
+              showingUnpairConfirmation = true
+            } label: {
+              Label(MacTransferL10n.text("mt_unpair_button"),
+                systemImage: "person.crop.circle.badge.xmark")
+            }
             Divider()
             Text(MacTransferL10n.text("mt_manual_device_ip_title"))
               .font(.headline)
@@ -950,6 +969,15 @@ private struct CompanionView: View {
     .onAppear {
       manualDeviceAddress = model.pairedSelected?.manualAddress ?? ""
       Task { await model.refresh() }
+    }
+    .confirmationDialog(MacTransferL10n.text("mt_unpair_title"),
+      isPresented: $showingUnpairConfirmation, titleVisibility: .visible) {
+      Button(MacTransferL10n.text("mt_unpair_button"), role: .destructive) {
+        do { try model.unpairSelected() }
+        catch { preferencesError = error.localizedDescription }
+      }
+    } message: {
+      Text(MacTransferL10n.text("mt_unpair_detail"))
     }
   }
 

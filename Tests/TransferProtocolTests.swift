@@ -470,6 +470,69 @@ struct TransferProtocolTests {
     let v3Paired = try checkPairedDevice(secondPhone.udid, key: v3Key)
     try check(v3Paired.physicalDeviceID == mobilePhysicalID,
       "V3 pairing replaced the mobile device's physical ID")
+    try server.revoke(device.physicalDeviceID)
+    let afterRevocation = Collector.loadState()
+    try check(afterRevocation.devices.contains(where: { $0.physicalDeviceID == mobilePhysicalID }) &&
+      afterRevocation.revokedDevices.contains(where: {
+        $0.physicalDeviceID == device.physicalDeviceID
+      }), "Removing one pairing affected another device")
+    let revokedNonce = UUID()
+    let removal = try opened(request(endpoint, hostID: hostID, device: device,
+      nonce: revokedNonce), secret: device.secret,
+      context: (hostID, device.physicalDeviceID, revokedNonce))
+    let removalControl = try JSONSerialization.jsonObject(with: removal.1) as! [String: String]
+    try check(removal.0.isEmpty && removalControl["type"] == "unpair",
+      "Revoked phone did not receive an encrypted removal command")
+    let replayedRemoval = try request(endpoint, hostID: hostID, device: device,
+      nonce: revokedNonce, expectNoResponse: true)
+    try check(replayedRemoval.isEmpty, "Revocation command accepted a replayed pull nonce")
+    let unpairNonce = UUID()
+    let identity = "\(hostID.uuidString)|\(device.physicalDeviceID.uuidString)|\(unpairNonce.uuidString)"
+    let proof = HMAC<SHA256>.authenticationCode(
+      for: Data("unpair|v1|\(identity)".utf8),
+      using: SymmetricKey(data: device.secret))
+      .map { String(format: "%02x", $0) }.joined()
+    let acknowledgment = try request(endpoint, hostID: hostID, device: device,
+      overridePayload: ["type": "unpair", "version": "1",
+        "hostID": hostID.uuidString,
+        "physicalDeviceID": device.physicalDeviceID.uuidString,
+        "nonce": unpairNonce.uuidString, "proof": proof])
+    let acknowledgmentObject = try JSONSerialization.jsonObject(with: acknowledgment)
+      as! [String: String]
+    let expectedAck = HMAC<SHA256>.authenticationCode(
+      for: Data("unpair-ack|v1|\(identity)".utf8),
+      using: SymmetricKey(data: device.secret))
+      .map { String(format: "%02x", $0) }.joined()
+    try check(acknowledgmentObject["proof"] == expectedAck,
+      "Idempotent revocation acknowledgement was not authenticated")
+    let badRevocation = try request(endpoint, hostID: hostID, device: v3Paired,
+      expectNoResponse: true, overridePayload: ["type": "unpair", "version": "1",
+        "hostID": hostID.uuidString,
+        "physicalDeviceID": mobilePhysicalID.uuidString,
+        "nonce": UUID().uuidString, "proof": String(repeating: "0", count: 64)])
+    try check(badRevocation.isEmpty && Collector.loadState().devices.contains(where: {
+      $0.physicalDeviceID == mobilePhysicalID
+    }), "Invalid removal proof affected another pairing")
+    let mobileNonce = UUID()
+    let mobileIdentity = "\(hostID.uuidString)|\(mobilePhysicalID.uuidString)|\(mobileNonce.uuidString)"
+    let mobileProof = HMAC<SHA256>.authenticationCode(
+      for: Data("unpair|v1|\(mobileIdentity)".utf8),
+      using: SymmetricKey(data: v3Key))
+      .map { String(format: "%02x", $0) }.joined()
+    let mobileRemoval = try request(endpoint, hostID: hostID, device: v3Paired,
+      overridePayload: ["type": "unpair", "version": "1",
+        "hostID": hostID.uuidString,
+        "physicalDeviceID": mobilePhysicalID.uuidString,
+        "nonce": mobileNonce.uuidString, "proof": mobileProof])
+    let mobileAnswer = try JSONSerialization.jsonObject(with: mobileRemoval) as! [String: String]
+    try check(mobileAnswer["type"] == "unpair-ack",
+      "Phone-initiated removal was not acknowledged")
+    try check(!Collector.loadState().devices.contains(where: {
+      $0.physicalDeviceID == mobilePhysicalID
+    }) && Collector.loadState().revokedDevices.contains(where: {
+      $0.physicalDeviceID == mobilePhysicalID
+    }),
+      "Phone-initiated removal did not persist on the Mac")
     if let udid = ProcessInfo.processInfo.environment["MOCHILOG_DIRECT_DEVICE_ID"],
       let address = ProcessInfo.processInfo.environment["MOCHILOG_DIRECT_DEVICE_IP"] {
       let probe = PairedDevice(udid: udid, name: "Direct RSD probe", model: "iPad",

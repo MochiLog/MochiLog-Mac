@@ -43,6 +43,15 @@ private struct PairingRequest: Decodable {
   let physicalDeviceID: UUID?
 }
 
+private struct RevocationRequest: Decodable {
+  let type: String
+  let version: String
+  let hostID: UUID
+  let physicalDeviceID: UUID
+  let nonce: UUID
+  let proof: String
+}
+
 private struct PairingSession {
   let invitation: PairingInvitation
   let selected: ConnectedDevice
@@ -80,10 +89,26 @@ final class TransferServer: @unchecked Sendable {
   var onAppPresence: ((UUID, Bool, Date) -> Void)?
   var onTransferActivity: ((UUID, Bool) -> Void)?
   var onPairingCompleted: (() -> Void)?
+  var onPairingRevoked: (() -> Void)?
 
   init(state: CompanionState) { self.state = state }
 
   func update(state: CompanionState) { queue.async { self.state = state } }
+
+  func revoke(_ physicalDeviceID: UUID) throws {
+    try queue.sync {
+      guard let index = state.devices.firstIndex(where: {
+        $0.physicalDeviceID == physicalDeviceID
+      }) else { return }
+      var updated = state
+      let device = updated.devices.remove(at: index)
+      updated.revokedDevices.removeAll { $0.physicalDeviceID == physicalDeviceID }
+      updated.revokedDevices.append(device)
+      try Collector.saveState(updated)
+      state = updated
+      onPairingRevoked?()
+    }
+  }
 
   func beginPairing(for selected: ConnectedDevice, existing: PairedDevice?) -> PairingInvitation {
     queue.sync {
@@ -249,7 +274,9 @@ final class TransferServer: @unchecked Sendable {
       guard request.count <= 16_384 else { return }
       if let newline = request.firstIndex(of: 10) {
         let body = Data(request[..<newline])
-        if let pairingReply = queue.sync(execute: { makePairingResponse(to: body) }) {
+        if let pairingReply = queue.sync(execute: {
+          makeRevocationResponse(to: body) ?? makePairingResponse(to: body)
+        }) {
           var offset = 0
           while offset < pairingReply.count {
             let written = pairingReply.withUnsafeBytes { bytes in
@@ -351,7 +378,8 @@ final class TransferServer: @unchecked Sendable {
   }
 
   private func respond(to requestData: Data, on connection: NWConnection) {
-    if let pairingReply = makePairingResponse(to: requestData) {
+    if let pairingReply = makeRevocationResponse(to: requestData)
+      ?? makePairingResponse(to: requestData) {
       connection.send(content: pairingReply, completion: .contentProcessed { _ in
         connection.cancel()
       })
@@ -439,6 +467,7 @@ final class TransferServer: @unchecked Sendable {
       if let index = updated.devices.firstIndex(where: { $0.udid == session.selected.udid }) {
         updated.devices[index] = newDevice
       } else { updated.devices.append(newDevice) }
+      updated.revokedDevices.removeAll { $0.physicalDeviceID == physicalDeviceID }
       guard (try? Collector.saveState(updated)) != nil else { return nil }
       state = updated
       session.confirmed = true
@@ -454,11 +483,43 @@ final class TransferServer: @unchecked Sendable {
     ]) + Data([10])
   }
 
+  private func makeRevocationResponse(to requestData: Data) -> Data? {
+    guard let request = try? JSONDecoder().decode(RevocationRequest.self, from: requestData),
+      request.type == "unpair", request.version == "1", request.hostID == state.hostID,
+      let device = (state.devices + state.revokedDevices).first(where: {
+        $0.physicalDeviceID == request.physicalDeviceID
+      }),
+      let supplied = Data(hex: request.proof) else { return nil }
+    let identity = "\(request.hostID.uuidString)|\(request.physicalDeviceID.uuidString)|\(request.nonce.uuidString)"
+    let expected = Data(HMAC<SHA256>.authenticationCode(
+      for: Data("unpair|v1|\(identity)".utf8),
+      using: SymmetricKey(data: device.secret)))
+    guard supplied == expected else { return nil }
+    if let index = state.devices.firstIndex(where: {
+      $0.physicalDeviceID == request.physicalDeviceID
+    }) {
+      var updated = state
+      updated.revokedDevices.append(updated.devices.remove(at: index))
+      guard (try? Collector.saveState(updated)) != nil else { return nil }
+      state = updated
+      onPairingRevoked?()
+    }
+    let proof = HMAC<SHA256>.authenticationCode(
+      for: Data("unpair-ack|v1|\(identity)".utf8),
+      using: SymmetricKey(data: device.secret))
+      .map { String(format: "%02x", $0) }.joined()
+    return (try? JSONSerialization.data(withJSONObject: [
+      "type": "unpair-ack", "nonce": request.nonce.uuidString, "proof": proof
+    ])) .map { $0 + Data([10]) }
+  }
+
   private func makeResponse(to requestData: Data) -> PreparedResponse? {
     guard let request = try? JSONDecoder().decode(PullRequest.self, from: requestData),
       request.version == "2",
       request.hostID == state.hostID,
-      let device = state.devices.first(where: { $0.physicalDeviceID == request.physicalDeviceID }),
+      let device = (state.devices + state.revokedDevices).first(where: {
+        $0.physicalDeviceID == request.physicalDeviceID
+      }),
       Date().timeIntervalSince(nonces[request.nonce] ?? .distantPast) > 300
     else { return nil }
     let message = "v2|\(request.hostID.uuidString)|\(request.physicalDeviceID.uuidString)|\(request.nonce.uuidString)|\(request.ack ?? "")"
@@ -472,9 +533,24 @@ final class TransferServer: @unchecked Sendable {
       && received == expectedBackground
     guard backgroundNotice || received == expected else { return nil }
     let now = Date()
-    onAuthenticatedRequest?(device.physicalDeviceID, now)
     nonces[request.nonce] = now
     nonces = nonces.filter { now.timeIntervalSince($0.value) < 300 }
+    if state.revokedDevices.contains(where: {
+      $0.physicalDeviceID == device.physicalDeviceID
+    }) {
+      guard !backgroundNotice else { return nil }
+      let control = try? JSONSerialization.data(withJSONObject: ["type": "unpair"])
+      guard let control else { return nil }
+      let plain = Data([0, 0]) + control
+      let context = Data("v2|response|\(request.hostID.uuidString)|\(request.physicalDeviceID.uuidString)|\(request.nonce.uuidString)".utf8)
+      guard let sealed = try? AES.GCM.seal(plain,
+        using: SymmetricKey(data: device.secret), authenticating: context).combined
+      else { return nil }
+      var length = UInt32(sealed.count).bigEndian
+      return PreparedResponse(data: withUnsafeBytes(of: &length) { Data($0) } + sealed,
+        deviceID: device.physicalDeviceID)
+    }
+    onAuthenticatedRequest?(device.physicalDeviceID, now)
     if backgroundNotice {
       onAppPresence?(device.physicalDeviceID, false, now)
       return nil
