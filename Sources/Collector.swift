@@ -149,8 +149,16 @@ enum Collector {
   }
 
   static func run(_ arguments: [String], timeout: TimeInterval = 120) throws -> String {
-    guard let helper = Bundle.main.url(forResource: "pymobiledevice3", withExtension: nil,
-      subdirectory: "Collector") else { throw CollectorError.helperMissing }
+    #if TRANSFER_TESTING
+    let testHelper = ProcessInfo.processInfo.environment["MOCHILOG_TEST_COLLECTOR"]
+      .map { URL(fileURLWithPath: $0) }
+    #else
+    let testHelper: URL? = nil
+    #endif
+    guard let helper = testHelper ?? Bundle.main.url(forResource: "pymobiledevice3",
+      withExtension: nil, subdirectory: "Collector") else {
+      throw CollectorError.helperMissing
+    }
     let process = Process()
     process.executableURL = helper
     process.arguments = arguments

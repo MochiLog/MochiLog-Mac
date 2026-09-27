@@ -470,6 +470,16 @@ struct TransferProtocolTests {
     let v3Paired = try checkPairedDevice(secondPhone.udid, key: v3Key)
     try check(v3Paired.physicalDeviceID == mobilePhysicalID,
       "V3 pairing replaced the mobile device's physical ID")
+    if let udid = ProcessInfo.processInfo.environment["MOCHILOG_DIRECT_DEVICE_ID"],
+      let address = ProcessInfo.processInfo.environment["MOCHILOG_DIRECT_DEVICE_IP"] {
+      let probe = PairedDevice(udid: udid, name: "Direct RSD probe", model: "iPad",
+        physicalDeviceID: UUID(), secret: Data(repeating: 0, count: 32),
+        manualAddress: address)
+      let report = try Collector.collect(probe)
+      try check(report.failed == 0 && report.saved + report.skipped > 0,
+        "Direct RSD collection did not finish: \(report.lastError ?? "no files")")
+      print("PASS: direct RSD real device collection saved \(report.saved), skipped \(report.skipped)")
+    }
     print("PASS: authenticated transfer, replay rejection, host/Watch separation, acknowledgements, diagnostics, and repeat pull")
   }
 }
