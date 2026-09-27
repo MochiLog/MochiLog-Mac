@@ -373,9 +373,21 @@ enum Collector {
     guard let enumerator = FileManager.default.enumerator(at: root,
       includingPropertiesForKeys: [.isRegularFileKey]) else { return [] }
     let files = enumerator.compactMap { $0 as? URL }
-    return files.filter { (try? $0.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true
-      && $0.lastPathComponent.hasPrefix("Analytics-")
-      && $0.lastPathComponent.hasSuffix(".ips.ca.synced") }
+    let standardizedRoot = root.resolvingSymlinksInPath().standardizedFileURL.path
+    let rootPath = standardizedRoot.hasSuffix("/")
+      ? String(standardizedRoot.dropLast()) : standardizedRoot
+    return files.filter { file in
+      guard (try? file.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true,
+        file.lastPathComponent.hasPrefix("Analytics-"),
+        file.lastPathComponent.hasSuffix(".ips.ca.synced") else { return false }
+      let path = file.resolvingSymlinksInPath().standardizedFileURL.path
+      guard path.hasPrefix(rootPath + "/") else { return false }
+      let relative = String(path.dropFirst(rootPath.count + 1))
+      let parts = relative.split(separator: "/")
+      return parts.count == 1 ||
+        ((parts.count == 2 || parts.count == 3) &&
+          ["Host", "Watch"].contains(String(parts[0])))
+    }
       .sorted { $0.path < $1.path }
   }
 
