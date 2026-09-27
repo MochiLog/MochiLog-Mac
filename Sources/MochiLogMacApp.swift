@@ -821,6 +821,9 @@ private struct CompanionView: View {
 
   private var devices: some View {
     VStack(alignment: .leading, spacing: 22) {
+      if model.state.devices.isEmpty && !model.isOSPairingVerified {
+        firstConnectionHero
+      }
       GroupBox(MacTransferL10n.text("mt_005")) {
         VStack(alignment: .leading, spacing: 10) {
           pairingDiagram
@@ -980,6 +983,58 @@ private struct CompanionView: View {
     } message: {
       Text(MacTransferL10n.text("mt_unpair_detail"))
     }
+  }
+
+  private var firstConnectionHero: some View {
+    HStack(spacing: 28) {
+      VStack(alignment: .leading, spacing: 15) {
+        Image(systemName: "cable.connector")
+          .font(.title2.weight(.medium))
+          .foregroundStyle(.blue)
+          .frame(width: 52, height: 52)
+          .background(.blue.opacity(0.12), in: RoundedRectangle(cornerRadius: 16))
+        Text(MacTransferL10n.text("mt_intro_title"))
+          .font(.system(size: 31, weight: .semibold))
+        Text(MacTransferL10n.text("mt_intro_detail"))
+          .font(.subheadline).foregroundStyle(.secondary)
+          .fixedSize(horizontal: false, vertical: true)
+        Label(MacTransferL10n.text(model.selectableDevices.isEmpty
+          ? "mt_intro_waiting" : "mt_intro_found"),
+          systemImage: model.selectableDevices.isEmpty
+            ? "cable.connector" : "checkmark.circle")
+          .font(.subheadline.weight(.medium))
+          .foregroundStyle(model.selectableDevices.isEmpty ? .blue : .green)
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
+      VStack(spacing: 0) {
+        RoundedRectangle(cornerRadius: 23)
+          .fill(LinearGradient(colors: [.indigo, .blue],
+            startPoint: .topLeading, endPoint: .bottomTrailing))
+          .frame(width: 126, height: 210)
+          .overlay {
+            Image(systemName: "battery.100percent")
+              .font(.system(size: 39)).foregroundStyle(.white.opacity(0.85))
+          }
+          .overlay(alignment: .top) {
+            Capsule().fill(.black.opacity(0.75))
+              .frame(width: 42, height: 8).padding(.top, 9)
+          }
+          .overlay {
+            RoundedRectangle(cornerRadius: 23)
+              .strokeBorder(.gray.opacity(0.8), lineWidth: 3)
+          }
+        RoundedRectangle(cornerRadius: 3).fill(.gray)
+          .frame(width: 18, height: 19)
+        Rectangle().fill(.gray.opacity(0.7))
+          .frame(width: 6, height: 24)
+      }
+      .frame(width: 170)
+      .accessibilityHidden(true)
+    }
+    .padding(28)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(Color(nsColor: .controlBackgroundColor),
+      in: RoundedRectangle(cornerRadius: 22))
   }
 
   private var support: some View {
