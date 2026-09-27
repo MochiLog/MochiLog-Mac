@@ -31,9 +31,14 @@ def main(output):
         expression = distribution.metadata.get("License-Expression") or distribution.metadata.get("License")
         if expression:
             sections.append(f"License metadata: {expression}\n")
-        homepage = distribution.metadata.get("Home-page") or distribution.metadata.get("Project-URL")
+        for classifier in distribution.metadata.get_all("Classifier", []):
+            if classifier.startswith("License ::"):
+                sections.append(f"License classifier: {classifier}\n")
+        homepage = distribution.metadata.get("Home-page")
         if homepage:
             sections.append(f"Project: {homepage}\n")
+        for project_url in distribution.metadata.get_all("Project-URL", []):
+            sections.append(f"Project: {project_url}\n")
         seen = set()
         for file in license_files(distribution):
             content = file.read_text(encoding="utf-8", errors="replace")
