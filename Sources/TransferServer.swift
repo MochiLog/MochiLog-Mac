@@ -53,6 +53,7 @@ private struct PairingSession {
   var attempts = 0
   var confirmed = false
   var negotiatedPhysicalDeviceID: UUID?
+  var negotiatedVersion: String?
 }
 
 /// Local-only, authenticated pull server. The full filename and log are encrypted.
@@ -389,6 +390,9 @@ final class TransferServer: @unchecked Sendable {
       else { return nil }
       physicalDeviceID = supplied
     } else { physicalDeviceID = invitation.physicalDeviceID }
+    guard session.negotiatedVersion == nil || session.negotiatedVersion == version,
+      session.negotiatedPhysicalDeviceID == nil ||
+        session.negotiatedPhysicalDeviceID == physicalDeviceID else { return nil }
     let key: Data
     if let existing = session.key {
       key = existing
@@ -403,6 +407,7 @@ final class TransferServer: @unchecked Sendable {
       session.clientPublicKey = publicData
       session.key = key
       session.negotiatedPhysicalDeviceID = physicalDeviceID
+      session.negotiatedVersion = version
     }
     let secret = SymmetricKey(data: key)
     if request.type == "pair-init" {
