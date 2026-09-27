@@ -6,6 +6,40 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>MochiLog Mac</title>
         <item>
+            <title>0.2.7</title>
+            <pubDate>Sat, 26 Sep 2026 02:20:52 +0900</pubDate>
+            <sparkle:version>10</sparkle:version>
+            <sparkle:shortVersionString>0.2.7</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>27.0</sparkle:minimumSystemVersion>
+            <description sparkle:format="markdown"><![CDATA[# MochiLog Mac 0.2.7 Beta
+
+## 日本語
+
+MochiLog Macは、iOS/iPadOS 27の解析ログをiPhone・iPad版MochiLogへ渡すmacOS 27向けベータ版です。Macがログを収集・一時保存し、解析と記録は端末側で行います。署名・公証済みのDMGに必要な収集ツールを同梱しています。
+
+- ロック解除中の端末を5分ごとに確認し、新しい解析ログを収集するようにしました。端末がロック中なら次回に再試行します。
+- 無線で端末が見つからない場合の手動IP指定と、接続経路の診断を追加しました。Macが収集済みのログは、MochiLogを開いた端末へ暗号化して転送します。
+- 端末ごとの接続状態を表示し、Mac側から個別にMochiLogペアリングを解除できるようにしました。解除は認証された接続を通じて相手側にも反映します。
+- ペアリングと転送の確認を強化し、不完全な診断ファイルを転送キューに入れないようにしました。初回設定や解析ログが見つからない場合のガイドも改善しました。
+- 同梱するPythonランタイムと依存パッケージのライセンス表示を充実させました。
+
+**ベータ版の条件:** 新しい解析ログの収集には端末のロック解除とAppleの診断サービスに接続できるローカル無線環境が必要です。Tailscaleのモバイル通信経由ではMacが収集済みのログを転送できますが、端末内の新しい解析ログは収集できません。問題が起きた場合はアプリ内のサポート画面から診断情報を確認できます。
+
+## English
+
+MochiLog Mac is a macOS 27 beta companion that delivers iOS/iPadOS 27 analytics logs to MochiLog on iPhone and iPad. The Mac collects and temporarily queues files; the mobile app parses and records them. The signed and notarized DMG includes the collector and its dependencies.
+
+- Checks unlocked devices every five minutes for new analytics logs. Locked devices are retried on a later check.
+- Adds a manual device IP fallback and connection diagnostics when wireless discovery fails. Collected files are encrypted before transfer to an open MochiLog app.
+- Shows each device's connection state and allows removing an individual MochiLog pairing from the Mac. Removal is relayed to the other side over an authenticated connection.
+- Strengthens pairing and transfer confirmation, excludes incomplete diagnostic files from the queue, and improves setup and missing-log guidance.
+- Expands the bundled Python runtime and dependency license notices.
+
+**Beta requirements and limits:** Collecting new analytics logs requires an unlocked device and a local wireless route to Apple's diagnostic service. Tailscale over cellular can transfer files already collected by the Mac, but cannot collect new system analytics files from the device. The in-app support screen includes reviewable diagnostics for problems.
+]]></description>
+            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.7/MochiLog-Mac-Beta.dmg" length="55517708" type="application/octet-stream" sparkle:edSignature="80g/GxIlnVg5apJbjFevWma2oK7+tLyHBEwSyoQsAhoyrK1PHo6RyRk0OfpU/K0o8w0n6Xu8pqBIZN4V83OtDg=="/>
+        </item>
+        <item>
             <title>0.2.6</title>
             <pubDate>Sat, 26 Sep 2026 02:20:52 +0900</pubDate>
             <sparkle:version>9</sparkle:version>
@@ -55,23 +89,9 @@ Fixed premature disconnects when requests arrive late or in multiple TCP segment
 ]]></description>
             <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.5/MochiLog-Mac-Beta.dmg" length="54394912" type="application/octet-stream" sparkle:edSignature="HHJhpV2VH4RwhyaHNuvuA4A/qxQl9JXZyWY2hBMbmGREgDRHukVlesZ5PvRjYz93JQpwdxg9np4GWeQPC20CDg=="/>
         </item>
-        <item>
-            <title>0.2.4</title>
-            <pubDate>Sat, 26 Sep 2026 02:20:52 +0900</pubDate>
-            <sparkle:version>7</sparkle:version>
-            <sparkle:shortVersionString>0.2.4</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>27.0</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[# MochiLog Mac 0.2.4 Beta
-
-Mac now advertises its reachable local addresses so iPhone and iPad can connect even when Bonjour's service endpoint stalls. The listener uses a stable port. If Tailscale is active, a separate direct receiver offers an optional route without multicast discovery; devices without Tailscale continue to use the local network. Connection diagnostics now use the device's local time zone.
-
-Macが接続可能なローカルアドレスを通知するようになり、Bonjourの接続先で通信が止まる場合もiPhone・iPadから接続できるよう改善しました。待受ポートを固定し、Tailscaleが有効な場合はマルチキャスト検出を使わない専用の受信経路も利用できます。Tailscaleを使わない端末は従来どおりローカルネットワークを使用します。接続診断の時刻は端末の標準時で表示します。
-]]></description>
-            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.4/MochiLog-Mac-Beta.dmg" length="54396178" type="application/octet-stream" sparkle:edSignature="/XyOepq+rEFagRSiWE4li8OvZUV5Ff0UEf/AxCOfeuHRomk1W5j6KWsvDgdCc2nIcS3Uo3EPhQWqme+Rt9WvBA=="/>
-        </item>
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: eNmAMFyX5Mlv2EiIpyWLn3fn5lUAjh6BbdQIaYWOyQxPzevi0hBEFOhfyeGO7tWi+SQ0CGFX6K7Rfz/vsMsFDA==
-length: 8322
+edSignature: 7LVRJ1M70s5GFdj5jrlkHHakXvNQJg4BHYBv/B/Vu3kCrKKE7tx8rzrcxqqPX+ZKAHY3kZSYyPEtfpLKTsT0DA==
+length: 10424
 -->
