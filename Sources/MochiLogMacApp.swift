@@ -145,7 +145,7 @@ final class CompanionModel: ObservableObject {
       await refresh()
       await collectAll()
     }
-    Timer.scheduledTimer(withTimeInterval: 30 * 60, repeats: true) { [weak self] _ in
+    Timer.scheduledTimer(withTimeInterval: 5 * 60, repeats: true) { [weak self] _ in
       Task { @MainActor in await self?.collectAll() }
     }
     Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
