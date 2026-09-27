@@ -37,7 +37,24 @@ private enum LicenseDocument: String, CaseIterable, Identifiable {
 
 struct MacLicensesView: View {
   @Environment(\.dismiss) private var dismiss
-  @State private var selection = LicenseDocument.mochiLog
+  @State private var selection = LicenseDocument.mochiLog.rawValue
+
+  private var pythonLicenses: [URL] {
+    guard let root = Bundle.main.resourceURL?.appendingPathComponent("PythonLicenses"),
+      let urls = try? FileManager.default.contentsOfDirectory(
+        at: root, includingPropertiesForKeys: nil) else { return [] }
+    return urls.filter { $0.pathExtension == "txt" }
+      .sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
+  }
+
+  private var selectedContents: String {
+    if let document = LicenseDocument(rawValue: selection) { return document.contents }
+    guard let url = pythonLicenses.first(where: { $0.path == selection }),
+      let text = try? String(contentsOf: url, encoding: .utf8) else {
+      return MacTransferL10n.text("mt_l_06")
+    }
+    return text
+  }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
@@ -50,13 +67,18 @@ struct MacLicensesView: View {
       HStack(alignment: .top, spacing: 16) {
         List(selection: $selection) {
           ForEach(LicenseDocument.allCases) { document in
-            Text(MacTransferL10n.text(document.titleKey)).tag(document)
+            Text(MacTransferL10n.text(document.titleKey)).tag(document.rawValue)
+          }
+          Section(MacTransferL10n.text("mt_l_04")) {
+            ForEach(pythonLicenses, id: \.path) { url in
+              Text(url.deletingPathExtension().lastPathComponent).tag(url.path)
+            }
           }
         }
         .listStyle(.sidebar)
         .frame(width: 210)
         ScrollView {
-          Text(selection.contents)
+          Text(selectedContents)
             .font(.system(.caption, design: .monospaced))
             .textSelection(.enabled)
             .frame(maxWidth: .infinity, alignment: .topLeading)

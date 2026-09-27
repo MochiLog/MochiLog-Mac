@@ -3,6 +3,7 @@
 
 from importlib import metadata
 from pathlib import Path
+import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -24,36 +25,41 @@ def license_files(distribution):
 
 def main(output):
     sections = ["Python dependencies bundled with MochiLog Mac\n"]
+    individual = Path(output).parent / "PythonLicenses"
+    individual.mkdir(parents=True, exist_ok=True)
     for distribution in sorted(metadata.distributions(), key=lambda item: (item.metadata.get("Name") or "").lower()):
         name = distribution.metadata.get("Name") or "Unknown package"
         version = distribution.version
-        sections.append(f"\n{'=' * 72}\n{name} {version}\n{'=' * 72}\n")
+        entry = [f"{name} {version}\n{'=' * 72}\n"]
         expression = distribution.metadata.get("License-Expression") or distribution.metadata.get("License")
         if expression:
-            sections.append(f"License metadata: {expression}\n")
+            entry.append(f"License metadata: {expression}\n")
         for classifier in distribution.metadata.get_all("Classifier", []):
             if classifier.startswith("License ::"):
-                sections.append(f"License classifier: {classifier}\n")
+                entry.append(f"License classifier: {classifier}\n")
         homepage = distribution.metadata.get("Home-page")
         if homepage:
-            sections.append(f"Project: {homepage}\n")
+            entry.append(f"Project: {homepage}\n")
         for project_url in distribution.metadata.get_all("Project-URL", []):
-            sections.append(f"Project: {project_url}\n")
+            entry.append(f"Project: {project_url}\n")
         seen = set()
         for file in license_files(distribution):
             content = file.read_text(encoding="utf-8", errors="replace")
             if content in seen:
                 continue
             seen.add(content)
-            sections.append(f"\n--- {file.name} ---\n{content.rstrip()}\n")
+            entry.append(f"\n--- {file.name} ---\n{content.rstrip()}\n")
         if not seen:
             upstream = UPSTREAM_LICENSES.get(name.lower())
             if upstream:
                 source, url = upstream
-                sections.append(f"\n--- LICENSE (upstream: {url}) ---\n"
-                                f"{source.read_text(encoding='utf-8').rstrip()}\n")
+                entry.append(f"\n--- LICENSE (upstream: {url}) ---\n"
+                             f"{source.read_text(encoding='utf-8').rstrip()}\n")
             else:
-                sections.append("No license text was included in this package metadata. See the project URL above.\n")
+                entry.append("No license text was included in this package metadata. See the project URL above.\n")
+        filename = re.sub(r"[^A-Za-z0-9._-]+", "-", f"{name}-{version}") + ".txt"
+        (individual / filename).write_text("".join(entry), encoding="utf-8")
+        sections.append(f"\n{'=' * 72}\n{''.join(entry)}")
     Path(output).write_text("".join(sections), encoding="utf-8")
 
 
