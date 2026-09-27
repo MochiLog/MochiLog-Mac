@@ -20,6 +20,7 @@ Mac連携を設定しなくても、iPhone/iPadのMochiLogは従来どおり使�
 ## 困ったときは
 
 - **解析ログがない:** 端末の「設定 → プライバシーとセキュリティ → 解析と改善」で解析の共有を確認してください。OSアップデート後も再確認してください。Macはこのスイッチを直接読めませんが、端末内の解析ログが2日以上新しくなっていない場合はアプリ内で案内します。オンにした直後は次の日次ログの生成まで待つ必要があります。
+- **IPが変わった・自動検出できない:** Macアプリの「端末」で連携済みiPhone/iPadのIPv4アドレスを手動指定できます。保存したIPではOSのRemotePairing記録を使って無線診断サービスへ接続します。スマホ側のMac連携画面でもMacのIPを指定できます。自動検出へ戻すときは手動IPを解除してください。
 - **Macが収集できない:** 端末をロック解除し、Macをスリープさせず、同じWi-Fiに接続します。Macアプリの「端末」でOSペアリングを確認し、「今すぐログを収集」を試してください。無線診断サービスが空の一覧を返した場合は成功0件と扱わず、別の接続方式を試してからエラーを表示します。Macアプリの動作中は5分ごとに再試行します。
 - **収集されたのに記録が増えない:** 該当するiPhone/iPadでMochiLogを開いてください。転送と受信確認の後に端末側で解析します。取り込み済みのログは重複として除外されます。Apple Watchログはペアリング先のiPhoneから届きます。
 - **外出先で収集できない:** モバイル回線のTailscaleではMacに収集済みのファイルを転送できますが、端末内の新しい解析ログを取得するにはローカルの無線診断接続が必要です。必要なら設定アプリから手動で共有してください。
@@ -49,6 +50,6 @@ OSの言語設定に合わせて、日本語・英語・簡体字中国語・繁
 
 ## ビルド
 
-開発者はXcode 27、XcodeGen、fastlane、Python 3とDeveloper ID Application証明書を用意し、`fastlane mac beta_dmg`を実行します。完成した配布物は`Build/MochiLog-Mac-Beta.dmg`です。使用者側にはこれらの依存は不要です。公証用のkeychain profileがある場合は`MOCHILOG_NOTARY_PROFILE=<profile> fastlane mac notarize_beta`で**アプリ本体とDMGの両方**を公証・stapleします。APIキーを使う場合は`MOCHILOG_NOTARY_KEY_PATH`、`MOCHILOG_NOTARY_KEY_ID`、`MOCHILOG_NOTARY_ISSUER_ID`を環境変数で渡します。認証情報はリポジトリへ保存しません。
+開発者はXcode 27、XcodeGen、fastlane、Python 3.13以降とDeveloper ID Application証明書を用意し、`fastlane mac beta_dmg`を実行します。完成した配布物は`Build/MochiLog-Mac-Beta.dmg`です。使用者側にはこれらの依存は不要です。公証用のkeychain profileがある場合は`MOCHILOG_NOTARY_PROFILE=<profile> fastlane mac notarize_beta`で**アプリ本体とDMGの両方**を公証・stapleします。APIキーを使う場合は`MOCHILOG_NOTARY_KEY_PATH`、`MOCHILOG_NOTARY_KEY_ID`、`MOCHILOG_NOTARY_ISSUER_ID`を環境変数で渡します。認証情報はリポジトリへ保存しません。
 
 `pymobiledevice3`およびビルド時依存のバージョンは`requirements-build.txt`で固定しています。ライセンスはMacアプリの「ライセンスとお知らせ」画面、または`LICENSE`と`THIRD_PARTY.md`を参照してください。
