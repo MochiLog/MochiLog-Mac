@@ -14,6 +14,7 @@ struct MochiLogMacApp: App {
 
   init() {
     SingleInstanceGuard.claim()
+    CrashDiagnostics.start()
     updaterController = SPUStandardUpdaterController(startingUpdater: true,
       updaterDelegate: nil, userDriverDelegate: nil)
   }

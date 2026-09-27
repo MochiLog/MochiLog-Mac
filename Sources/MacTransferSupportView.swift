@@ -30,6 +30,11 @@ struct MacTransferSupportView: View {
       Label(MacTransferL10n.text("mt_035"),
         systemImage: "doc.text")
         .font(.callout).foregroundStyle(.secondary)
+      if CrashDiagnostics.latest() != nil {
+        Label(MacTransferL10n.text("mt_crash_attachment"),
+          systemImage: "waveform.path.ecg")
+          .font(.caption).foregroundStyle(.secondary)
+      }
       if SupportDiagnostics.phoneReport(for: device) == nil {
         Text(MacTransferL10n.text("mt_036"))
           .font(.caption).foregroundStyle(.orange)

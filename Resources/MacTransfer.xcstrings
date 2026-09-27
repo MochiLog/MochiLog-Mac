@@ -2281,6 +2281,19 @@
         }
       }
     },
+    "mt_crash_attachment": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Der letzte vom System bereitgestellte Absturz- oder Hängerbericht wird beim Senden der E-Mail angehängt." } },
+        "en": { "stringUnit": { "state": "translated", "value": "The latest system crash or hang report is attached when you send the email." } },
+        "es": { "stringUnit": { "state": "translated", "value": "El último informe de fallo o bloqueo del sistema se adjunta al enviar el correo." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Le dernier rapport de plantage ou de blocage du système est joint lors de l’envoi de l’e-mail." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "OSから届いた直近のクラッシュ・停止診断を、メール作成時に添付します。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "시스템의 최근 충돌 또는 멈춤 보고서는 이메일을 보낼 때 첨부됩니다." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "发送邮件时会附加系统最近的崩溃或卡顿报告。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "傳送郵件時會附加系統最近的當機或卡住報告。" } }
+      }
+    },
     "mt_036": {
       "extractionState": "manual",
       "localizations": {

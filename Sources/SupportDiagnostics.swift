@@ -18,7 +18,7 @@ enum SupportDiagnostics {
   static func macLogText() -> String {
     let events = (try? JSONDecoder().decode([String].self,
       from: Data(contentsOf: eventsURL))) ?? []
-    return events.joined(separator: "\n")
+    return ([CrashDiagnostics.summary()].compactMap { $0 } + events).joined(separator: "\n")
   }
 
   private static func file(_ name: String, for device: PairedDevice) -> URL {
@@ -84,6 +84,7 @@ enum SupportDiagnostics {
       "lastCollection": lastCollection,
       "recentEvents": recentEvents
     ]
+    object["lastAppDiagnostic"] = CrashDiagnostics.summary()
     while true {
       let data = (try? JSONSerialization.data(withJSONObject: object,
         options: [.prettyPrinted, .sortedKeys])) ?? Data("{}".utf8)
@@ -100,6 +101,11 @@ enum SupportDiagnostics {
     let mac = directory.appendingPathComponent("mochilog-mac-diagnostics.json")
     try macReport(for: device).write(to: mac, options: .atomic)
     var attachments = [mac]
+    if let diagnostic = CrashDiagnostics.latest() {
+      let target = directory.appendingPathComponent("mochilog-mac-app-diagnostic.json")
+      try diagnostic.write(to: target, options: .atomic)
+      attachments.append(target)
+    }
     if let phone = phoneReport(for: device) {
       let target = directory.appendingPathComponent("mochilog-iphone-diagnostics.json")
       try FileManager.default.copyItem(at: phone, to: target)
