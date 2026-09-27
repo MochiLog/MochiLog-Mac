@@ -630,8 +630,6 @@ private struct CompanionView: View {
         flowNode("lock.shield", "mt_flow_secure", tint: .blue)
         flowArrow
         flowNode("iphone.gen3", "mt_guide_import_title", tint: .orange)
-        flowArrow
-        flowNode("icloud", "mt_flow_cloud", tint: .secondary, optional: true)
       }
       VStack(alignment: .leading, spacing: 7) {
         compactFlowNode("macbook", "mt_guide_collect_title", tint: .green)
@@ -639,8 +637,6 @@ private struct CompanionView: View {
         compactFlowNode("lock.shield", "mt_flow_secure", tint: .blue)
         compactFlowArrow
         compactFlowNode("iphone.gen3", "mt_guide_import_title", tint: .orange)
-        compactFlowArrow
-        compactFlowNode("icloud", "mt_flow_cloud", tint: .secondary)
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
@@ -650,19 +646,13 @@ private struct CompanionView: View {
   }
 
   private func flowNode(_ symbol: String, _ titleKey: String,
-    tint: Color, optional: Bool = false) -> some View {
+    tint: Color) -> some View {
     VStack(spacing: 9) {
       Image(systemName: symbol)
         .font(.title2.weight(.medium))
         .foregroundStyle(tint)
         .frame(width: 54, height: 54)
         .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 15))
-        .overlay {
-          if optional {
-            RoundedRectangle(cornerRadius: 15)
-              .strokeBorder(tint.opacity(0.55), style: StrokeStyle(dash: [4, 4]))
-          }
-        }
       Text(MacTransferL10n.text(titleKey))
         .font(.caption.weight(.semibold))
         .multilineTextAlignment(.center)

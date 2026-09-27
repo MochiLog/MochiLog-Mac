@@ -18,19 +18,6 @@
         "zh-Hant": { "stringUnit": { "state": "translated", "value": "加密傳輸" } }
       }
     },
-    "mt_flow_cloud": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "iCloud sync is optional" } },
-        "ja": { "stringUnit": { "state": "translated", "value": "iCloud同期は任意" } },
-        "de": { "stringUnit": { "state": "translated", "value": "iCloud-Sync ist optional" } },
-        "es": { "stringUnit": { "state": "translated", "value": "La sincronización con iCloud es opcional" } },
-        "fr": { "stringUnit": { "state": "translated", "value": "La synchro iCloud est facultative" } },
-        "ko": { "stringUnit": { "state": "translated", "value": "iCloud 동기화는 선택 사항" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "iCloud 同步可选" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "iCloud 同步可選" } }
-      }
-    },
     "mt_flow_details": {
       "extractionState": "manual",
       "localizations": {
@@ -333,14 +320,14 @@
     "mt_guide_import_detail": {
       "extractionState": "manual",
       "localizations": {
-        "en": { "stringUnit": { "state": "translated", "value": "Open MochiLog on the iPhone or iPad to receive pending logs securely. The app analyzes and records them; iCloud sync remains optional and separate." } },
-        "ja": { "stringUnit": { "state": "translated", "value": "iPhone・iPadでMochiLogを開くと、保管されたログを暗号化して受信し、アプリ側で解析・記録します。iCloud同期は別の任意設定です。" } },
-        "de": { "stringUnit": { "state": "translated", "value": "Öffne MochiLog auf dem iPhone oder iPad, um wartende Protokolle verschlüsselt zu empfangen. Die App wertet sie aus und speichert sie. iCloud-Sync bleibt getrennt und optional." } },
-        "es": { "stringUnit": { "state": "translated", "value": "Abre MochiLog en el iPhone o iPad para recibir los registros pendientes de forma cifrada. La app los analiza y guarda. La sincronización con iCloud es independiente y opcional." } },
-        "fr": { "stringUnit": { "state": "translated", "value": "Ouvrez MochiLog sur l’iPhone ou l’iPad pour recevoir les journaux en attente de façon chiffrée. L’app les analyse et les enregistre. La synchronisation iCloud reste distincte et facultative." } },
-        "ko": { "stringUnit": { "state": "translated", "value": "iPhone 또는 iPad에서 MochiLog을 열면 대기 중인 로그를 암호화해 수신하고 앱에서 분석·기록합니다. iCloud 동기화는 별도의 선택 사항입니다." } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "在 iPhone 或 iPad 上打开 MochiLog，即可加密接收待传日志，由 App 分析并记录。iCloud 同步是独立的可选设置。" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "在 iPhone 或 iPad 上開啟 MochiLog，即可加密接收待傳日誌，由 App 分析並記錄。iCloud 同步是獨立的選用設定。" } }
+        "en": { "stringUnit": { "state": "translated", "value": "Open MochiLog on the iPhone or iPad to receive pending logs securely. The app analyzes and records them." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "iPhone・iPadでMochiLogを開くと、保管されたログを暗号化して受信し、アプリ側で解析・記録します。" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Öffne MochiLog auf dem iPhone oder iPad, um wartende Protokolle verschlüsselt zu empfangen. Die App wertet sie aus und speichert sie." } },
+        "es": { "stringUnit": { "state": "translated", "value": "Abre MochiLog en el iPhone o iPad para recibir los registros pendientes de forma cifrada. La app los analiza y guarda." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Ouvrez MochiLog sur l’iPhone ou l’iPad pour recevoir les journaux en attente de façon chiffrée. L’app les analyse et les enregistre." } },
+        "ko": { "stringUnit": { "state": "translated", "value": "iPhone 또는 iPad에서 MochiLog을 열면 대기 중인 로그를 암호화해 수신하고 앱에서 분석·기록합니다." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "在 iPhone 或 iPad 上打开 MochiLog，即可加密接收待传日志，由 App 分析并记录。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "在 iPhone 或 iPad 上開啟 MochiLog，即可加密接收待傳日誌，由 App 分析並記錄。" } }
       }
     },
     "mt_guide_without_title": {
