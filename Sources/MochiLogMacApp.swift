@@ -97,6 +97,7 @@ final class CompanionModel: ObservableObject {
   @Published var isBusy = false
   @Published var collectionDone = 0
   @Published var collectionTotal = 0
+  @Published var staleAnalyticsDeviceIDs: Set<UUID> = []
   @Published var lastAppRequestAt: [UUID: Date] = [:]
   @Published private var appPresence: [UUID: AppPresence] = [:]
   @Published private var activeTransfers: [UUID: Int] = [:]
@@ -271,6 +272,14 @@ final class CompanionModel: ObservableObject {
           }
         }.value
         SupportDiagnostics.saveCollection(report, error: nil, for: device)
+        let isStale = report.newestHostAnalyticsAt.map {
+          Date().timeIntervalSince($0) >= 48 * 60 * 60
+        } ?? true
+        if isStale {
+          staleAnalyticsDeviceIDs.insert(device.physicalDeviceID)
+        } else {
+          staleAnalyticsDeviceIDs.remove(device.physicalDeviceID)
+        }
         savedAny = savedAny || report.saved > 0
         if selectedUDID == device.udid { osPairingState = .verified }
         status = report.failed == 0
@@ -532,6 +541,14 @@ private struct CompanionView: View {
                     Text(MacTransferL10n.text("mt_no_request"))
                       .font(.caption).foregroundStyle(.secondary)
                   }
+                  if model.staleAnalyticsDeviceIDs.contains(device.physicalDeviceID) {
+                    Label(MacTransferL10n.text("mt_analytics_stale_title"),
+                      systemImage: "exclamationmark.triangle")
+                      .font(.caption.weight(.medium)).foregroundStyle(.orange)
+                    Text(MacTransferL10n.text("mt_analytics_stale_detail"))
+                      .font(.caption).foregroundStyle(.secondary)
+                      .fixedSize(horizontal: false, vertical: true)
+                  }
                 }
                 Spacer()
                 if device.confirmedAt != nil {
@@ -546,6 +563,21 @@ private struct CompanionView: View {
           Button(MacTransferL10n.text("mt_nav_manage_devices")) { page = .devices }
             .buttonStyle(.link)
         }.frame(maxWidth: .infinity, alignment: .leading).padding(12)
+      }
+      GroupBox(MacTransferL10n.text("mt_help_title")) {
+        VStack(alignment: .leading, spacing: 14) {
+          guidePoint("mt_help_missing_title", "mt_help_missing_detail",
+            symbol: "doc.text.magnifyingglass")
+          guidePoint("mt_help_collect_title", "mt_help_collect_detail",
+            symbol: "lock.open")
+          guidePoint("mt_help_import_title", "mt_help_import_detail",
+            symbol: "arrow.down.doc")
+          guidePoint("mt_help_remote_title", "mt_help_remote_detail",
+            symbol: "network")
+          Button(MacTransferL10n.text("mt_help_support")) { page = .support }
+            .buttonStyle(.link)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading).padding(12)
       }
     }
   }

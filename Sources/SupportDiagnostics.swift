@@ -49,7 +49,7 @@ enum SupportDiagnostics {
     } else if error != nil {
       category = "collection_error"
     } else { category = report?.failed == 0 ? "completed" : "partial_failure" }
-    let object: [String: Any] = [
+    var object: [String: Any] = [
       "schema": 1,
       "collectedAt": ISO8601DateFormatter().string(from: Date()),
       "result": category,
@@ -57,6 +57,9 @@ enum SupportDiagnostics {
       "excluded": report?.skipped ?? 0,
       "failed": report?.failed ?? 0
     ]
+    if let newest = report?.newestHostAnalyticsAt {
+      object["newestHostAnalyticsAt"] = ISO8601DateFormatter().string(from: newest)
+    }
     guard let data = try? JSONSerialization.data(withJSONObject: object) else { return }
     let destination = file("collection", for: device)
     try? data.write(to: destination, options: .atomic)

@@ -170,6 +170,21 @@ struct TransferProtocolTests {
       _ = try Collector.browse { _, _ in throw CollectorError.timeout }
       throw TestFailure.failed("Complete discovery failure was hidden")
     } catch CollectorError.discoveryTimeout { }
+    print("Checking empty wireless diagnostic listings fall back to the native route")
+    let rootListing = try Collector.remoteRootListing(udid: "ipad") { args, _ in
+      if args.first == "usbmux" { return #"["ipad"]"# }
+      if args.contains("--mobdev2") { return "" }
+      if args.contains("--native") { return "/Retired\n/DiagnosticLogs\n" }
+      throw TestFailure.failed("Unexpected diagnostic command")
+    }
+    try check(rootListing.1.contains("--native") && rootListing.0.contains("/Retired"),
+      "An empty Wi-Fi lockdown result hid a working native diagnostic route")
+    do {
+      _ = try Collector.remoteRootListing(udid: "ipad") { args, _ in
+        args.first == "usbmux" ? #"["ipad"]"# : ""
+      }
+      throw TestFailure.failed("Empty diagnostic results were reported as a successful collection")
+    } catch CollectorError.failed { }
 
     setbuf(stdout, nil)
     guard ProcessInfo.processInfo.environment["MOCHILOG_TRANSFER_TEST_ROOT"] != nil else {

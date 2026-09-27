@@ -76,6 +76,7 @@ struct CollectionReport {
   let skipped: Int
   let failed: Int
   let lastError: String?
+  let newestHostAnalyticsAt: Date?
 }
 
 enum LogKind: String {
@@ -281,15 +282,25 @@ enum Collector {
     try usbmuxDeviceIDs("--usb").contains(udid)
   }
 
-  private static func remoteRootListing(udid: String) throws -> (String, [String]) {
+  static func remoteRootListing(udid: String,
+    runCommand: ([String], TimeInterval) throws -> String = {
+      try Collector.run($0, timeout: $1)
+    }) throws -> (String, [String]) {
     let native = ["--native", "--udid", udid]
     let network = ["--mobdev2", "--udid", udid]
     let root = ["--remote-file", "/", "--depth", "1"]
-    if (try? usbmuxDeviceIDs("--network").contains(udid)) == true,
-      let listing = try? run(["crash", "ls"] + network + root, timeout: 45) {
+    let networkIDs = try? JSONDecoder().decode([String].self,
+      from: Data(try runCommand(["usbmux", "list", "--network", "--simple"], 20).utf8))
+    if networkIDs?.contains(udid) == true,
+      let listing = try? runCommand(["crash", "ls"] + network + root, 45),
+      !listing.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
       return (listing, network)
     }
-    return (try run(["crash", "ls"] + native + root, timeout: 45), native)
+    let listing = try runCommand(["crash", "ls"] + native + root, 45)
+    guard !listing.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+      throw CollectorError.failed(MacTransferL10n.text("mt_empty_diagnostic_listing"))
+    }
+    return (listing, native)
   }
 
   static func directory(for device: PairedDevice) throws -> URL {
@@ -434,6 +445,13 @@ enum Collector {
         && !remote.name.localizedCaseInsensitiveContains("session")
         && remote.name.hasSuffix(".ips.ca.synced")
     }
+    let timestamp = DateFormatter()
+    timestamp.locale = Locale(identifier: "en_US_POSIX")
+    timestamp.timeZone = .current
+    timestamp.dateFormat = "yyyy-MM-dd-HHmmss"
+    let newestHostAnalyticsAt = remoteFiles.lazy.filter { $0.source == nil }
+      .compactMap { timestamp.date(from: String($0.name.dropFirst(10).prefix(17))) }
+      .max()
     let destination = try directory(for: device)
     let delivered = delivered(for: device)
     let newFiles = remoteFiles.filter { remote in
@@ -497,6 +515,6 @@ enum Collector {
       progress?(index + 1, newFiles.count)
     }
     return CollectionReport(saved: saved, skipped: skipped, failed: failed,
-      lastError: lastError)
+      lastError: lastError, newestHostAnalyticsAt: newestHostAnalyticsAt)
   }
 }
