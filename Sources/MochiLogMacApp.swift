@@ -109,6 +109,7 @@ final class CompanionModel: ObservableObject {
   @Published var state = Collector.loadState()
   private var server: TransferServer?
   private var pairProcess: Process?
+  private var lastAutomaticDecision: [UUID: String] = [:]
 
   init() {
     let server = TransferServer(state: state)
@@ -149,10 +150,10 @@ final class CompanionModel: ObservableObject {
     catch { status = MacTransferL10n.format("mt_m_02", error.localizedDescription) }
     Task {
       await refresh()
-      await collectAll()
+      await collectAll(trigger: "app launch")
     }
     Timer.scheduledTimer(withTimeInterval: 5 * 60, repeats: true) { [weak self] _ in
-      Task { @MainActor in await self?.collectAll() }
+      Task { @MainActor in await self?.collectAll(trigger: "5-minute timer") }
     }
     Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
       Task { @MainActor in self?.presenceClock = Date() }
@@ -286,14 +287,43 @@ final class CompanionModel: ObservableObject {
     return components.url?.absoluteString
   }
 
-  func collectAll(manual: Bool = false) async {
-    guard !state.devices.isEmpty, !isBusy else { return }
+  func collectAll(manual: Bool = false, trigger: String = "manual request") async {
+    guard !state.devices.isEmpty else { return }
+    guard !isBusy else {
+      SupportDiagnostics.record("Collection trigger skipped: \(trigger); another collection is in progress")
+      return
+    }
     var japan = Calendar(identifier: .gregorian)
     japan.timeZone = TimeZone(identifier: "Asia/Tokyo")!
     let now = Date()
     let collectionOpen = japan.component(.hour, from: now) >= 9
     let devices = state.devices.filter { device in
-      manual || (collectionOpen && (device.automaticPauseUntil ?? .distantPast) <= now)
+      if manual { return true }
+      let reason: String?
+      let resume: Date
+      if !collectionOpen {
+        reason = "before the daily collection window"
+        resume = japan.nextDate(after: now, matching: DateComponents(hour: 9),
+          matchingPolicy: .nextTime) ?? now.addingTimeInterval(24 * 60 * 60)
+      } else if let until = device.automaticPauseUntil, until > now {
+        reason = "mobile app confirmed all required daily logs"
+        resume = until
+      } else {
+        reason = nil
+        resume = now
+      }
+      if let reason {
+        let key = "\(reason)|\(Int(resume.timeIntervalSince1970))"
+        if lastAutomaticDecision[device.physicalDeviceID] != key {
+          SupportDiagnostics.record("\(device.name): automatic collection stopped; trigger=\(reason); resume=\(SupportDiagnostics.localTime(resume))")
+          lastAutomaticDecision[device.physicalDeviceID] = key
+        }
+        return false
+      }
+      if lastAutomaticDecision.removeValue(forKey: device.physicalDeviceID) != nil {
+        SupportDiagnostics.record("\(device.name): automatic collection resumed; trigger=\(trigger)")
+      }
+      return true
     }
     guard !devices.isEmpty else { return }
     isBusy = true
@@ -301,6 +331,7 @@ final class CompanionModel: ObservableObject {
     var savedAny = false
     for device in devices {
       do {
+        SupportDiagnostics.record("\(device.name): collection started; trigger=\(manual ? "manual request" : trigger)")
         collectionDone = 0
         collectionTotal = 0
         let report = try await Task.detached(priority: .utility) { [weak self] in
@@ -322,11 +353,13 @@ final class CompanionModel: ObservableObject {
           staleAnalyticsDeviceIDs.remove(device.physicalDeviceID)
         }
         savedAny = savedAny || report.saved > 0
+        SupportDiagnostics.record("\(device.name): collection finished; saved=\(report.saved), excluded=\(report.skipped), failed=\(report.failed)")
         if selectedUDID == device.udid { osPairingState = .verified }
         status = report.failed == 0
           ? MacTransferL10n.format("mt_m_08", device.name, report.saved, report.skipped)
           : MacTransferL10n.format("mt_m_09", device.name, report.saved, report.skipped, report.failed, report.lastError ?? "")
       } catch {
+        SupportDiagnostics.record("\(device.name): collection failed; trigger=\(manual ? "manual request" : trigger); error=\(error.localizedDescription)")
         SupportDiagnostics.saveCollection(nil, error: error, for: device)
         if selectedUDID == device.udid { osPairingState = .failed }
         status = "\(device.name): \(error.localizedDescription)"

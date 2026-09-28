@@ -597,6 +597,7 @@ final class TransferServer: @unchecked Sendable {
       do {
         state.devices[index].automaticPauseUntil = nil
         try Collector.saveState(state)
+        SupportDiagnostics.record("\(device.name): automatic collection resumed; trigger=authenticated mobile request at \(SupportDiagnostics.localTime(now))")
         onPairingCompleted?()
         let control = try JSONSerialization.data(withJSONObject: ["type": "daily-resume-ack"])
         let context = Data("v2|response|\(request.hostID.uuidString)|\(request.physicalDeviceID.uuidString)|\(request.nonce.uuidString)".utf8)
@@ -625,6 +626,7 @@ final class TransferServer: @unchecked Sendable {
       do {
         state.devices[index].automaticPauseUntil = Date(timeIntervalSince1970: untilSeconds)
         try Collector.saveState(state)
+        SupportDiagnostics.record("\(device.name): automatic collection stopped; trigger=confirmed daily receipt; resume=\(SupportDiagnostics.localTime(Date(timeIntervalSince1970: untilSeconds)))")
         onPairingCompleted?()
         let control = try JSONSerialization.data(withJSONObject: [
           "type": "daily-pause-ack", "until": untilText

@@ -2,8 +2,17 @@ import Foundation
 
 enum SupportDiagnostics {
   private static var eventsURL: URL { Collector.root.appendingPathComponent("support-events.json") }
+  private static let eventLock = NSLock()
+
+  static func localTime(_ date: Date) -> String {
+    let formatter = ISO8601DateFormatter()
+    formatter.timeZone = .autoupdatingCurrent
+    return formatter.string(from: date)
+  }
 
   static func record(_ message: String) {
+    eventLock.lock()
+    defer { eventLock.unlock() }
     let normalized = String(message.replacingOccurrences(of: "\n", with: " ").prefix(200))
     var events = (try? JSONDecoder().decode([String].self,
       from: Data(contentsOf: eventsURL))) ?? []
@@ -11,7 +20,7 @@ enum SupportDiagnostics {
     let formatter = ISO8601DateFormatter()
     formatter.timeZone = .autoupdatingCurrent
     events.append("\(formatter.string(from: Date())) | \(normalized)")
-    if events.count > 80 { events.removeFirst(events.count - 80) }
+    if events.count > 500 { events.removeFirst(events.count - 500) }
     try? JSONEncoder().encode(events).write(to: eventsURL, options: .atomic)
   }
 
