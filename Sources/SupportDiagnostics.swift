@@ -5,9 +5,14 @@ enum SupportDiagnostics {
   private static var archiveDirectory: URL {
     Collector.root.appendingPathComponent("DebugLogs", isDirectory: true)
   }
+  private static var phoneArchiveDirectory: URL {
+    Collector.root.appendingPathComponent("PhoneDebugLogs", isDirectory: true)
+  }
   private static let retentionKey = "MochiLogDebugRetentionDays"
   private static let migratedKey = "MochiLogDebugArchiveMigrated"
   private static let eventLock = NSLock()
+  private static let snapshotLock = NSLock()
+  private static var manifestSnapshots: [UUID: (Date, [String: Int])] = [:]
 
   static var retentionDays: Int {
     get {
@@ -19,6 +24,7 @@ enum SupportDiagnostics {
       defer { eventLock.unlock() }
       UserDefaults.standard.set(min(365, max(1, newValue)), forKey: retentionKey)
       pruneArchive()
+      prunePhoneArchives()
     }
   }
 
@@ -37,7 +43,24 @@ enum SupportDiagnostics {
     return (try? String(contentsOf: archiveURL(for: day), encoding: .utf8)) ?? ""
   }
 
+  static func phoneArchiveDays(for device: PairedDevice) -> [String] {
+    let folder = phoneArchiveDirectory.appendingPathComponent(
+      device.physicalDeviceID.uuidString, isDirectory: true)
+    return archiveDays(in: folder)
+  }
+
+  static func phoneLogText(for device: PairedDevice, day: String) -> String {
+    guard validDay(day) else { return "" }
+    let folder = phoneArchiveDirectory.appendingPathComponent(
+      device.physicalDeviceID.uuidString, isDirectory: true)
+    return (try? String(contentsOf: folder.appendingPathComponent("\(day).log"),
+      encoding: .utf8)) ?? ""
+  }
+
   static func deleteLogs() {
+    snapshotLock.lock()
+    manifestSnapshots.removeAll()
+    snapshotLock.unlock()
     eventLock.lock()
     defer { eventLock.unlock() }
     for day in storedDays() { try? FileManager.default.removeItem(at: archiveURL(for: day)) }
@@ -64,7 +87,11 @@ enum SupportDiagnostics {
   }
 
   private static func storedDays() -> [String] {
-    let files = (try? FileManager.default.contentsOfDirectory(at: archiveDirectory,
+    archiveDays(in: archiveDirectory)
+  }
+
+  private static func archiveDays(in directory: URL) -> [String] {
+    let files = (try? FileManager.default.contentsOfDirectory(at: directory,
       includingPropertiesForKeys: nil)) ?? []
     return files.compactMap { file in
       guard file.pathExtension == "log" else { return nil }
@@ -111,6 +138,19 @@ enum SupportDiagnostics {
     }
   }
 
+  private static func prunePhoneArchives() {
+    let cutoff = dayString(Calendar.current.date(byAdding: .day,
+      value: 1 - retentionDays, to: Date()) ?? Date())
+    let folders = (try? FileManager.default.contentsOfDirectory(at:
+      phoneArchiveDirectory, includingPropertiesForKeys: nil)) ?? []
+    for folder in folders where folder.hasDirectoryPath {
+      for day in archiveDays(in: folder) where day < cutoff {
+        try? FileManager.default.removeItem(at:
+          folder.appendingPathComponent("\(day).log"))
+      }
+    }
+  }
+
   static func localTime(_ date: Date) -> String {
     let formatter = ISO8601DateFormatter()
     formatter.timeZone = .autoupdatingCurrent
@@ -147,8 +187,20 @@ enum SupportDiagnostics {
   static func savePhoneReport(_ data: Data, for device: PairedDevice) throws {
     guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
       object["schema"] as? Int == 1 else { return }
+    if object["archiveRefresh"] as? Bool == true {
+      snapshotLock.lock()
+      manifestSnapshots.removeValue(forKey: device.physicalDeviceID)
+      snapshotLock.unlock()
+    }
+    if let chunk = object["archiveChunk"] as? [String: Any] {
+      receiveArchiveChunk(chunk, directory: phoneArchiveDirectory.appendingPathComponent(
+        device.physicalDeviceID.uuidString, isDirectory: true))
+    }
     let destination = file("iphone", for: device)
-    try data.write(to: destination, options: .atomic)
+    var saved = object
+    saved.removeValue(forKey: "archiveChunk")
+    try JSONSerialization.data(withJSONObject: saved).write(to: destination,
+      options: .atomic)
     try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: destination.path)
   }
 
@@ -204,13 +256,127 @@ enum SupportDiagnostics {
       "recentEvents": recentEvents
     ]
     object["lastAppDiagnostic"] = CrashDiagnostics.summary()
+    let phone = phoneReport(for: device).flatMap { try? Data(contentsOf: $0) }
+      .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+    let phoneDirectory = phoneArchiveDirectory.appendingPathComponent(
+      device.physicalDeviceID.uuidString, isDirectory: true)
+    object["archiveManifest"] = snapshotManifest(for: device)
+    if let manifest = phone?["archiveManifest"] as? [String: Int],
+      let request = archiveRequest(manifest: manifest, directory: phoneDirectory) {
+      object["archiveRequest"] = request
+    }
+    if let request = phone?["archiveRequest"] as? [String: Any],
+      let chunk = archiveChunk(request: request, directory: archiveDirectory,
+        limit: 4_096) {
+      object["archiveChunk"] = chunk
+    }
     while true {
       let data = (try? JSONSerialization.data(withJSONObject: object,
-        options: [.prettyPrinted, .sortedKeys])) ?? Data("{}".utf8)
-      if data.count <= 16_384 || recentEvents.isEmpty { return data }
-      recentEvents.removeFirst()
-      object["recentEvents"] = recentEvents
+        options: [.sortedKeys])) ?? Data("{}".utf8)
+      if data.count <= 16_384 { return data }
+      if !recentEvents.isEmpty {
+        recentEvents.removeFirst()
+        object["recentEvents"] = recentEvents
+      } else if var chunk = object["archiveChunk"] as? [String: Any],
+        let encoded = chunk["data"] as? String,
+        let bytes = Data(base64Encoded: encoded), bytes.count > 128 {
+        chunk["data"] = Data(bytes.prefix(bytes.count / 2)).base64EncodedString()
+        object["archiveChunk"] = chunk
+      } else {
+        object.removeValue(forKey: "archiveChunk")
+        object.removeValue(forKey: "lastAppDiagnostic")
+        return (try? JSONSerialization.data(withJSONObject: object,
+          options: [.sortedKeys])) ?? Data("{}".utf8)
+      }
     }
+  }
+
+  private static func compactDay(_ day: String) -> String {
+    day.replacingOccurrences(of: "-", with: "")
+  }
+
+  private static func expandedDay(_ compact: String) -> String? {
+    guard compact.range(of: #"^[0-9]{8}$"#, options: .regularExpression) != nil
+    else { return nil }
+    let day = String(compact.prefix(4)) + "-" +
+      String(compact.dropFirst(4).prefix(2)) + "-" + String(compact.suffix(2))
+    return validDay(day) ? day : nil
+  }
+
+  private static func archiveManifest(in directory: URL) -> [String: Int] {
+    Dictionary(uniqueKeysWithValues: archiveDays(in: directory).compactMap { day in
+      let url = directory.appendingPathComponent("\(day).log")
+      guard let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize,
+        (0...64_000_000).contains(size) else { return nil }
+      return (compactDay(day), size)
+    })
+  }
+
+  private static func snapshotManifest(for device: PairedDevice) -> [String: Int] {
+    snapshotLock.lock()
+    defer { snapshotLock.unlock() }
+    if let saved = manifestSnapshots[device.physicalDeviceID],
+      Date().timeIntervalSince(saved.0) < 600 { return saved.1 }
+    let manifest = archiveManifest(in: archiveDirectory)
+    manifestSnapshots[device.physicalDeviceID] = (Date(), manifest)
+    return manifest
+  }
+
+  private static func archiveRequest(manifest: [String: Int], directory: URL)
+    -> [String: Any]? {
+    for compact in manifest.keys.sorted(by: >) {
+      guard let day = expandedDay(compact), let size = manifest[compact],
+        (0...64_000_000).contains(size) else { continue }
+      let url = directory.appendingPathComponent("\(day).log")
+      let current = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
+      if current < size { return ["day": compact, "offset": current] }
+    }
+    return nil
+  }
+
+  private static func archiveChunk(request: [String: Any], directory: URL,
+    limit: Int) -> [String: Any]? {
+    guard let compact = request["day"] as? String,
+      let day = expandedDay(compact), let offset = request["offset"] as? Int,
+      offset >= 0, offset <= 64_000_000 else { return nil }
+    let url = directory.appendingPathComponent("\(day).log")
+    guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+    defer { try? handle.close() }
+    guard (try? handle.seek(toOffset: UInt64(offset))) != nil,
+      let bytes = try? handle.read(upToCount: limit), !bytes.isEmpty else { return nil }
+    return ["day": compact, "offset": offset,
+      "data": bytes.base64EncodedString()]
+  }
+
+  private static func receiveArchiveChunk(_ chunk: [String: Any],
+    directory: URL) {
+    guard let compact = chunk["day"] as? String,
+      let day = expandedDay(compact), let offset = chunk["offset"] as? Int,
+      let encoded = chunk["data"] as? String,
+      let bytes = Data(base64Encoded: encoded), !bytes.isEmpty,
+      bytes.count <= 8_192, offset >= 0,
+      offset + bytes.count <= 64_000_000 else { return }
+    do {
+      try FileManager.default.createDirectory(at: directory,
+        withIntermediateDirectories: true)
+      let url = directory.appendingPathComponent("\(day).log")
+      if !FileManager.default.fileExists(atPath: url.path) {
+        FileManager.default.createFile(atPath: url.path, contents: nil)
+      }
+      let handle = try FileHandle(forUpdating: url)
+      defer { try? handle.close() }
+      let size = try handle.seekToEnd()
+      guard size == UInt64(offset) else { return }
+      try handle.write(contentsOf: bytes)
+      try FileManager.default.setAttributes([.posixPermissions: 0o600],
+        ofItemAtPath: url.path)
+      let cutoff = dayString(Calendar.current.date(byAdding: .day,
+        value: 1 - retentionDays, to: Date()) ?? Date())
+      for old in archiveDays(in: directory) where old < cutoff {
+        try? FileManager.default.removeItem(at:
+          directory.appendingPathComponent("\(old).log"))
+      }
+    } catch { return }
   }
 
   static func mailAttachments(for device: PairedDevice, incidentDate: Date) throws -> [URL] {
@@ -227,6 +393,10 @@ enum SupportDiagnostics {
       let log = directory.appendingPathComponent("mochilog-mac-debug-\(day).log")
       try logText(for: day).write(to: log, atomically: true, encoding: .utf8)
       attachments.append(log)
+      let phoneLog = directory.appendingPathComponent("mochilog-iphone-debug-\(day).log")
+      try phoneLogText(for: device, day: day).write(to: phoneLog,
+        atomically: true, encoding: .utf8)
+      attachments.append(phoneLog)
     }
     if let diagnostic = CrashDiagnostics.latest() {
       let target = directory.appendingPathComponent("mochilog-mac-app-diagnostic.json")

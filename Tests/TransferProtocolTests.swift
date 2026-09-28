@@ -425,6 +425,36 @@ struct TransferProtocolTests {
       secret: device.secret,
       context: (hostID, device.physicalDeviceID, v2FinalNonce))
     try check(v2Final.0.isEmpty, "V2 acknowledgement did not finish the transfer")
+    print("Checking authenticated daily debug archive exchange")
+    SupportDiagnostics.record("archive exchange fixture")
+    let archiveDay = SupportDiagnostics.dayString(Date())
+    let compactDay = archiveDay.replacingOccurrences(of: "-", with: "")
+    let phoneLine = Data("phone archive line\n".utf8)
+    let archiveReport = try JSONSerialization.data(withJSONObject: [
+      "schema": 1, "platform": "iOS", "archiveRefresh": true,
+      "archiveManifest": [compactDay: phoneLine.count],
+      "archiveChunk": ["day": compactDay, "offset": 0,
+        "data": phoneLine.base64EncodedString()],
+      "archiveRequest": ["day": compactDay, "offset": 0]
+    ] as [String: Any])
+    let archiveNonce = UUID()
+    let archiveReply = try opened(request(endpoint, hostID: hostID, device: device,
+      nonce: archiveNonce, diagnostics: archiveReport), secret: device.secret,
+      context: (hostID, device.physicalDeviceID, archiveNonce))
+    try check(archiveReply.0.isEmpty, "Archive exchange did not return a terminal report")
+    try check(SupportDiagnostics.phoneLogText(for: device, day: archiveDay) ==
+      String(data: phoneLine, encoding: .utf8), "Phone archive chunk was not saved")
+    let archiveObject = try JSONSerialization.jsonObject(with: archiveReply.1)
+      as? [String: Any]
+    let computerChunk = archiveObject?["archiveChunk"] as? [String: Any]
+    try check(computerChunk?["day"] as? String == compactDay &&
+      Data(base64Encoded: computerChunk?["data"] as? String ?? "") != nil,
+      "Computer archive chunk was not returned")
+    let duplicateNonce = UUID()
+    _ = try request(endpoint, hostID: hostID, device: device,
+      nonce: duplicateNonce, diagnostics: archiveReport)
+    try check(SupportDiagnostics.phoneLogText(for: device, day: archiveDay) ==
+      String(data: phoneLine, encoding: .utf8), "Retried archive chunk was duplicated")
     print("Checking delayed fragmented requests on the VPN receiver")
     server.startTestTailnetReceiver()
     let vpnEndpoint = NWEndpoint.hostPort(host: "127.0.0.1",

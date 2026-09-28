@@ -7,6 +7,7 @@ struct MacTransferDebugLogView: View {
   let device: PairedDevice?
   @State private var revision = 0
   @State private var selectedDay: String?
+  @State private var selectedPhoneDay: String?
   @State private var showingDeleteConfirmation = false
 
   private var macLog: String {
@@ -16,9 +17,16 @@ struct MacTransferDebugLogView: View {
   }
 
   private var days: [String] { _ = revision; return SupportDiagnostics.archiveDays() }
+  private var phoneDays: [String] {
+    _ = revision
+    return device.map { SupportDiagnostics.phoneArchiveDays(for: $0) } ?? []
+  }
 
   private var phoneLog: String {
     _ = revision
+    if let device, let selectedPhoneDay {
+      return SupportDiagnostics.phoneLogText(for: device, day: selectedPhoneDay)
+    }
     guard let device, let url = SupportDiagnostics.phoneReport(for: device),
       let data = try? Data(contentsOf: url),
       let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -54,12 +62,19 @@ struct MacTransferDebugLogView: View {
       }
       HStack(alignment: .top, spacing: 16) {
         logPanel(MacTransferL10n.text("mt_044"), text: macLog)
-        logPanel(MacTransferL10n.text("mt_045"), text: phoneLog)
+        VStack(alignment: .leading, spacing: 8) {
+          Picker(MacTransferL10n.text("mt_log_date"), selection: $selectedPhoneDay) {
+            ForEach(phoneDays, id: \.self) { day in Text(day).tag(Optional(day)) }
+          }
+          .frame(maxWidth: 230)
+          logPanel(MacTransferL10n.text("mt_045"), text: phoneLog)
+        }
       }
       HStack {
         Button(MacTransferL10n.text("mt_015")) {
           revision += 1
           if selectedDay == nil { selectedDay = days.first }
+          if selectedPhoneDay == nil { selectedPhoneDay = phoneDays.first }
         }
         Spacer()
         Button(MacTransferL10n.text("mt_037")) { dismiss() }
@@ -67,7 +82,10 @@ struct MacTransferDebugLogView: View {
     }
     .padding(24)
     .frame(minWidth: 760, minHeight: 440)
-    .onAppear { selectedDay = days.first }
+    .onAppear {
+      selectedDay = days.first
+      selectedPhoneDay = phoneDays.first
+    }
     .confirmationDialog(MacTransferL10n.text("mt_log_delete_confirm"),
       isPresented: $showingDeleteConfirmation) {
       Button(MacTransferL10n.text("mt_log_delete"), role: .destructive) {
