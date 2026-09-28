@@ -7,6 +7,7 @@ struct MacTransferSupportView: View {
   @State private var nickname = ""
   @State private var email = ""
   @State private var message = ""
+  @State private var incidentDate = Date()
   @State private var errorMessage: String?
   private var valid: Bool {
     [nickname, email, message].allSatisfy {
@@ -27,6 +28,10 @@ struct MacTransferSupportView: View {
       TextEditor(text: $message)
         .frame(height: 130)
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(.quaternary))
+      DatePicker(MacTransferL10n.text("mt_log_incident"), selection: $incidentDate,
+        displayedComponents: [.date, .hourAndMinute])
+      Text(MacTransferL10n.text("mt_log_support_days"))
+        .font(.caption).foregroundStyle(.secondary)
       Label(MacTransferL10n.text("mt_035"),
         systemImage: "doc.text")
         .font(.callout).foregroundStyle(.secondary)
@@ -58,13 +63,15 @@ struct MacTransferSupportView: View {
       return
     }
     do {
-      let attachments = try SupportDiagnostics.mailAttachments(for: device)
+      let attachments = try SupportDiagnostics.mailAttachments(for: device,
+        incidentDate: incidentDate)
       service.recipients = ["support@mochilog.ryuya-dev.net"]
       service.subject = "[MochiLog Mac] \(MacTransferL10n.text("mt_040"))"
       let body = """
       \(MacTransferL10n.text("mt_032")): \(nickname)
       \(MacTransferL10n.text("mt_033")): \(email)
       \(MacTransferL10n.text("mt_041")): \(device.model)
+      \(MacTransferL10n.text("mt_log_incident")): \(incidentDate.formatted(date: .abbreviated, time: .shortened))
 
       \(MacTransferL10n.text("mt_034")):
       \(message)
