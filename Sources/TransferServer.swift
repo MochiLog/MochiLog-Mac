@@ -13,6 +13,9 @@ private struct PullRequest: Decodable {
   let presence: String?
   let presenceMAC: String?
   let clientDiagnosticsBox: String?
+  let dailyPauseUntil: String?
+  let dailyPauseMAC: String?
+  let dailyResumeMAC: String?
 }
 
 private struct PreparedResponse {
@@ -583,6 +586,60 @@ final class TransferServer: @unchecked Sendable {
         authenticating: Data("v2|diagnostics|\(request.hostID.uuidString)|\(request.physicalDeviceID.uuidString)|\(request.nonce.uuidString)".utf8)),
       report.count <= 8_192 {
       try? SupportDiagnostics.savePhoneReport(report, for: device)
+    }
+    if let supplied = request.dailyResumeMAC.flatMap(Data.init(hex:)),
+      supplied == Data(HMAC<SHA256>.authenticationCode(
+        for: Data("daily-resume|v1|\(request.hostID.uuidString)|\(request.physicalDeviceID.uuidString)|\(request.nonce.uuidString)".utf8),
+        using: SymmetricKey(data: device.secret))),
+      let index = state.devices.firstIndex(where: {
+        $0.physicalDeviceID == request.physicalDeviceID
+      }) {
+      do {
+        state.devices[index].automaticPauseUntil = nil
+        try Collector.saveState(state)
+        onPairingCompleted?()
+        let control = try JSONSerialization.data(withJSONObject: ["type": "daily-resume-ack"])
+        let context = Data("v2|response|\(request.hostID.uuidString)|\(request.physicalDeviceID.uuidString)|\(request.nonce.uuidString)".utf8)
+        let sealed = try AES.GCM.seal(Data([0, 0]) + control,
+          using: SymmetricKey(data: device.secret), authenticating: context)
+        guard let combined = sealed.combined else { return nil }
+        var length = UInt32(combined.count).bigEndian
+        return PreparedResponse(data: withUnsafeBytes(of: &length) { Data($0) } + combined,
+          deviceID: device.physicalDeviceID)
+      } catch {
+        onStatus?("Automatic collection resume could not be saved: \(error.localizedDescription)")
+        return nil
+      }
+    }
+    if let untilText = request.dailyPauseUntil,
+      let untilSeconds = TimeInterval(untilText),
+      untilSeconds > now.timeIntervalSince1970,
+      untilSeconds <= now.addingTimeInterval(26 * 60 * 60).timeIntervalSince1970,
+      let supplied = request.dailyPauseMAC.flatMap(Data.init(hex:)),
+      supplied == Data(HMAC<SHA256>.authenticationCode(
+        for: Data("daily-pause|v1|\(request.hostID.uuidString)|\(request.physicalDeviceID.uuidString)|\(request.nonce.uuidString)|\(untilText)".utf8),
+        using: SymmetricKey(data: device.secret))),
+      let index = state.devices.firstIndex(where: {
+        $0.physicalDeviceID == request.physicalDeviceID
+      }) {
+      do {
+        state.devices[index].automaticPauseUntil = Date(timeIntervalSince1970: untilSeconds)
+        try Collector.saveState(state)
+        onPairingCompleted?()
+        let control = try JSONSerialization.data(withJSONObject: [
+          "type": "daily-pause-ack", "until": untilText
+        ])
+        let context = Data("v2|response|\(request.hostID.uuidString)|\(request.physicalDeviceID.uuidString)|\(request.nonce.uuidString)".utf8)
+        let sealed = try AES.GCM.seal(Data([0, 0]) + control,
+          using: SymmetricKey(data: device.secret), authenticating: context)
+        guard let combined = sealed.combined else { return nil }
+        var length = UInt32(combined.count).bigEndian
+        return PreparedResponse(data: withUnsafeBytes(of: &length) { Data($0) } + combined,
+          deviceID: device.physicalDeviceID)
+      } catch {
+        onStatus?("Automatic collection pause could not be saved: \(error.localizedDescription)")
+        return nil
+      }
     }
     do {
       if let ack = request.ack,

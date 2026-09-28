@@ -331,6 +331,69 @@ struct TransferProtocolTests {
       nonce: repeatNonce), secret: device.secret,
       context: (hostID, device.physicalDeviceID, repeatNonce))
     try check(repeatPull.0.isEmpty, "Delivered payload appeared again")
+    print("Checking authenticated automatic-collection pause")
+    let pauseUntil = String(Int(Date().addingTimeInterval(3600).timeIntervalSince1970))
+    let pauseNonce = UUID()
+    let pauseMessage = "daily-pause|v1|\(hostID.uuidString)|\(device.physicalDeviceID.uuidString)|\(pauseNonce.uuidString)|\(pauseUntil)"
+    let pauseMAC = HMAC<SHA256>.authenticationCode(for: Data(pauseMessage.utf8),
+      using: SymmetricKey(data: device.secret))
+      .map { String(format: "%02x", $0) }.joined()
+    let baseMAC = HMAC<SHA256>.authenticationCode(for: Data(
+      "v2|\(hostID.uuidString)|\(device.physicalDeviceID.uuidString)|\(pauseNonce.uuidString)|".utf8),
+      using: SymmetricKey(data: device.secret))
+      .map { String(format: "%02x", $0) }.joined()
+    var pausePayload = ["version": "2", "hostID": hostID.uuidString,
+      "physicalDeviceID": device.physicalDeviceID.uuidString,
+      "nonce": pauseNonce.uuidString, "ack": "", "mac": baseMAC,
+      "dailyPauseUntil": pauseUntil, "dailyPauseMAC": String(repeating: "0", count: 64)]
+    let invalidPause = try opened(request(endpoint, hostID: hostID, device: device,
+      nonce: pauseNonce, overridePayload: pausePayload), secret: device.secret,
+      context: (hostID, device.physicalDeviceID, pauseNonce))
+    try check(invalidPause.0.isEmpty &&
+      Collector.loadState().devices.first?.automaticPauseUntil == nil,
+      "Invalid daily pause proof changed the saved state")
+    pausePayload["dailyPauseMAC"] = pauseMAC
+    let acceptedNonce = UUID()
+    pausePayload["nonce"] = acceptedNonce.uuidString
+    pausePayload["mac"] = HMAC<SHA256>.authenticationCode(for: Data(
+      "v2|\(hostID.uuidString)|\(device.physicalDeviceID.uuidString)|\(acceptedNonce.uuidString)|".utf8),
+      using: SymmetricKey(data: device.secret))
+      .map { String(format: "%02x", $0) }.joined()
+    pausePayload["dailyPauseMAC"] = HMAC<SHA256>.authenticationCode(for: Data(
+      "daily-pause|v1|\(hostID.uuidString)|\(device.physicalDeviceID.uuidString)|\(acceptedNonce.uuidString)|\(pauseUntil)".utf8),
+      using: SymmetricKey(data: device.secret))
+      .map { String(format: "%02x", $0) }.joined()
+    let acceptedPause = try opened(request(endpoint, hostID: hostID, device: device,
+      nonce: acceptedNonce, overridePayload: pausePayload), secret: device.secret,
+      context: (hostID, device.physicalDeviceID, acceptedNonce))
+    let pauseAck = try JSONSerialization.jsonObject(with: acceptedPause.1) as? [String: String]
+    try check(acceptedPause.0.isEmpty && pauseAck?["type"] == "daily-pause-ack" &&
+      pauseAck?["until"] == pauseUntil &&
+      Collector.loadState().devices.first?.automaticPauseUntil != nil,
+      "Authenticated pause was not acknowledged and persisted")
+    let pauseReplay = try request(endpoint, hostID: hostID, device: device,
+      nonce: acceptedNonce, expectNoResponse: true)
+    try check(pauseReplay.isEmpty,
+      "A pause nonce was accepted twice")
+    let resumeNonce = UUID()
+    let resumePayload = ["version": "2", "hostID": hostID.uuidString,
+      "physicalDeviceID": device.physicalDeviceID.uuidString,
+      "nonce": resumeNonce.uuidString, "ack": "",
+      "mac": HMAC<SHA256>.authenticationCode(for: Data(
+        "v2|\(hostID.uuidString)|\(device.physicalDeviceID.uuidString)|\(resumeNonce.uuidString)|".utf8),
+        using: SymmetricKey(data: device.secret))
+        .map { String(format: "%02x", $0) }.joined(),
+      "dailyResumeMAC": HMAC<SHA256>.authenticationCode(for: Data(
+        "daily-resume|v1|\(hostID.uuidString)|\(device.physicalDeviceID.uuidString)|\(resumeNonce.uuidString)".utf8),
+        using: SymmetricKey(data: device.secret))
+        .map { String(format: "%02x", $0) }.joined()]
+    let resumeReply = try opened(request(endpoint, hostID: hostID, device: device,
+      nonce: resumeNonce, overridePayload: resumePayload), secret: device.secret,
+      context: (hostID, device.physicalDeviceID, resumeNonce))
+    let resumeAck = try JSONSerialization.jsonObject(with: resumeReply.1) as? [String: String]
+    try check(resumeAck?["type"] == "daily-resume-ack" &&
+      Collector.loadState().devices.first?.automaticPauseUntil == nil,
+      "Authenticated resume did not clear the saved pause")
     print("Checking v2 encrypted diagnostics and nonce-bound response")
     let v2Name = "Analytics-2026-09-26-130000.ips.ca.synced"
     let v2Content = Data("v2 battery payload".utf8)

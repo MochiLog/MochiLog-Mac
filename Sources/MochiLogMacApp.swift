@@ -55,7 +55,7 @@ private struct MacMenuBarContent: View {
       NSApp.activate(ignoringOtherApps: true)
     }
     Button(MacTransferL10n.text("mt_001")) {
-      Task { await model.collectAll() }
+      Task { await model.collectAll(manual: true) }
     }.disabled(model.isBusy || model.state.devices.isEmpty)
     Button(MacTransferL10n.text("mt_send_now")) {
       model.sendQueuedNow()
@@ -286,12 +286,20 @@ final class CompanionModel: ObservableObject {
     return components.url?.absoluteString
   }
 
-  func collectAll() async {
+  func collectAll(manual: Bool = false) async {
     guard !state.devices.isEmpty, !isBusy else { return }
+    var japan = Calendar(identifier: .gregorian)
+    japan.timeZone = TimeZone(identifier: "Asia/Tokyo")!
+    let now = Date()
+    let collectionOpen = japan.component(.hour, from: now) >= 9
+    let devices = state.devices.filter { device in
+      manual || (collectionOpen && (device.automaticPauseUntil ?? .distantPast) <= now)
+    }
+    guard !devices.isEmpty else { return }
     isBusy = true
     defer { isBusy = false }
     var savedAny = false
-    for device in state.devices {
+    for device in devices {
       do {
         collectionDone = 0
         collectionTotal = 0
@@ -542,7 +550,7 @@ private struct CompanionView: View {
             } else { ProgressView() }
           }
           Button {
-            Task { await model.collectAll() }
+            Task { await model.collectAll(manual: true) }
           } label: {
             Label(MacTransferL10n.text("mt_001"), systemImage: "arrow.down.doc")
           }

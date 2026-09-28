@@ -16,14 +16,17 @@ struct PairedDevice: Codable, Identifiable {
   let secret: Data
   var confirmedAt: Date? = nil
   var manualAddress: String? = nil
+  var automaticPauseUntil: Date? = nil
   var id: String { udid }
 
   private enum CodingKeys: String, CodingKey {
-    case udid, name, model, physicalDeviceID, secret, confirmedAt, manualAddress
+    case udid, name, model, physicalDeviceID, secret, confirmedAt, manualAddress,
+      automaticPauseUntil
   }
 
   init(udid: String, name: String, model: String, physicalDeviceID: UUID,
-    secret: Data, confirmedAt: Date? = nil, manualAddress: String? = nil) {
+    secret: Data, confirmedAt: Date? = nil, manualAddress: String? = nil,
+    automaticPauseUntil: Date? = nil) {
     self.udid = udid
     self.name = name
     self.model = model
@@ -31,6 +34,7 @@ struct PairedDevice: Codable, Identifiable {
     self.secret = secret
     self.confirmedAt = confirmedAt
     self.manualAddress = manualAddress
+    self.automaticPauseUntil = automaticPauseUntil
   }
 
   init(from decoder: Decoder) throws {
@@ -43,6 +47,7 @@ struct PairedDevice: Codable, Identifiable {
     secret = try values.decodeIfPresent(Data.self, forKey: .secret) ?? Data()
     confirmedAt = try values.decodeIfPresent(Date.self, forKey: .confirmedAt)
     manualAddress = try values.decodeIfPresent(String.self, forKey: .manualAddress)
+    automaticPauseUntil = try values.decodeIfPresent(Date.self, forKey: .automaticPauseUntil)
   }
 
   func encode(to encoder: Encoder) throws {
@@ -53,6 +58,7 @@ struct PairedDevice: Codable, Identifiable {
     try values.encode(physicalDeviceID, forKey: .physicalDeviceID)
     try values.encodeIfPresent(confirmedAt, forKey: .confirmedAt)
     try values.encodeIfPresent(manualAddress, forKey: .manualAddress)
+    try values.encodeIfPresent(automaticPauseUntil, forKey: .automaticPauseUntil)
   }
 }
 
@@ -150,7 +156,8 @@ enum Collector {
         let restored = PairedDevice(udid: device.udid, name: device.name,
           model: device.model, physicalDeviceID: device.physicalDeviceID,
           secret: secret, confirmedAt: device.confirmedAt,
-          manualAddress: device.manualAddress)
+          manualAddress: device.manualAddress,
+          automaticPauseUntil: device.automaticPauseUntil)
         if index < state.devices.count { state.devices[index] = restored }
         else { state.revokedDevices[index - state.devices.count] = restored }
       }
