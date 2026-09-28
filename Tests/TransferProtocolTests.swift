@@ -455,6 +455,20 @@ struct TransferProtocolTests {
       nonce: duplicateNonce, diagnostics: archiveReport)
     try check(SupportDiagnostics.phoneLogText(for: device, day: archiveDay) ==
       String(data: phoneLine, encoding: .utf8), "Retried archive chunk was duplicated")
+    for offset in 1...4 {
+      guard let date = Calendar.current.date(byAdding: .day, value: -offset,
+        to: Date()) else { continue }
+      let day = SupportDiagnostics.dayString(date)
+      let compact = day.replacingOccurrences(of: "-", with: "")
+      let historical = try JSONSerialization.data(withJSONObject: [
+        "schema": 1,
+        "archiveChunk": ["day": compact, "offset": 0,
+          "data": phoneLine.base64EncodedString()]
+      ] as [String: Any])
+      try SupportDiagnostics.savePhoneReport(historical, for: device)
+    }
+    try check(SupportDiagnostics.phoneArchiveDays(for: device).count >= 5,
+      "Five incident dates were not retained for support")
     print("Checking delayed fragmented requests on the VPN receiver")
     server.startTestTailnetReceiver()
     let vpnEndpoint = NWEndpoint.hostPort(host: "127.0.0.1",

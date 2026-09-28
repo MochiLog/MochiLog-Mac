@@ -17,12 +17,12 @@ enum SupportDiagnostics {
   static var retentionDays: Int {
     get {
       let saved = UserDefaults.standard.integer(forKey: retentionKey)
-      return saved == 0 ? 30 : min(365, max(1, saved))
+      return saved == 0 ? 30 : min(365, max(7, saved))
     }
     set {
       eventLock.lock()
       defer { eventLock.unlock() }
-      UserDefaults.standard.set(min(365, max(1, newValue)), forKey: retentionKey)
+      UserDefaults.standard.set(min(365, max(7, newValue)), forKey: retentionKey)
       pruneArchive()
       prunePhoneArchives()
     }
@@ -324,9 +324,11 @@ enum SupportDiagnostics {
 
   private static func archiveRequest(manifest: [String: Int], directory: URL)
     -> [String: Any]? {
+    let cutoff = dayString(Calendar.current.date(byAdding: .day,
+      value: 1 - retentionDays, to: Date()) ?? Date())
     for compact in manifest.keys.sorted(by: >) {
       guard let day = expandedDay(compact), let size = manifest[compact],
-        (0...64_000_000).contains(size) else { continue }
+        day >= cutoff, (0...64_000_000).contains(size) else { continue }
       let url = directory.appendingPathComponent("\(day).log")
       let current = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
       if current < size { return ["day": compact, "offset": current] }
