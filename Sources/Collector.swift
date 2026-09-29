@@ -434,6 +434,33 @@ enum Collector {
     return Set(names)
   }
 
+  private static func recheckURL(for device: PairedDevice) -> URL {
+    root.appendingPathComponent("recheck-\(device.physicalDeviceID.uuidString).json")
+  }
+
+  private static func rechecks(for device: PairedDevice) -> [String: Date] {
+    guard let data = try? Data(contentsOf: recheckURL(for: device)),
+      let values = try? JSONDecoder().decode([String: Date].self, from: data)
+    else { return [:] }
+    return values
+  }
+
+  private static func saveRechecks(_ values: [String: Date], for device: PairedDevice) throws {
+    let url = recheckURL(for: device)
+    try JSONEncoder().encode(values).write(to: url, options: .atomic)
+    try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+  }
+
+  // A large Analytics file can be returned incompletely by the diagnostics
+  // service while the device changes lock state. Do not permanently discard it.
+  static func shouldRecheckUnclassified(_ url: URL) throws -> Bool {
+    let bytes = try Data(contentsOf: url, options: .mappedIfSafe)
+    if bytes.count >= 1_000_000 { return true }
+    let markers = ["last_value_CycleCount", "last_value_NominalChargeCapacity",
+      "last_value_AppleRawMaxCapacity"]
+    return markers.contains { bytes.range(of: Data($0.utf8)) != nil }
+  }
+
   static func markDelivered(_ name: String, for device: PairedDevice) throws {
     let url = root.appendingPathComponent("delivered-\(device.physicalDeviceID.uuidString).json")
     var names = delivered(for: device)
@@ -524,11 +551,14 @@ enum Collector {
       .max()
     let destination = try directory(for: device)
     let delivered = delivered(for: device)
+    var rechecks = rechecks(for: device)
+    let now = Date()
     let newFiles = remoteFiles.filter { remote in
       let name = remote.name
       guard name.range(of: #"^Analytics-[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{6}.*\.ips\.ca\.synced$"#,
         options: .regularExpression) != nil else { return false }
       if delivered.contains(remote.token) { return false }
+      if let retryAt = rechecks[remote.token], retryAt > now { return false }
       if let source = remote.source, delivered.contains("Host::\(source)::\(name)") {
         return false
       }
@@ -587,9 +617,23 @@ enum Collector {
           let local = try directory(for: device, kind: kind, source: remote.source)
             .appendingPathComponent(name)
           try FileManager.default.moveItem(at: downloaded, to: local)
+          if rechecks.removeValue(forKey: remote.token) != nil {
+            try saveRechecks(rechecks, for: device)
+          }
           saved += 1
+        } else if try shouldRecheckUnclassified(downloaded) {
+          let retryAt = Date().addingTimeInterval(30 * 60)
+          rechecks[remote.token] = retryAt
+          try saveRechecks(rechecks, for: device)
+          failed += 1
+          lastError = "Analytics file could not be verified; it will be checked again."
+          let size = (try? downloaded.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+          SupportDiagnostics.record("\(device.name): deferred unclassified \(name); bytes=\(size); retry=\(SupportDiagnostics.localTime(retryAt))")
         } else {
           try markDelivered(remote.token, for: device)
+          if rechecks.removeValue(forKey: remote.token) != nil {
+            try saveRechecks(rechecks, for: device)
+          }
           skipped += 1
         }
       } catch {

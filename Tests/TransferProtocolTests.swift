@@ -196,6 +196,17 @@ struct TransferProtocolTests {
     let watchToken = "Watch::\(source)::\(filename)"
     let hostContent = Data("synthetic iPhone payload".utf8)
     let watchContent = Data("synthetic Watch payload".utf8)
+    let uncertain = FileManager.default.temporaryDirectory
+      .appendingPathComponent("mochilog-unclassified-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: uncertain) }
+    try Data(repeating: 0x20, count: 1_000_000).write(to: uncertain)
+    let shouldRecheckLarge = try Collector.shouldRecheckUnclassified(uncertain)
+    try check(shouldRecheckLarge,
+      "A large unclassified Analytics download must remain eligible for retry")
+    try Data("short unrelated diagnostic".utf8).write(to: uncertain)
+    let shouldRecheckSmall = try Collector.shouldRecheckUnclassified(uncertain)
+    try check(!shouldRecheckSmall,
+      "A small unrelated diagnostic should be excluded")
     let device = PairedDevice(udid: "test-iphone", name: "Test iPhone",
       model: "iPhone18,3", physicalDeviceID: UUID(),
       secret: Data((0..<32).map { UInt8($0) }))
