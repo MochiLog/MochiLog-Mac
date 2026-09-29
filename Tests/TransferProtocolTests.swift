@@ -315,6 +315,7 @@ struct TransferProtocolTests {
     let afterBackground = try Collector.pending(for: device)
     try check(afterBackground.count == 2,
       "Background notice changed the delivery queue")
+    BatteryLogStorage.retainsAfterDelivery = true
     print("Checking host ACK and Watch transfer")
     let secondNonce = UUID()
     let second = try opened(request(endpoint, hostID: hostID, device: device,
@@ -342,6 +343,28 @@ struct TransferProtocolTests {
       nonce: repeatNonce), secret: device.secret,
       context: (hostID, device.physicalDeviceID, repeatNonce))
     try check(repeatPull.0.isEmpty, "Delivered payload appeared again")
+    print("Checking archived log manual resend over encrypted transport")
+    let archivedHost = BatteryLogStorage.list(devices: [device]).filter {
+      !$0.pending && $0.kind == "Host" && $0.name == filename
+    }
+    let requeuedHost = try BatteryLogStorage.requeue(archivedHost, devices: [device])
+    try check(archivedHost.count == 1 && requeuedHost == 1,
+      "Acknowledged host log was not available for manual resend")
+    let resendNonce = UUID()
+    let resent = try opened(request(endpoint, hostID: hostID, device: device,
+      nonce: resendNonce), secret: device.secret,
+      context: (hostID, device.physicalDeviceID, resendNonce))
+    try check(resent.0 == hostToken && resent.1 == hostContent,
+      "Manual resend did not deliver the selected raw log")
+    let resendACKNonce = UUID()
+    let resendEnd = try opened(request(endpoint, hostID: hostID, device: device,
+      nonce: resendACKNonce, ack: resent.0), secret: device.secret,
+      context: (hostID, device.physicalDeviceID, resendACKNonce))
+    let afterResendACK = try Collector.pending(for: device)
+    try check(resendEnd.0.isEmpty && afterResendACK.isEmpty,
+      "Repeated acknowledgement left the resend pending")
+    try BatteryLogStorage.delete(BatteryLogStorage.list(devices: [device]).filter { !$0.pending })
+    BatteryLogStorage.retainsAfterDelivery = false
     print("Checking authenticated automatic-collection pause")
     let pauseUntil = String(Int(Date().addingTimeInterval(3600).timeIntervalSince1970))
     let pauseNonce = UUID()
