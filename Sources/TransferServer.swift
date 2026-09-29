@@ -648,7 +648,7 @@ final class TransferServer: @unchecked Sendable {
         let acknowledged = try Collector.queueFile(for: ack, device: device) {
         if FileManager.default.fileExists(atPath: acknowledged.path) {
           try Collector.markDelivered(ack, for: device)
-          try FileManager.default.removeItem(at: acknowledged)
+          try BatteryLogStorage.archiveAcknowledged(acknowledged, device: device)
         }
       }
       let next = try Collector.pending(for: device).first

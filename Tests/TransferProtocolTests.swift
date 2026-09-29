@@ -651,6 +651,40 @@ struct TransferProtocolTests {
       $0.physicalDeviceID == mobilePhysicalID
     }),
       "Phone-initiated removal did not persist on the Mac")
+    print("Checking battery log retention, export, and manual resend")
+    let storageDevice = PairedDevice(udid: "storage-test", name: "Storage Test",
+      model: "iPhone18,3", physicalDeviceID: UUID(),
+      secret: Data(repeating: 1, count: 32))
+    let storageFile = try Collector.directory(for: storageDevice, kind: .host)
+      .appendingPathComponent("Analytics-2026-09-29-090000.ips.ca.synced")
+    try Data("raw diagnostic bytes".utf8).write(to: storageFile)
+    BatteryLogStorage.retainsAfterDelivery = false
+    try BatteryLogStorage.archiveAcknowledged(storageFile, device: storageDevice)
+    try check(!FileManager.default.fileExists(atPath: storageFile.path) &&
+      BatteryLogStorage.list(devices: [storageDevice]).isEmpty,
+      "Immediate-delete mode retained an acknowledged log")
+    try Data("raw diagnostic bytes".utf8).write(to: storageFile)
+    BatteryLogStorage.retainsAfterDelivery = true
+    try BatteryLogStorage.archiveAcknowledged(storageFile, device: storageDevice)
+    var stored = BatteryLogStorage.list(devices: [storageDevice])
+    try check(stored.count == 1 && !stored[0].pending,
+      "Keep mode did not archive the acknowledged log")
+    let exportFolder = Collector.root.appendingPathComponent("test-export")
+    try BatteryLogStorage.export(stored, to: exportFolder)
+    try check(FileManager.default.fileExists(atPath: exportFolder
+      .appendingPathComponent(storageDevice.physicalDeviceID.uuidString)
+      .appendingPathComponent("Host").appendingPathComponent(storageFile.lastPathComponent).path),
+      "Battery log export did not preserve the raw file")
+    let requeued = try BatteryLogStorage.requeue(stored, devices: [storageDevice])
+    try check(requeued == 1 && FileManager.default.fileExists(atPath: storageFile.path),
+      "Manual resend did not restore the pending queue file")
+    stored = BatteryLogStorage.list(devices: [storageDevice])
+    try check(stored.count == 2, "Pending and archived copies were not both listed")
+    try BatteryLogStorage.archiveAcknowledged(storageFile, device: storageDevice)
+    try BatteryLogStorage.delete(stored.filter { !$0.pending })
+    try check(BatteryLogStorage.list(devices: [storageDevice]).isEmpty,
+      "Deleting the archived log left a stored copy")
+    BatteryLogStorage.retainsAfterDelivery = false
     if let udid = ProcessInfo.processInfo.environment["MOCHILOG_DIRECT_DEVICE_ID"],
       let address = ProcessInfo.processInfo.environment["MOCHILOG_DIRECT_DEVICE_IP"] {
       let probe = PairedDevice(udid: udid, name: "Direct RSD probe", model: "iPad",

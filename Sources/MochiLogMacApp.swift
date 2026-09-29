@@ -461,12 +461,13 @@ final class CompanionModel: ObservableObject {
 
 private struct CompanionView: View {
   private enum Page: String, CaseIterable, Identifiable {
-    case overview, devices, support, settings
+    case overview, devices, batteryLogs, support, settings
     var id: Self { self }
     var titleKey: String {
       switch self {
       case .overview: "mt_nav_overview"
       case .devices: "mt_nav_devices"
+      case .batteryLogs: "mt_battery_logs"
       case .support: "mt_022"
       case .settings: "mt_nav_settings"
       }
@@ -475,6 +476,7 @@ private struct CompanionView: View {
       switch self {
       case .overview: "square.grid.2x2"
       case .devices: "iphone.gen3"
+      case .batteryLogs: "archivebox"
       case .support: "questionmark.circle"
       case .settings: "gearshape"
       }
@@ -526,6 +528,7 @@ private struct CompanionView: View {
           switch page ?? .overview {
           case .overview: overview
           case .devices: devices
+          case .batteryLogs: BatteryLogLibraryView()
           case .support: support
           case .settings: settings
           }
