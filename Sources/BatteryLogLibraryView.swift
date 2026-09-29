@@ -81,7 +81,11 @@ struct BatteryLogLibraryView: View {
         Button(MacTransferL10n.text("mt_battery_export")) { exportSelection() }
           .disabled(selectedRows.isEmpty)
         Button(MacTransferL10n.text("mt_battery_resend")) { resendSelection() }
-          .disabled(!selectedRows.contains(where: { !$0.pending }))
+          .disabled(!selectedRows.contains(where: { item in
+            !item.pending && model.state.devices.contains(where: {
+              $0.physicalDeviceID == item.deviceID
+            })
+          }))
         Spacer()
         Button(MacTransferL10n.text("mt_battery_delete"), role: .destructive) {
           showingDelete = true

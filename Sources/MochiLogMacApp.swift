@@ -112,6 +112,7 @@ final class CompanionModel: ObservableObject {
   private var lastAutomaticDecision: [UUID: String] = [:]
 
   init() {
+    try? BatteryLogStorage.prune()
     let server = TransferServer(state: state)
     self.server = server
     server.onStatus = { [weak self] message in
