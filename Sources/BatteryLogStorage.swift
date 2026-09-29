@@ -64,7 +64,9 @@ enum BatteryLogStorage {
 
   static func list(devices: [PairedDevice]) -> [StoredBatteryLog] {
     var rows: [StoredBatteryLog] = []
-    let names = Dictionary(uniqueKeysWithValues: devices.map { ($0.physicalDeviceID, $0.name) })
+    let names = devices.reduce(into: [UUID: String]()) { result, device in
+      result[device.physicalDeviceID] = device.name
+    }
     for device in devices {
       if let queue = try? Collector.directory(for: device) {
         rows += scan(queue, deviceID: device.physicalDeviceID,
