@@ -461,6 +461,9 @@ struct TransferProtocolTests {
     try check(v2Final.0.isEmpty, "V2 acknowledgement did not finish the transfer")
     print("Checking authenticated daily debug archive exchange")
     SupportDiagnostics.record("archive exchange fixture")
+    for index in 0..<60 {
+      SupportDiagnostics.record("archive fixture \(index) " + String(repeating: "x", count: 160))
+    }
     let archiveDay = SupportDiagnostics.dayString(Date())
     let compactDay = archiveDay.replacingOccurrences(of: "-", with: "")
     let phoneLine = Data("phone archive line\n".utf8)
@@ -481,8 +484,9 @@ struct TransferProtocolTests {
     let archiveObject = try JSONSerialization.jsonObject(with: archiveReply.1)
       as? [String: Any]
     let computerChunk = archiveObject?["archiveChunk"] as? [String: Any]
+    let computerBytes = Data(base64Encoded: computerChunk?["data"] as? String ?? "")
     try check(computerChunk?["day"] as? String == compactDay &&
-      Data(base64Encoded: computerChunk?["data"] as? String ?? "") != nil,
+      computerBytes?.count == 8_192,
       "Computer archive chunk was not returned")
     let duplicateNonce = UUID()
     _ = try request(endpoint, hostID: hostID, device: device,

@@ -267,7 +267,7 @@ enum SupportDiagnostics {
     }
     if let request = phone?["archiveRequest"] as? [String: Any],
       let chunk = archiveChunk(request: request, directory: archiveDirectory,
-        limit: 4_096) {
+        limit: 8_192) {
       object["archiveChunk"] = chunk
     }
     while true {
