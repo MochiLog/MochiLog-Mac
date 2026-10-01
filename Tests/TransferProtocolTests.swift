@@ -36,7 +36,8 @@ private func request(_ endpoint: NWEndpoint, hostID: UUID, device: PairedDevice,
   nonce: UUID = UUID(), ack: String = "", validMAC: Bool = true,
   diagnostics: Data? = nil, presence: String? = nil, version2: Bool = true,
   expectNoResponse: Bool = false, delayedChunks: Bool = false,
-  overridePayload: [String: String]? = nil) throws -> Data {
+  overridePayload: [String: String]? = nil, offerEnabled: Bool = false,
+  offer: (token: String, digest: String, decision: String)? = nil) throws -> Data {
   let message = presence == "background"
     ? "v2|background|\(hostID.uuidString)|\(device.physicalDeviceID.uuidString)|\(nonce.uuidString)"
     : "\(version2 ? "v2|" : "")\(hostID.uuidString)|\(device.physicalDeviceID.uuidString)|\(nonce.uuidString)|\(ack)"
@@ -51,6 +52,23 @@ private func request(_ endpoint: NWEndpoint, hostID: UUID, device: PairedDevice,
     "mac": validMAC ? mac : String(repeating: "0", count: 64)
   ]
   if version2 { payload["version"] = "2" }
+  if offerEnabled {
+    func signed(_ text: String) -> String {
+      HMAC<SHA256>.authenticationCode(for: Data(text.utf8),
+        using: SymmetricKey(data: device.secret))
+        .map { String(format: "%02x", $0) }.joined()
+    }
+    payload["offerVersion"] = "1"
+    payload["offerMAC"] = signed(
+      "file-offer|v1|\(hostID.uuidString)|\(device.physicalDeviceID.uuidString)|\(nonce.uuidString)")
+    if let offer {
+      payload["offerToken"] = offer.token
+      payload["offerDigest"] = offer.digest
+      payload["offerDecision"] = offer.decision
+      payload["offerDecisionMAC"] = signed(
+        "file-decision|v1|\(hostID.uuidString)|\(device.physicalDeviceID.uuidString)|\(nonce.uuidString)|\(offer.token)|\(offer.digest)|\(offer.decision)")
+    }
+  }
   if let presence {
     payload["presence"] = presence
     payload["presenceMAC"] = HMAC<SHA256>.authenticationCode(
@@ -390,6 +408,60 @@ struct TransferProtocolTests {
       "Repeated acknowledgement left the resend pending")
     try BatteryLogStorage.delete(BatteryLogStorage.list(devices: [device]).filter { !$0.pending })
     BatteryLogStorage.retainsAfterDelivery = false
+    print("Checking preflight digest inquiry and duplicate skip")
+    let duplicateName = "Analytics-2026-09-27-090000.ips.ca.synced"
+    let duplicateFile = try Collector.directory(for: device, kind: .host)
+      .appendingPathComponent(duplicateName)
+    try hostContent.write(to: duplicateFile)
+    let offerNonce = UUID()
+    let offered = try opened(request(endpoint, hostID: hostID, device: device,
+      nonce: offerNonce, offerEnabled: true), secret: device.secret,
+      context: (hostID, device.physicalDeviceID, offerNonce))
+    let offerJSON = try JSONSerialization.jsonObject(with: offered.1) as? [String: String]
+    let digest = SHA256.hash(data: hostContent).map { String(format: "%02x", $0) }.joined()
+    try check(offered.0.isEmpty && offerJSON?["type"] == "file-offer" &&
+      offerJSON?["sha256"] == digest && offerJSON?["token"] == "Host::\(duplicateName)",
+      "Preflight sent log bytes or incorrect digest")
+    let badDecisionNonce = UUID()
+    let rejectedDecision = try opened(request(endpoint, hostID: hostID, device: device,
+      nonce: badDecisionNonce, offerEnabled: true,
+      offer: ("Host::\(duplicateName)", String(repeating: "0", count: 64), "have")),
+      secret: device.secret, context: (hostID, device.physicalDeviceID, badDecisionNonce))
+    try check(rejectedDecision.0.isEmpty && FileManager.default.fileExists(atPath: duplicateFile.path),
+      "Mismatched digest removed a queued log")
+    let skipNonce = UUID()
+    let skipped = try opened(request(endpoint, hostID: hostID, device: device,
+      nonce: skipNonce, offerEnabled: true,
+      offer: ("Host::\(duplicateName)", digest, "have")),
+      secret: device.secret, context: (hostID, device.physicalDeviceID, skipNonce))
+    try check(skipped.0.isEmpty && !FileManager.default.fileExists(atPath: duplicateFile.path),
+      "Matching mobile receipt did not suppress duplicate transfer")
+    try hostContent.write(to: duplicateFile)
+    try Data().write(to: URL(fileURLWithPath: duplicateFile.path + ".force-resend"))
+    let forcedNonce = UUID()
+    let forcedOffer = try opened(request(endpoint, hostID: hostID, device: device,
+      nonce: forcedNonce, offerEnabled: true), secret: device.secret,
+      context: (hostID, device.physicalDeviceID, forcedNonce))
+    let forcedJSON = try JSONSerialization.jsonObject(with: forcedOffer.1) as? [String: String]
+    try check(forcedJSON?["force"] == "true", "Manual resend was not identified")
+    let refusedNonce = UUID()
+    _ = try request(endpoint, hostID: hostID, device: device,
+      nonce: refusedNonce, offerEnabled: true,
+      offer: ("Host::\(duplicateName)", digest, "have"))
+    try check(FileManager.default.fileExists(atPath: duplicateFile.path),
+      "A mobile duplicate decision cancelled an explicit manual resend")
+    let sendNonce = UUID()
+    let forcedContent = try opened(request(endpoint, hostID: hostID, device: device,
+      nonce: sendNonce, offerEnabled: true,
+      offer: ("Host::\(duplicateName)", digest, "send")),
+      secret: device.secret, context: (hostID, device.physicalDeviceID, sendNonce))
+    try check(forcedContent.0 == "Host::\(duplicateName)" && forcedContent.1 == hostContent,
+      "Approved preflight did not deliver a manual resend")
+    let forcedAckNonce = UUID()
+    _ = try request(endpoint, hostID: hostID, device: device,
+      nonce: forcedAckNonce, ack: forcedContent.0, offerEnabled: true)
+    try check(!FileManager.default.fileExists(atPath: duplicateFile.path + ".force-resend"),
+      "Manual resend marker remained after acknowledgement")
     print("Checking authenticated automatic-collection pause")
     let pauseUntil = String(Int(Date().addingTimeInterval(3600).timeIntervalSince1970))
     let pauseNonce = UUID()

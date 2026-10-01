@@ -16,6 +16,12 @@ private struct PullRequest: Decodable {
   let dailyPauseUntil: String?
   let dailyPauseMAC: String?
   let dailyResumeMAC: String?
+  let offerVersion: String?
+  let offerMAC: String?
+  let offerToken: String?
+  let offerDigest: String?
+  let offerDecision: String?
+  let offerDecisionMAC: String?
 }
 
 private struct PreparedResponse {
@@ -651,9 +657,42 @@ final class TransferServer: @unchecked Sendable {
           try BatteryLogStorage.archiveAcknowledged(acknowledged, device: device)
         }
       }
+      let offerEnabled = request.offerVersion == "1" &&
+        request.offerMAC.flatMap(Data.init(hex:)) == Data(HMAC<SHA256>.authenticationCode(
+          for: Data("file-offer|v1|\(request.hostID.uuidString)|\(request.physicalDeviceID.uuidString)|\(request.nonce.uuidString)".utf8),
+          using: SymmetricKey(data: device.secret)))
+      if offerEnabled, let token = request.offerToken, let digest = request.offerDigest,
+        let decision = request.offerDecision, ["have", "send"].contains(decision),
+        let supplied = request.offerDecisionMAC.flatMap(Data.init(hex:)),
+        supplied == Data(HMAC<SHA256>.authenticationCode(
+          for: Data("file-decision|v1|\(request.hostID.uuidString)|\(request.physicalDeviceID.uuidString)|\(request.nonce.uuidString)|\(token)|\(digest)|\(decision)".utf8),
+          using: SymmetricKey(data: device.secret))),
+        let offered = try Collector.queueFile(for: token, device: device),
+        FileManager.default.fileExists(atPath: offered.path) {
+        let bytes = try Data(contentsOf: offered, options: .mappedIfSafe)
+        let actual = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
+        let forced = FileManager.default.fileExists(atPath: offered.path + ".force-resend")
+        if actual == digest && decision == "have" && !forced {
+          try Collector.markDelivered(token, for: device)
+          try BatteryLogStorage.archiveAcknowledged(offered, device: device)
+          SupportDiagnostics.record("\(device.name): skipped already received log \(token); SHA-256 confirmed by mobile")
+        } else if actual == digest && decision == "send" {
+          return try encryptedLogResponse(bytes, name: token, request: request, device: device)
+        }
+      }
       let next = try Collector.pending(for: device).first
       let name = try next.map { try Collector.queueToken(for: $0, device: device) } ?? ""
       let content = try next.map { try Data(contentsOf: $0, options: .mappedIfSafe) } ?? Data()
+      if offerEnabled, let next {
+        guard content.count <= 64 * 1024 * 1024 else { return nil }
+        let digest = SHA256.hash(data: content).map { String(format: "%02x", $0) }.joined()
+        let forced = FileManager.default.fileExists(atPath: next.path + ".force-resend")
+        let control = try JSONSerialization.data(withJSONObject: [
+          "type": "file-offer", "token": name, "sha256": digest,
+          "force": forced ? "true" : "false"
+        ])
+        return try encryptedLogResponse(control, name: "", request: request, device: device)
+      }
       guard content.count <= 64 * 1024 * 1024,
         let nameData = name.data(using: .utf8), nameData.count <= 1024
       else { throw CollectorError.failed(MacTransferL10n.text("mt_c_07")) }
@@ -676,6 +715,22 @@ final class TransferServer: @unchecked Sendable {
       onStatus?(MacTransferL10n.format("mt_m_18", error.localizedDescription))
       return nil
     }
+  }
+
+  private func encryptedLogResponse(_ content: Data, name: String, request: PullRequest,
+    device: PairedDevice) throws -> PreparedResponse {
+    let nameData = Data(name.utf8)
+    guard nameData.count <= 1024 else { throw CollectorError.failed("Invalid log token") }
+    var plain = Data([UInt8(nameData.count >> 8), UInt8(nameData.count & 0xff)])
+    plain.append(nameData)
+    plain.append(content)
+    let context = Data("v2|response|\(request.hostID.uuidString)|\(request.physicalDeviceID.uuidString)|\(request.nonce.uuidString)".utf8)
+    let sealed = try AES.GCM.seal(plain, using: SymmetricKey(data: device.secret),
+      authenticating: context)
+    guard let combined = sealed.combined else { throw CollectorError.failed("Unable to seal log") }
+    var length = UInt32(combined.count).bigEndian
+    return PreparedResponse(data: withUnsafeBytes(of: &length) { Data($0) } + combined,
+      deviceID: device.physicalDeviceID)
   }
 }
 

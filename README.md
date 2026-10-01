@@ -40,6 +40,8 @@ Mac内の転送待ちログ、ペアリング情報、診断情報の扱いは[�
 
 転送プロトコルの認証・応答・iPhone/Watch別キュー・受信確認・再送防止は `bash scripts/test-transfer-protocol.sh` で自動検証できます。一時ディレクトリだけを使い、実機の記録やMacの転送キューは変更しません。
 
+対応するモバイル版にはログ本体の送信前にSHA-256を暗号化したofferとして提示します。端末が保存済みなら本体を送らずキューを完了し、ユーザーが指定した手動再送にはこの省略を適用しません。旧モバイル版には従来の転送を続けます。
+
 Actionsの「Signed beta DMG」を手動実行すると、macOS 27/Xcode 27のランナーでビルドし、Developer ID署名、公証、ステープル、Gatekeeper検証を行います。完了後、実行結果の「Artifacts」から`MochiLog-Mac-Beta-notarized-<実行番号>`をダウンロードすると、DMGとSHA-256チェックサムを取得できます。成果物の保存期間は90日です。このワークフローはGitHub Releaseを作成しません。リポジトリのActions secretsに`MOCHILOG_CERTIFICATE_P12_BASE64`（空パスワードのDeveloper ID Application p12をbase64化した値）、`MOCHILOG_NOTARY_KEY_BASE64`（App Store Connect APIキーp8のbase64）、`MOCHILOG_NOTARY_KEY_ID`、`MOCHILOG_NOTARY_ISSUER_ID`を設定してください。証明書やAPIキーの実体はリポジトリへコミットしません。
 
 ## ベータ版の更新と公開

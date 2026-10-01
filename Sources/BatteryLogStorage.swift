@@ -38,6 +38,8 @@ enum BatteryLogStorage {
   }
 
   static func archiveAcknowledged(_ file: URL, device: PairedDevice) throws {
+    let resendMarker = URL(fileURLWithPath: file.path + ".force-resend")
+    defer { try? FileManager.default.removeItem(at: resendMarker) }
     guard retainsAfterDelivery else {
       try FileManager.default.removeItem(at: file)
       return
@@ -136,6 +138,8 @@ enum BatteryLogStorage {
       try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(),
         withIntermediateDirectories: true)
       try FileManager.default.copyItem(at: item.url, to: destination)
+      try Data().write(to: URL(fileURLWithPath: destination.path + ".force-resend"),
+        options: .atomic)
       copied += 1
     }
     return copied
