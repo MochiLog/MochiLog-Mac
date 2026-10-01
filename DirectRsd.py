@@ -40,24 +40,30 @@ async def run(arguments):
                 print(json.dumps({"verified": True}))
             elif arguments.action == "scan":
                 root = await asyncio.wait_for(reports.ls("/", depth=1), timeout=30)
-                directories = [("/Retired", None)]
+                directories = [("/Retired", None), ("/", None)]
                 for entry in root:
                     if re.fullmatch(r"/ProxiedDevice-[a-fA-F0-9]+", entry):
-                        directories.append((entry + "/Retired", entry[1:]))
+                        directories.extend(((entry + "/Retired", entry[1:]), (entry, entry[1:])))
                 files = []
+                seen = set()
                 for directory, source in directories:
                     try:
-                        entries = await asyncio.wait_for(reports.ls(directory, depth=1), timeout=60)
+                        entries = root if directory == "/" else await asyncio.wait_for(
+                            reports.ls(directory, depth=1), timeout=60
+                        )
                     except Exception:
                         if source is None:
                             raise
                         continue
                     for entry in entries:
                         name = entry.rsplit("/", 1)[-1]
-                        if (entry.startswith(directory + "/Analytics-")
+                        token = (source, name)
+                        if (entry.startswith(directory.rstrip("/") + "/Analytics-")
                             and re.fullmatch(r"Analytics-\d{4}-\d{2}-\d{2}-\d{6}.*\.ips\.ca\.synced", name)
                             and "session" not in name.lower()
-                            and not name.startswith("Analytics-Census-")):
+                            and not name.startswith("Analytics-Census-")
+                            and token not in seen):
+                            seen.add(token)
                             files.append({"path": entry, "source": source})
                 print(json.dumps({"files": files}))
             elif arguments.action == "pull-batch":
@@ -68,8 +74,9 @@ async def run(arguments):
                 results = []
                 for index, item in enumerate(items):
                     path = item["path"]
-                    if not isinstance(path, str) or not path.startswith("/Retired/Analytics-") and not re.match(
-                        r"^/ProxiedDevice-[a-fA-F0-9]+/Retired/Analytics-", path
+                    if not isinstance(path, str) or not re.fullmatch(
+                        r"/(?:ProxiedDevice-[a-fA-F0-9]+/)?(?:Retired/)?Analytics-\d{4}-\d{2}-\d{2}-\d{6}[A-Za-z0-9._-]*\.ips\.ca\.synced",
+                        path,
                     ):
                         raise ValueError("Invalid report path")
                     target_dir = os.path.join(arguments.output, str(index))

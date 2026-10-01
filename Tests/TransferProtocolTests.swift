@@ -170,15 +170,40 @@ struct TransferProtocolTests {
       _ = try Collector.browse { _, _ in throw CollectorError.timeout }
       throw TestFailure.failed("Complete discovery failure was hidden")
     } catch CollectorError.discoveryTimeout { }
-    print("Checking empty wireless diagnostic listings fall back to the native route")
+    print("Checking the native diagnostic route takes priority over incomplete Wi-Fi listings")
     let rootListing = try Collector.remoteRootListing(udid: "ipad") { args, _ in
       if args.first == "usbmux" { return #"["ipad"]"# }
-      if args.contains("--mobdev2") { return "" }
+      if args.contains("--mobdev2") { return "/Retired\n" }
       if args.contains("--native") { return "/Retired\n/DiagnosticLogs\n" }
       throw TestFailure.failed("Unexpected diagnostic command")
     }
     try check(rootListing.1.contains("--native") && rootListing.0.contains("/Retired"),
-      "An empty Wi-Fi lockdown result hid a working native diagnostic route")
+      "An incomplete Wi-Fi lockdown result hid a working native diagnostic route")
+    let wifiFallback = try Collector.remoteRootListing(udid: "ipad") { args, _ in
+      if args.contains("--native") { throw CollectorError.timeout }
+      if args.first == "usbmux" { return #"["ipad"]"# }
+      if args.contains("--mobdev2") { return "/Retired\n" }
+      throw TestFailure.failed("Unexpected diagnostic command")
+    }
+    try check(wifiFallback.1.contains("--mobdev2"),
+      "A native timeout hid the available Wi-Fi diagnostic route")
+    let currentLog = "Analytics-2026-10-01-090003.000.ips.ca.synced"
+    let watchSource = "ProxiedDevice-abcdef1234"
+    let candidates = Collector.analyticsCandidates([
+      RemoteLog(path: "/Retired/\(currentLog)", source: nil),
+      RemoteLog(path: "/\(currentLog)", source: nil),
+      RemoteLog(path: "/\(watchSource)/Analytics-2026-10-01-090017.ips.ca.synced",
+        source: watchSource),
+      RemoteLog(path: "/Analytics-2026-10-01-023246.session.ips.ca.synced", source: nil)
+    ])
+    try check(candidates.count == 2 && candidates[0].path.hasPrefix("/Retired/") &&
+      candidates[1].source == watchSource,
+      "Current diagnostics were hidden or a moved report was counted twice")
+    try check(Collector.isLikelyDailyReport(candidates[0]) &&
+      Collector.isLikelyDailyReport(candidates[1]) &&
+      !Collector.isLikelyDailyReport(RemoteLog(
+        path: "/Retired/Analytics-2026-10-01-090005.ips.ca.synced", source: nil)),
+      "A truncated daily battery report could be permanently excluded")
     do {
       _ = try Collector.remoteRootListing(udid: "ipad") { args, _ in
         args.first == "usbmux" ? #"["ipad"]"# : ""

@@ -113,7 +113,7 @@ enum LogKind: String {
   case watch = "Watch"
 }
 
-private struct RemoteLog {
+struct RemoteLog {
   let path: String
   let source: String? // ProxiedDevice directory on the paired iPhone.
   var name: String { URL(fileURLWithPath: path).lastPathComponent }
@@ -330,6 +330,10 @@ enum Collector {
     let native = ["--native", "--udid", udid]
     let network = ["--mobdev2", "--udid", udid]
     let root = ["--remote-file", "/", "--depth", "1"]
+    if let listing = try? runCommand(["crash", "ls"] + native + root, 45),
+      !listing.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+      return (listing, native)
+    }
     let networkIDs = try? JSONDecoder().decode([String].self,
       from: Data(try runCommand(["usbmux", "list", "--network", "--simple"], 20).utf8))
     if networkIDs?.contains(udid) == true,
@@ -337,11 +341,7 @@ enum Collector {
       !listing.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
       return (listing, network)
     }
-    let listing = try runCommand(["crash", "ls"] + native + root, 45)
-    guard !listing.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-      throw CollectorError.failed(MacTransferL10n.text("mt_empty_diagnostic_listing"))
-    }
-    return (listing, native)
+    throw CollectorError.failed(MacTransferL10n.text("mt_empty_diagnostic_listing"))
   }
 
   static func directory(for device: PairedDevice) throws -> URL {
@@ -461,6 +461,15 @@ enum Collector {
     return markers.contains { bytes.range(of: Data($0.utf8)) != nil }
   }
 
+  // A short download can be a truncated daily report when the device changes
+  // lock state mid-transfer. Keep likely battery reports eligible for retry.
+  static func isLikelyDailyReport(_ remote: RemoteLog) -> Bool {
+    guard remote.name.range(of: #"^Analytics-[0-9]{4}-[0-9]{2}-[0-9]{2}-09[0-1][0-9][0-9][0-9]"#,
+      options: .regularExpression) != nil else { return false }
+    return remote.source != nil || remote.name.range(of: #"\.[0-9]+\.ips\.ca\.synced$"#,
+      options: .regularExpression) != nil
+  }
+
   static func markDelivered(_ name: String, for device: PairedDevice) throws {
     let url = root.appendingPathComponent("delivered-\(device.physicalDeviceID.uuidString).json")
     var names = delivered(for: device)
@@ -522,6 +531,9 @@ enum Collector {
       remoteFiles = listing.split(separator: "\n").map {
         RemoteLog(path: String($0), source: nil)
       }
+      remoteFiles += rootListing.split(separator: "\n").map {
+        RemoteLog(path: String($0), source: nil)
+      }
       for sourcePath in proxiedSources {
         let source = String(sourcePath.dropFirst())
         do {
@@ -530,18 +542,18 @@ enum Collector {
           remoteFiles += listed.split(separator: "\n").map {
             RemoteLog(path: String($0), source: source)
           }
+          let current = try run(["crash", "ls"] + connection +
+            ["--remote-file", sourcePath, "--depth", "1"], timeout: 90)
+          remoteFiles += current.split(separator: "\n").map {
+            RemoteLog(path: String($0), source: source)
+          }
         } catch {
           // One unavailable paired accessory must not block the host's logs.
           continue
         }
       }
     }
-    remoteFiles = remoteFiles.filter { remote in
-      let prefix = remote.source.map { "/\($0)/Retired/Analytics-" } ?? "/Retired/Analytics-"
-      return remote.path.hasPrefix(prefix) && !remote.name.hasPrefix("Analytics-Census-")
-        && !remote.name.localizedCaseInsensitiveContains("session")
-        && remote.name.hasSuffix(".ips.ca.synced")
-    }
+    remoteFiles = analyticsCandidates(remoteFiles)
     let timestamp = DateFormatter()
     timestamp.locale = Locale(identifier: "en_US_POSIX")
     timestamp.timeZone = .current
@@ -621,7 +633,8 @@ enum Collector {
             try saveRechecks(rechecks, for: device)
           }
           saved += 1
-        } else if try shouldRecheckUnclassified(downloaded) {
+        } else if try shouldRecheckUnclassified(downloaded) || !remote.path.contains("/Retired/") ||
+          isLikelyDailyReport(remote) {
           let retryAt = Date().addingTimeInterval(30 * 60)
           rechecks[remote.token] = retryAt
           try saveRechecks(rechecks, for: device)
@@ -644,5 +657,17 @@ enum Collector {
     }
     return CollectionReport(saved: saved, skipped: skipped, failed: failed,
       lastError: lastError, newestHostAnalyticsAt: newestHostAnalyticsAt)
+  }
+
+  static func analyticsCandidates(_ files: [RemoteLog]) -> [RemoteLog] {
+    var seen = Set<String>()
+    return files.filter { remote in
+      let base = remote.source.map { "/\($0)/" } ?? "/"
+      let validLocation = remote.path.hasPrefix(base + "Retired/Analytics-") ||
+        remote.path.hasPrefix(base + "Analytics-")
+      return validLocation && !remote.name.hasPrefix("Analytics-Census-") &&
+        !remote.name.localizedCaseInsensitiveContains("session") &&
+        remote.name.hasSuffix(".ips.ca.synced") && seen.insert(remote.token).inserted
+    }
   }
 }
