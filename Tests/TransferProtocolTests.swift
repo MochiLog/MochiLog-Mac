@@ -436,6 +436,11 @@ struct TransferProtocolTests {
       secret: device.secret, context: (hostID, device.physicalDeviceID, skipNonce))
     try check(skipped.0.isEmpty && !FileManager.default.fileExists(atPath: duplicateFile.path),
       "Matching mobile receipt did not suppress duplicate transfer")
+    let preflightLog = SupportDiagnostics.macLogText()
+    try check(preflightLog.contains("preflight offer Host::\(duplicateName)") &&
+      preflightLog.contains("preflight decision=have, action=skip Host::\(duplicateName)") &&
+      preflightLog.contains("digest changed"),
+      "Preflight offer, duplicate decision, or rejection was missing from the debug log")
     try hostContent.write(to: duplicateFile)
     try Data().write(to: URL(fileURLWithPath: duplicateFile.path + ".force-resend"))
     let forcedNonce = UUID()

@@ -661,6 +661,14 @@ final class TransferServer: @unchecked Sendable {
         request.offerMAC.flatMap(Data.init(hex:)) == Data(HMAC<SHA256>.authenticationCode(
           for: Data("file-offer|v1|\(request.hostID.uuidString)|\(request.physicalDeviceID.uuidString)|\(request.nonce.uuidString)".utf8),
           using: SymmetricKey(data: device.secret)))
+      if request.offerVersion == "1" && !offerEnabled {
+        SupportDiagnostics.record("\(device.name): preflight rejected; capability authentication failed")
+      }
+      if offerEnabled, request.offerToken != nil,
+        (request.offerDigest == nil || request.offerDecision == nil ||
+          request.offerDecisionMAC == nil) {
+        SupportDiagnostics.record("\(device.name): preflight decision rejected; incomplete fields")
+      }
       if offerEnabled, let token = request.offerToken, let digest = request.offerDigest,
         let decision = request.offerDecision, ["have", "send"].contains(decision),
         let supplied = request.offerDecisionMAC.flatMap(Data.init(hex:)),
@@ -675,10 +683,17 @@ final class TransferServer: @unchecked Sendable {
         if actual == digest && decision == "have" && !forced {
           try Collector.markDelivered(token, for: device)
           try BatteryLogStorage.archiveAcknowledged(offered, device: device)
-          SupportDiagnostics.record("\(device.name): skipped already received log \(token); SHA-256 confirmed by mobile")
+          SupportDiagnostics.record("\(device.name): preflight decision=have, action=skip \(token); SHA-256 \(digest.prefix(12))")
         } else if actual == digest && decision == "send" {
+          SupportDiagnostics.record("\(device.name): preflight decision=send, action=transfer \(token); SHA-256 \(digest.prefix(12)); bytes=\(bytes.count)")
           return try encryptedLogResponse(bytes, name: token, request: request, device: device)
+        } else {
+          let reason = actual != digest ? "digest changed" : "manual resend overrides skip"
+          SupportDiagnostics.record("\(device.name): preflight decision=\(decision) not applied for \(token); \(reason); offering current file")
         }
+      } else if offerEnabled, let token = request.offerToken,
+        request.offerDigest != nil, request.offerDecision != nil {
+        SupportDiagnostics.record("\(device.name): preflight decision rejected for \(token); authentication, token, or queue file invalid")
       }
       let next = try Collector.pending(for: device).first
       let name = try next.map { try Collector.queueToken(for: $0, device: device) } ?? ""
@@ -687,6 +702,7 @@ final class TransferServer: @unchecked Sendable {
         guard content.count <= 64 * 1024 * 1024 else { return nil }
         let digest = SHA256.hash(data: content).map { String(format: "%02x", $0) }.joined()
         let forced = FileManager.default.fileExists(atPath: next.path + ".force-resend")
+        SupportDiagnostics.record("\(device.name): preflight offer \(name); SHA-256 \(digest.prefix(12)); bytes=\(content.count); forced=\(forced)")
         let control = try JSONSerialization.data(withJSONObject: [
           "type": "file-offer", "token": name, "sha256": digest,
           "force": forced ? "true" : "false"
