@@ -1,5 +1,7 @@
 # MochiLog Mac
 
+利用者向けの導入手順と困ったときの案内は[日本語・英語の利用ガイド](docs/USER_GUIDE.md)を参照してください。
+
 MochiLogのiOS/iPadOS 27向けワイヤレスログ転送機能のMac用ベータアプリです。macOS 27以降に対応します。Macが解析ログを取得して保持し、iPhone/iPadでMochiLogを開いたときにローカルネットワークで暗号化して転送します。解析と記録はiPhone/iPad側で行います。
 
 ## Mac連携でできること
