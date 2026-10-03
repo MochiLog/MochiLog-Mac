@@ -87,6 +87,39 @@ enum BatteryLogStorage {
     return rows.sorted { $0.storedAt > $1.storedAt }
   }
 
+  // Only verified battery logs reach the queue or archive. Do not infer a
+  // watch-free iPhone from an empty Watch folder: its log may arrive later.
+  static func hasRequiredDailyLogs(for device: PairedDevice, on day: String) -> Bool {
+    hasRequiredDailyLogs(model: device.model, rows: list(devices: [device]), on: day)
+  }
+
+  static func hasRequiredDailyLogs(model: String, rows: [StoredBatteryLog],
+    on day: String) -> Bool {
+    guard rows.contains(where: { $0.kind == "Host" && $0.logDay == day }) else {
+      return false
+    }
+    if model.hasPrefix("iPad") { return true }
+    guard model.hasPrefix("iPhone") else { return false }
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.timeZone = TimeZone(secondsFromGMT: 0)
+    formatter.dateFormat = "yyyy-MM-dd"
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = formatter.timeZone
+    guard let date = formatter.date(from: day),
+      let weekStart = calendar.date(byAdding: .day,
+        value: -6, to: date) else { return false }
+    let oldestRelevantDay = formatter.string(from: weekStart)
+    let expectedWatches = Set(rows.filter {
+      $0.kind == "Watch" && $0.logDay >= oldestRelevantDay && $0.logDay <= day
+    }.compactMap(\.source))
+    guard !expectedWatches.isEmpty else { return false }
+    let todayWatches = Set(rows.filter {
+      $0.kind == "Watch" && $0.logDay == day
+    }.compactMap(\.source))
+    return expectedWatches.isSubset(of: todayWatches)
+  }
+
   private static func scan(_ root: URL, deviceID: UUID, deviceName: String,
     pending: Bool) -> [StoredBatteryLog] {
     guard let files = FileManager.default.enumerator(at: root,

@@ -814,6 +814,28 @@ struct TransferProtocolTests {
     try check(BatteryLogStorage.list(devices: [storageDevice]).isEmpty,
       "Deleting the archived log left a stored copy")
     BatteryLogStorage.retainsAfterDelivery = false
+    print("Checking daily collection stops only after required verified logs exist")
+    func dailyRow(_ kind: String, _ source: String?, _ day: String) -> StoredBatteryLog {
+      let name = "Analytics-\(day)-090000.ips.ca.synced"
+      return StoredBatteryLog(id: UUID().uuidString,
+        url: URL(fileURLWithPath: "/tmp/\(name)"), deviceID: storageDevice.physicalDeviceID,
+        deviceName: storageDevice.name, kind: kind, source: source,
+        size: 100_000, storedAt: Date(), pending: true)
+    }
+    let host = dailyRow("Host", nil, "2026-10-03")
+    let firstWatch = dailyRow("Watch", "ProxiedDevice-a1", "2026-10-03")
+    let secondWatch = dailyRow("Watch", "ProxiedDevice-b2", "2026-10-02")
+    try check(BatteryLogStorage.hasRequiredDailyLogs(model: "iPad16,6",
+      rows: [host], on: "2026-10-03"), "iPad host log did not stop collection")
+    try check(!BatteryLogStorage.hasRequiredDailyLogs(model: "iPhone18,3",
+      rows: [host], on: "2026-10-03"), "Unknown Watch state stopped iPhone collection")
+    try check(!BatteryLogStorage.hasRequiredDailyLogs(model: "iPhone18,3",
+      rows: [host, firstWatch, secondWatch], on: "2026-10-03"),
+      "A second known Watch was ignored")
+    try check(BatteryLogStorage.hasRequiredDailyLogs(model: "iPhone18,3",
+      rows: [host, firstWatch, secondWatch,
+        dailyRow("Watch", "ProxiedDevice-b2", "2026-10-03")], on: "2026-10-03"),
+      "Complete iPhone and Watch logs did not stop collection")
     if let udid = ProcessInfo.processInfo.environment["MOCHILOG_DIRECT_DEVICE_ID"],
       let address = ProcessInfo.processInfo.environment["MOCHILOG_DIRECT_DEVICE_IP"] {
       let probe = PairedDevice(udid: udid, name: "Direct RSD probe", model: "iPad",

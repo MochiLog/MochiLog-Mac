@@ -298,6 +298,11 @@ final class CompanionModel: ObservableObject {
     japan.timeZone = TimeZone(identifier: "Asia/Tokyo")!
     let now = Date()
     let collectionOpen = japan.component(.hour, from: now) >= 9
+    let dayFormatter = DateFormatter()
+    dayFormatter.calendar = japan
+    dayFormatter.timeZone = japan.timeZone
+    dayFormatter.dateFormat = "yyyy-MM-dd"
+    let today = dayFormatter.string(from: now)
     let devices = state.devices.filter { device in
       if manual { return true }
       let reason: String?
@@ -309,6 +314,10 @@ final class CompanionModel: ObservableObject {
       } else if let until = device.automaticPauseUntil, until > now {
         reason = "mobile app confirmed all required daily logs"
         resume = until
+      } else if BatteryLogStorage.hasRequiredDailyLogs(for: device, on: today) {
+        reason = "verified current-day host and known Watch logs are stored"
+        resume = japan.nextDate(after: now, matching: DateComponents(hour: 9),
+          matchingPolicy: .nextTime) ?? now.addingTimeInterval(24 * 60 * 60)
       } else {
         reason = nil
         resume = now
