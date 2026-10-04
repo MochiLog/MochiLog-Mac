@@ -18,6 +18,8 @@ MochiLog Mac は、iPhone・iPad の解析ログを Mac に一時保管し、端
 
 新しい解析ログを Mac が収集できるのは、端末のロックが解除されていて無線の診断接続が使えるときだけです。収集済みのログは Mac に残るので、その場でスマホ版を開く必要はありません。ログが届かないときは、まず端末で MochiLog を開いて「Mac 連携」の接続状態を確認してください。必要な当日分が揃うと不要な自動再走査を休止します。手動収集・受信は引き続き利用できます。
 
+初期設定では Mac アプリのウィンドウを×で閉じてもメニューバーに残り、収集と転送を続けます。メニューバーのアイコンからウィンドウを再表示できます。完全に終了したいときはメニューバーの「終了」を選びます。「設定 → ウィンドウを閉じたとき」で、×を押すとアプリを終了する動作にも変更できます。
+
 Mac の「電池ログ」では未転送・送信済みの生ログを確認、書き出し、再送できます。初期設定では受信確認後に送信済みログを削除します。「送信後も保管」を選ぶと保管期間と容量上限を設定できます。未転送ログは自動整理から保護されます。
 
 Tailscale は任意です。同じ Wi-Fi の外からは、双方で Tailscale を接続し、端末側でモバイル通信の転送を許可すると、Mac に**収集済み**のログを受け取れます。外出先のモバイル通信だけで端末内の新しい解析ログを Mac が収集することはできません。
@@ -48,6 +50,8 @@ MochiLog Mac collects Apple analytics files from an iPhone or iPad, temporarily 
 ### Everyday use and help
 
 The device must be unlocked and locally reachable while the Mac collects new analytics files. Queued files remain on the Mac until the mobile app can receive them. Once the required daily files are present, unnecessary automatic rescans pause; manual actions remain available. The **Battery Logs** page lists pending and delivered raw files and supports export and resend. Delivered files are deleted after acknowledgement by default, or you can enable retention with configurable limits. Pending files are protected from automatic cleanup.
+
+By default, closing the Mac app's window keeps it running in the menu bar so collection and transfers continue. Use the menu bar icon to reopen the window, or choose **Quit** there to stop the app. You can change this under **Settings → When closing the window** so closing the window quits the app instead.
 
 Tailscale is optional. If both devices use it and mobile transfer is enabled, you can receive files **already collected** by the Mac while away. Cellular plus Tailscale cannot collect new system analytics from the device.
 

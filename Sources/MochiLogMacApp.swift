@@ -7,12 +7,14 @@ import SwiftUI
 
 @main
 struct MochiLogMacApp: App {
+  @NSApplicationDelegateAdaptor(MochiLogMacAppDelegate.self) private var appDelegate
   @StateObject private var model = CompanionModel()
-  @AppStorage(MacAppPreferences.menuBarKey) private var showMenuBar = false
+  @AppStorage(MacAppPreferences.menuBarKey) private var showMenuBar = true
   @AppStorage(MacAppPreferences.hideDockKey) private var hideDock = false
   private let updaterController: SPUStandardUpdaterController
 
   init() {
+    MacAppPreferences.ensureMenuBarForBackgroundMode()
     SingleInstanceGuard.claim()
     CrashDiagnostics.start()
     updaterController = SPUStandardUpdaterController(startingUpdater: true,
@@ -41,6 +43,12 @@ struct MochiLogMacApp: App {
       MacMenuBarContent(model: model,
         checkForUpdates: { updaterController.checkForUpdates(nil) })
     }
+  }
+}
+
+final class MochiLogMacAppDelegate: NSObject, NSApplicationDelegate {
+  func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+    MacAppPreferences.quitOnWindowClose
   }
 }
 
@@ -504,8 +512,9 @@ private struct CompanionView: View {
   @State private var preferencesError: String?
   @State private var manualDeviceAddress = ""
   @State private var showingUnpairConfirmation = false
-  @AppStorage(MacAppPreferences.menuBarKey) private var showMenuBar = false
+  @AppStorage(MacAppPreferences.menuBarKey) private var showMenuBar = true
   @AppStorage(MacAppPreferences.hideDockKey) private var hideDock = false
+  @AppStorage(MacAppPreferences.quitOnWindowCloseKey) private var quitOnWindowClose = false
   private var supportDevice: PairedDevice? {
     model.state.devices.first(where: { $0.udid == supportDeviceID })
       ?? model.state.devices.first(where: { $0.udid == model.selectedUDID })
@@ -1140,8 +1149,20 @@ private struct CompanionView: View {
               }
             }))
           Toggle(MacTransferL10n.text("mt_029"), isOn: $showMenuBar)
+            .disabled(!quitOnWindowClose)
           Toggle(MacTransferL10n.text("mt_030"), isOn: $hideDock)
             .disabled(!showMenuBar)
+          Picker(MacTransferL10n.text("mt_close_behavior"), selection: $quitOnWindowClose) {
+            Text(MacTransferL10n.text("mt_close_keep_running")).tag(false)
+            Text(MacTransferL10n.text("mt_close_quit")).tag(true)
+          }
+          .pickerStyle(.radioGroup)
+          .onChange(of: quitOnWindowClose) { _, shouldQuit in
+            if !shouldQuit { showMenuBar = true }
+          }
+          Text(MacTransferL10n.text("mt_close_help"))
+            .font(.caption)
+            .foregroundStyle(.secondary)
           if let preferencesError { Text(preferencesError).foregroundStyle(.red) }
         }.frame(maxWidth: .infinity, alignment: .leading).padding(12)
       }

@@ -6,6 +6,17 @@ import ServiceManagement
 enum MacAppPreferences {
   static let menuBarKey = "MochiLogShowMenuBar"
   static let hideDockKey = "MochiLogHideDock"
+  static let quitOnWindowCloseKey = "MochiLogQuitOnWindowClose"
+
+  static var quitOnWindowClose: Bool {
+    UserDefaults.standard.bool(forKey: quitOnWindowCloseKey)
+  }
+
+  static func ensureMenuBarForBackgroundMode() {
+    if !quitOnWindowClose {
+      UserDefaults.standard.set(true, forKey: menuBarKey)
+    }
+  }
 
   static func applyDockVisibility() {
     let defaults = UserDefaults.standard
