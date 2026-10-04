@@ -363,7 +363,7 @@ final class CompanionModel: ObservableObject {
           staleAnalyticsDeviceIDs.remove(device.physicalDeviceID)
         }
         savedAny = savedAny || report.saved > 0
-        SupportDiagnostics.record("\(device.name): collection finished; saved=\(report.saved), excluded=\(report.skipped), failed=\(report.failed)")
+        SupportDiagnostics.record("\(device.name): collection finished; saved=\(report.saved), excluded=\(report.skipped), deferred=\(report.deferred), failed=\(report.failed)")
         if selectedUDID == device.udid { osPairingState = .verified }
         status = report.failed == 0
           ? MacTransferL10n.format("mt_m_08", device.name, report.saved, report.skipped)

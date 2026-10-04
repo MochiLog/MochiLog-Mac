@@ -104,6 +104,7 @@ struct CollectionReport {
   let saved: Int
   let skipped: Int
   let failed: Int
+  let deferred: Int
   let lastError: String?
   let newestHostAnalyticsAt: Date?
 }
@@ -600,6 +601,7 @@ enum Collector {
     var saved = 0
     var skipped = 0
     var failed = 0
+    var deferred = 0
     var lastError: String?
     for (index, remote) in newFiles.enumerated() {
       let name = remote.name
@@ -638,8 +640,7 @@ enum Collector {
           let retryAt = Date().addingTimeInterval(30 * 60)
           rechecks[remote.token] = retryAt
           try saveRechecks(rechecks, for: device)
-          failed += 1
-          lastError = "Analytics file could not be verified; it will be checked again."
+          deferred += 1
           let size = (try? downloaded.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
           SupportDiagnostics.record("\(device.name): deferred unclassified \(name); bytes=\(size); retry=\(SupportDiagnostics.localTime(retryAt))")
         } else {
@@ -655,7 +656,7 @@ enum Collector {
       }
       progress?(index + 1, newFiles.count)
     }
-    return CollectionReport(saved: saved, skipped: skipped, failed: failed,
+    return CollectionReport(saved: saved, skipped: skipped, failed: failed, deferred: deferred,
       lastError: lastError, newestHostAnalyticsAt: newestHostAnalyticsAt)
   }
 

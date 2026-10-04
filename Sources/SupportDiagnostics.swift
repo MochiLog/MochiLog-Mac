@@ -226,6 +226,7 @@ enum SupportDiagnostics {
       "result": category,
       "saved": report?.saved ?? 0,
       "excluded": report?.skipped ?? 0,
+      "deferred": report?.deferred ?? 0,
       "failed": report?.failed ?? 0
     ]
     if let newest = report?.newestHostAnalyticsAt {
