@@ -250,6 +250,24 @@ struct TransferProtocolTests {
     let shouldRecheckSmall = try Collector.shouldRecheckUnclassified(uncertain)
     try check(!shouldRecheckSmall,
       "A small unrelated diagnostic should be excluded")
+    let firstObservation = try Collector.observeUnclassified(uncertain, previous: nil)
+    let secondObservation = try Collector.observeUnclassified(uncertain,
+      previous: firstObservation)
+    let thirdObservation = try Collector.observeUnclassified(uncertain,
+      previous: secondObservation)
+    try check(firstObservation?.confirmations == 1 &&
+      secondObservation?.confirmations == 2 && thirdObservation?.confirmations == 3,
+      "Stable non-battery downloads should stop after three separate checks")
+    try Data().write(to: uncertain)
+    let emptyObservation = try Collector.observeUnclassified(uncertain,
+      previous: thirdObservation)
+    try check(emptyObservation == nil,
+      "An empty diagnostic pull must not confirm a non-battery report")
+    try Data("changed diagnostic".utf8).write(to: uncertain)
+    let changedObservation = try Collector.observeUnclassified(uncertain,
+      previous: thirdObservation)
+    try check(changedObservation?.confirmations == 1,
+      "A changed diagnostic report must start a fresh confirmation count")
     let device = PairedDevice(udid: "test-iphone", name: "Test iPhone",
       model: "iPhone18,3", physicalDeviceID: UUID(),
       secret: Data((0..<32).map { UInt8($0) }))

@@ -124,6 +124,11 @@ struct RemoteLog {
   }
 }
 
+struct UnclassifiedObservation: Codable {
+  let fingerprint: String
+  let confirmations: Int
+}
+
 enum Collector {
   static let root: URL = {
     #if TRANSFER_TESTING
@@ -452,6 +457,38 @@ enum Collector {
     try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
   }
 
+  private static func observationsURL(for device: PairedDevice) -> URL {
+    root.appendingPathComponent("unclassified-\(device.physicalDeviceID.uuidString).json")
+  }
+
+  private static func observations(for device: PairedDevice) -> [String: UnclassifiedObservation] {
+    guard let data = try? Data(contentsOf: observationsURL(for: device)),
+      let values = try? JSONDecoder().decode([String: UnclassifiedObservation].self, from: data)
+    else { return [:] }
+    return values
+  }
+
+  private static func saveObservations(_ values: [String: UnclassifiedObservation],
+    for device: PairedDevice) throws {
+    let url = observationsURL(for: device)
+    try JSONEncoder().encode(values).write(to: url, options: .atomic)
+    try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+  }
+
+  // Confirm the same complete, small, marker-free payload across separate
+  // 30-minute attempts before excluding a report with a plausible daily name.
+  // Empty pulls provide no evidence and must never advance the count.
+  static func observeUnclassified(_ url: URL,
+    previous: UnclassifiedObservation?) throws -> UnclassifiedObservation? {
+    let bytes = try Data(contentsOf: url, options: .mappedIfSafe)
+    guard !bytes.isEmpty else { return nil }
+    let fingerprint = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
+    let confirmations = previous?.fingerprint == fingerprint
+      ? min(3, (previous?.confirmations ?? 0) + 1) : 1
+    return UnclassifiedObservation(fingerprint: fingerprint,
+      confirmations: confirmations)
+  }
+
   // A large Analytics file can be returned incompletely by the diagnostics
   // service while the device changes lock state. Do not permanently discard it.
   static func shouldRecheckUnclassified(_ url: URL) throws -> Bool {
@@ -565,6 +602,7 @@ enum Collector {
     let destination = try directory(for: device)
     let delivered = delivered(for: device)
     var rechecks = rechecks(for: device)
+    var observations = observations(for: device)
     let now = Date()
     let newFiles = remoteFiles.filter { remote in
       let name = remote.name
@@ -634,19 +672,40 @@ enum Collector {
           if rechecks.removeValue(forKey: remote.token) != nil {
             try saveRechecks(rechecks, for: device)
           }
+          if observations.removeValue(forKey: remote.token) != nil {
+            try saveObservations(observations, for: device)
+          }
           saved += 1
         } else if try shouldRecheckUnclassified(downloaded) || !remote.path.contains("/Retired/") ||
           isLikelyDailyReport(remote) {
-          let retryAt = Date().addingTimeInterval(30 * 60)
-          rechecks[remote.token] = retryAt
-          try saveRechecks(rechecks, for: device)
-          deferred += 1
           let size = (try? downloaded.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
-          SupportDiagnostics.record("\(device.name): deferred unclassified \(name); bytes=\(size); retry=\(SupportDiagnostics.localTime(retryAt))")
+          let uncertain = try shouldRecheckUnclassified(downloaded)
+          let observation = uncertain ? nil : try observeUnclassified(downloaded,
+            previous: observations[remote.token])
+          if let observation, observation.confirmations >= 3 {
+            try markDelivered(remote.token, for: device)
+            rechecks.removeValue(forKey: remote.token)
+            observations.removeValue(forKey: remote.token)
+            try saveRechecks(rechecks, for: device)
+            try saveObservations(observations, for: device)
+            skipped += 1
+            SupportDiagnostics.record("\(device.name): excluded stable non-battery \(name); bytes=\(size); confirmations=3")
+          } else {
+            if let observation { observations[remote.token] = observation }
+            try saveObservations(observations, for: device)
+            let retryAt = Date().addingTimeInterval(30 * 60)
+            rechecks[remote.token] = retryAt
+            try saveRechecks(rechecks, for: device)
+            deferred += 1
+            SupportDiagnostics.record("\(device.name): deferred unclassified \(name); bytes=\(size); confirmations=\(observation?.confirmations ?? 0); retry=\(SupportDiagnostics.localTime(retryAt))")
+          }
         } else {
           try markDelivered(remote.token, for: device)
           if rechecks.removeValue(forKey: remote.token) != nil {
             try saveRechecks(rechecks, for: device)
+          }
+          if observations.removeValue(forKey: remote.token) != nil {
+            try saveObservations(observations, for: device)
           }
           skipped += 1
         }
