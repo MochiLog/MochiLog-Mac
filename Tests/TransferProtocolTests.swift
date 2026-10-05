@@ -854,6 +854,14 @@ struct TransferProtocolTests {
       rows: [host, firstWatch, secondWatch,
         dailyRow("Watch", "ProxiedDevice-b2", "2026-10-03")], on: "2026-10-03"),
       "Complete iPhone and Watch logs did not stop collection")
+    let receipts = [VerifiedBatteryReceipt(kind: "Host", source: nil, day: "2026-10-03"),
+      VerifiedBatteryReceipt(kind: "Watch", source: "ProxiedDevice-a1", day: "2026-10-03")]
+    try check(BatteryLogStorage.hasRequiredDailyLogs(model: "iPhone18,3", rows: [],
+      on: "2026-10-03", receipts: receipts),
+      "Deleting acknowledged raw files restarted daily collection")
+    try check(!BatteryLogStorage.hasRequiredDailyLogs(model: "iPhone18,3", rows: [],
+      on: "2026-10-04", receipts: receipts),
+      "Yesterday's acknowledged logs stopped today's collection")
     if let udid = ProcessInfo.processInfo.environment["MOCHILOG_DIRECT_DEVICE_ID"],
       let address = ProcessInfo.processInfo.environment["MOCHILOG_DIRECT_DEVICE_IP"] {
       let probe = PairedDevice(udid: udid, name: "Direct RSD probe", model: "iPad",

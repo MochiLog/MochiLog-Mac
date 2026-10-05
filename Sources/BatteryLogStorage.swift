@@ -15,12 +15,45 @@ struct StoredBatteryLog: Identifiable {
   var logDay: String { String(name.dropFirst("Analytics-".count).prefix(10)) }
 }
 
+struct VerifiedBatteryReceipt: Codable {
+  let kind: String
+  let source: String?
+  let day: String
+}
+
 enum BatteryLogStorage {
   private static let archiveName = "BatteryLogArchive"
   private static let capacityKey = "BatteryLogArchiveLimitMB"
   private static let monthsKey = "BatteryLogArchiveRetentionMonths"
   private static let retainKey = "BatteryLogArchiveAfterDelivery"
   static var archiveRoot: URL { Collector.root.appendingPathComponent(archiveName, isDirectory: true) }
+  private static func receiptsURL(for device: PairedDevice) -> URL {
+    Collector.root.appendingPathComponent("verified-receipts-\(device.physicalDeviceID.uuidString).json")
+  }
+
+  private static func receipts(for device: PairedDevice) -> [VerifiedBatteryReceipt] {
+    guard let data = try? Data(contentsOf: receiptsURL(for: device)),
+      let values = try? JSONDecoder().decode([VerifiedBatteryReceipt].self, from: data)
+    else { return [] }
+    return values
+  }
+
+  private static func recordReceipt(_ receipt: VerifiedBatteryReceipt,
+    for device: PairedDevice) throws {
+    let url = receiptsURL(for: device)
+    let cutoff = Calendar(identifier: .gregorian).date(byAdding: .day, value: -14,
+      to: Date()) ?? .distantPast
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.timeZone = TimeZone(identifier: "Asia/Tokyo")
+    formatter.dateFormat = "yyyy-MM-dd"
+    let oldestDay = formatter.string(from: cutoff)
+    var values = receipts(for: device).filter { $0.day >= oldestDay }
+    if !values.contains(where: { $0.kind == receipt.kind && $0.source == receipt.source &&
+      $0.day == receipt.day }) { values.append(receipt) }
+    try JSONEncoder().encode(values).write(to: url, options: .atomic)
+    try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+  }
 
   static var retainsAfterDelivery: Bool {
     get { UserDefaults.standard.bool(forKey: retainKey) }
@@ -39,17 +72,26 @@ enum BatteryLogStorage {
 
   static func archiveAcknowledged(_ file: URL, device: PairedDevice) throws {
     let resendMarker = URL(fileURLWithPath: file.path + ".force-resend")
-    guard retainsAfterDelivery else {
-      try FileManager.default.removeItem(at: file)
-      try? FileManager.default.removeItem(at: resendMarker)
-      return
-    }
     let queue = try Collector.directory(for: device).standardizedFileURL
     let source = file.standardizedFileURL
     guard source.path.hasPrefix(queue.path + "/") else {
       throw CollectorError.failed("Invalid battery log queue path")
     }
     let relative = String(source.path.dropFirst(queue.path.count + 1))
+    let parts = relative.split(separator: "/").map(String.init)
+    guard (parts.count == 2 && parts[0] == "Host") ||
+      (parts.count == 3 && parts[0] == "Watch"),
+      let name = parts.last, name.hasPrefix("Analytics-"), name.count >= 20 else {
+      throw CollectorError.failed("Invalid battery log queue path")
+    }
+    try recordReceipt(VerifiedBatteryReceipt(kind: parts[0],
+      source: parts.count == 3 ? parts[1] : nil,
+      day: String(name.dropFirst("Analytics-".count).prefix(10))), for: device)
+    guard retainsAfterDelivery else {
+      try FileManager.default.removeItem(at: file)
+      try? FileManager.default.removeItem(at: resendMarker)
+      return
+    }
     let destination = archiveRoot.appendingPathComponent(device.physicalDeviceID.uuidString)
       .appendingPathComponent(relative)
     try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(),
@@ -90,12 +132,14 @@ enum BatteryLogStorage {
   // Only verified battery logs reach the queue or archive. Do not infer a
   // watch-free iPhone from an empty Watch folder: its log may arrive later.
   static func hasRequiredDailyLogs(for device: PairedDevice, on day: String) -> Bool {
-    hasRequiredDailyLogs(model: device.model, rows: list(devices: [device]), on: day)
+    hasRequiredDailyLogs(model: device.model, rows: list(devices: [device]), on: day,
+      receipts: receipts(for: device))
   }
 
   static func hasRequiredDailyLogs(model: String, rows: [StoredBatteryLog],
-    on day: String) -> Bool {
-    guard rows.contains(where: { $0.kind == "Host" && $0.logDay == day }) else {
+    on day: String, receipts: [VerifiedBatteryReceipt] = []) -> Bool {
+    guard rows.contains(where: { $0.kind == "Host" && $0.logDay == day }) ||
+      receipts.contains(where: { $0.kind == "Host" && $0.day == day }) else {
       return false
     }
     if model.hasPrefix("iPad") { return true }
@@ -112,10 +156,14 @@ enum BatteryLogStorage {
     let oldestRelevantDay = formatter.string(from: weekStart)
     let expectedWatches = Set(rows.filter {
       $0.kind == "Watch" && $0.logDay >= oldestRelevantDay && $0.logDay <= day
+    }.compactMap(\.source) + receipts.filter {
+      $0.kind == "Watch" && $0.day >= oldestRelevantDay && $0.day <= day
     }.compactMap(\.source))
     guard !expectedWatches.isEmpty else { return false }
     let todayWatches = Set(rows.filter {
       $0.kind == "Watch" && $0.logDay == day
+    }.compactMap(\.source) + receipts.filter {
+      $0.kind == "Watch" && $0.day == day
     }.compactMap(\.source))
     return expectedWatches.isSubset(of: todayWatches)
   }
