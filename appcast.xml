@@ -6,6 +6,28 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>MochiLog Mac</title>
         <item>
+            <title>0.2.13</title>
+            <pubDate>Sat, 26 Sep 2026 02:20:52 +0900</pubDate>
+            <sparkle:version>16</sparkle:version>
+            <sparkle:shortVersionString>0.2.13</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>27.0</sparkle:minimumSystemVersion>
+            <description sparkle:format="markdown"><![CDATA[# MochiLog Mac 0.2.13 Beta
+
+## 日本語
+
+スマホアプリからの受信確認、重複判定、診断情報を含む転送要求全体を暗号化しました。要求の有効期限と再送防止情報を保存し、アプリ再起動後の再送や新方式から旧方式への戻りを防ぎます。未認証接続の数と待ち時間にも上限を設けました。
+
+旧版のiPhone・iPadアプリは、更新するまで既存のペアリングのまま利用できます。旧方式を検出するとTestFlightまたはApp Storeでの更新を案内します。ログの解析と記録は引き続きスマホ側で行います。
+
+## English
+
+The full transfer request, including acknowledgements, duplicate checks, and diagnostics, is now encrypted. Request expiry and persistent replay protection reject repeated requests after an app restart and prevent a connection upgraded to the new protocol from silently falling back. Unauthenticated connections are also bounded by count and time.
+
+Older iPhone and iPad builds can keep their existing pairing until updated. The Mac prompts for a TestFlight or App Store update when it detects the previous protocol. Parsing and record storage remain on the mobile app.
+]]></description>
+            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.13/MochiLog-Mac-Beta.dmg" length="55989419" type="application/octet-stream" sparkle:edSignature="1HUQMzhwqd1uwgTrbCU5owKgKoDtBmqQ0OGn/rbUfUEYv5GHY7gX4fenku1YAhoruY758r3htHGD0kRDLaypBA=="/>
+        </item>
+        <item>
             <title>0.2.12</title>
             <pubDate>Sat, 26 Sep 2026 02:20:52 +0900</pubDate>
             <sparkle:version>15</sparkle:version>
@@ -49,35 +71,9 @@ Under **Settings → When closing the window**, you can instead choose to quit w
 ]]></description>
             <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.11/MochiLog-Mac-Beta.dmg" length="55210820" type="application/octet-stream" sparkle:edSignature="EniQPNrepDOn6iRSe49Nw8fGMymA3q42TBWeR221TvlQeVj6SKM9Wc+wUNZdGKtaFIbzmA4BXQuc3dDUXL8MCw=="/>
         </item>
-        <item>
-            <title>0.2.10</title>
-            <pubDate>Sat, 26 Sep 2026 02:20:52 +0900</pubDate>
-            <sparkle:version>13</sparkle:version>
-            <sparkle:shortVersionString>0.2.10</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>27.0</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[# MochiLog Mac 0.2.10 Beta
-
-## 日本語
-
-解析ログの取得を端末側の制約で後から再試行する場合、その状態を収集失敗と誤表示しないよう修正しました。Mac側の状態表示とサポート用診断情報で、再試行待ちと実際のエラーを区別できます。
-
-TestFlight版MochiLogとの実機転送を確認しました。既存の記録を再送しても、iPhone側で重複として判定され、記録は増えませんでした。
-
-iOS/iPadOS 27向けのベータ版です。解析ログの収集時は端末をロック解除してください。
-
-## English
-
-Deferred analytics-log collection is no longer reported as a collection failure. The Mac app and support diagnostics now distinguish a pending retry from an actual error.
-
-Device transfer was verified with the TestFlight build of MochiLog. Resending an existing record was recognized as a duplicate on the iPhone and did not create another record.
-
-This beta targets iOS/iPadOS 27. Keep the device unlocked while collecting analytics logs.
-]]></description>
-            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.10/MochiLog-Mac-Beta.dmg" length="55222110" type="application/octet-stream" sparkle:edSignature="ZYIx0F4p6C6IhBWa27AKkaAAXLg38arx1y3I41gc3yM3AI154yM3/Sk56DOzsfvmkKFwxVJkKeso2/Z07tAtBw=="/>
-        </item>
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: b38wQplEcmTxHpMHUpV+IgeTzbmIT6ZIAJK8vcOFc3t3LaHLSMSl3IvSgDxEO0HbX0/J3OqUQvSRiwjcCG8tBA==
-length: 5751
+edSignature: 0EJMJwl0YQEFkCAEep/E0dAXqc1bhIwTe/jUriZIf6v7QEHBb30Rz7kVqZhah+SR2oOcRSB1rMTyEpQWkuxnAA==
+length: 5919
 -->
