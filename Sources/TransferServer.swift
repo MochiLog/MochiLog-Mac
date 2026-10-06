@@ -24,6 +24,20 @@ private struct PullRequest: Decodable {
   let offerDecisionMAC: String?
 }
 
+private struct SealedPullRequest: Decodable {
+  let version: String
+  let hostID: UUID
+  let physicalDeviceID: UUID
+  let nonce: UUID
+  let issuedAt: Int64
+  let box: String
+}
+
+private struct ReplayState: Codable {
+  var used: [UUID: Date] = [:]
+  var upgraded: Set<UUID> = []
+}
+
 private struct PreparedResponse {
   let data: Data
   let deviceID: UUID
@@ -89,7 +103,8 @@ final class TransferServer: @unchecked Sendable {
   private var tailnetAddress: String?
   private var activeTailnetClients = 0
   private var state: CompanionState
-  private var nonces: [UUID: Date] = [:]
+  private var replayState: ReplayState?
+  private var activeLANConnections: [ObjectIdentifier: NWConnection] = [:]
   private var announcementRevision = 0
   private var pairingSession: PairingSession?
   var onStatus: ((String) -> Void)?
@@ -99,8 +114,32 @@ final class TransferServer: @unchecked Sendable {
   var onTransferActivity: ((UUID, Bool) -> Void)?
   var onPairingCompleted: (() -> Void)?
   var onPairingRevoked: (() -> Void)?
+  var onLegacyClient: ((UUID) -> Void)?
+  var onSecureClient: ((UUID) -> Void)?
 
-  init(state: CompanionState) { self.state = state }
+  init(state: CompanionState) {
+    self.state = state
+    let url = Collector.root.appendingPathComponent("transfer-replay.json")
+    if !FileManager.default.fileExists(atPath: url.path) {
+      replayState = ReplayState()
+    } else if let data = try? Data(contentsOf: url) {
+      replayState = try? JSONDecoder().decode(ReplayState.self, from: data)
+    }
+  }
+
+  private func saveReplayState(_ value: ReplayState) -> Bool {
+    let url = Collector.root.appendingPathComponent("transfer-replay.json")
+    do {
+      try JSONEncoder().encode(value).write(to: url, options: .atomic)
+      try FileManager.default.setAttributes([.posixPermissions: 0o600],
+        ofItemAtPath: url.path)
+      replayState = value
+      return true
+    } catch {
+      onStatus?("Replay protection could not be saved: \(error.localizedDescription)")
+      return false
+    }
+  }
 
   func update(state: CompanionState) { queue.async { self.state = state } }
 
@@ -276,11 +315,11 @@ final class TransferServer: @unchecked Sendable {
     }
     var request = Data()
     var buffer = [UInt8](repeating: 0, count: 4096)
-    while request.count <= 16_384 {
+    while request.count <= 32_768 {
       let count = Darwin.recv(client, &buffer, buffer.count, 0)
       guard count > 0 else { return }
       request.append(contentsOf: buffer.prefix(count))
-      guard request.count <= 16_384 else { return }
+      guard request.count <= 32_768 else { return }
       if let newline = request.firstIndex(of: 10) {
         let body = Data(request[..<newline])
         if let pairingReply = queue.sync(execute: {
@@ -365,19 +404,28 @@ final class TransferServer: @unchecked Sendable {
   }
 
   private func handle(_ connection: NWConnection) {
+    guard activeLANConnections.count < 16 else { connection.cancel(); return }
+    let identifier = ObjectIdentifier(connection)
+    activeLANConnections[identifier] = connection
     connection.stateUpdateHandler = { [weak self] status in
       if case .ready = status { self?.receive(on: connection, accumulated: Data()) }
       if case .failed = status { connection.cancel() }
+      if case .cancelled = status { self?.activeLANConnections.removeValue(forKey: identifier) }
     }
     connection.start(queue: queue)
+    queue.asyncAfter(deadline: .now() + 25) { [weak self, weak connection] in
+      guard let self, self.activeLANConnections[identifier] != nil else { return }
+      connection?.cancel()
+      self.activeLANConnections.removeValue(forKey: identifier)
+    }
   }
 
   private func receive(on connection: NWConnection, accumulated: Data) {
-    connection.receive(minimumIncompleteLength: 1, maximumLength: 16_384) { [weak self] data, _, complete, error in
+    connection.receive(minimumIncompleteLength: 1, maximumLength: 32_768) { [weak self] data, _, complete, error in
       guard let self, error == nil, !complete else { connection.cancel(); return }
       var bytes = accumulated
       if let data { bytes.append(data) }
-      guard bytes.count <= 16_384 else { connection.cancel(); return }
+      guard bytes.count <= 32_768 else { connection.cancel(); return }
       if let end = bytes.firstIndex(of: 10) {
         self.respond(to: Data(bytes[..<end]), on: connection)
       } else {
@@ -479,6 +527,10 @@ final class TransferServer: @unchecked Sendable {
       updated.revokedDevices.removeAll { $0.physicalDeviceID == physicalDeviceID }
       guard (try? Collector.saveState(updated)) != nil else { return nil }
       state = updated
+      if var replay = replayState {
+        replay.upgraded.remove(physicalDeviceID)
+        guard saveReplayState(replay) else { return nil }
+      }
       session.confirmed = true
       pairingSession = session
       onPairingCompleted?()
@@ -522,14 +574,40 @@ final class TransferServer: @unchecked Sendable {
     ])) .map { $0 + Data([10]) }
   }
 
+  private func decodePullRequest(_ data: Data) -> (PullRequest, Bool)? {
+    if let envelope = try? JSONDecoder().decode(SealedPullRequest.self, from: data),
+      envelope.version == "3" {
+      let now = Date().timeIntervalSince1970
+      guard abs(now - Double(envelope.issuedAt)) <= 300,
+        let device = (state.devices + state.revokedDevices).first(where: {
+          $0.physicalDeviceID == envelope.physicalDeviceID
+        }),
+        let combined = Data(base64Encoded: envelope.box), combined.count <= 24_576,
+        let sealed = try? AES.GCM.SealedBox(combined: combined) else { return nil }
+      let context = Data("v3|request|\(envelope.hostID.uuidString)|\(envelope.physicalDeviceID.uuidString)|\(envelope.nonce.uuidString)|\(envelope.issuedAt)".utf8)
+      guard let plain = try? AES.GCM.open(sealed,
+        using: SymmetricKey(data: device.secret), authenticating: context),
+        let request = try? JSONDecoder().decode(PullRequest.self, from: plain),
+        request.hostID == envelope.hostID,
+        request.physicalDeviceID == envelope.physicalDeviceID,
+        request.nonce == envelope.nonce else { return nil }
+      return (request, true)
+    }
+    guard let request = try? JSONDecoder().decode(PullRequest.self, from: data)
+    else { return nil }
+    return (request, false)
+  }
+
   private func makeResponse(to requestData: Data) -> PreparedResponse? {
-    guard let request = try? JSONDecoder().decode(PullRequest.self, from: requestData),
+    guard let (request, secure) = decodePullRequest(requestData),
       request.version == "2",
       request.hostID == state.hostID,
       let device = (state.devices + state.revokedDevices).first(where: {
         $0.physicalDeviceID == request.physicalDeviceID
       }),
-      Date().timeIntervalSince(nonces[request.nonce] ?? .distantPast) > 300
+      var replay = replayState,
+      !replay.upgraded.contains(device.physicalDeviceID) || secure,
+      replay.used[request.nonce] == nil
     else { return nil }
     let message = "v2|\(request.hostID.uuidString)|\(request.physicalDeviceID.uuidString)|\(request.nonce.uuidString)|\(request.ack ?? "")"
     let expected = Data(HMAC<SHA256>.authenticationCode(for: Data(message.utf8),
@@ -541,9 +619,13 @@ final class TransferServer: @unchecked Sendable {
     let backgroundNotice = request.presence == "background" && request.ack == ""
       && received == expectedBackground
     guard backgroundNotice || received == expected else { return nil }
+    if secure { onSecureClient?(device.physicalDeviceID) }
+    else { onLegacyClient?(device.physicalDeviceID) }
     let now = Date()
-    nonces[request.nonce] = now
-    nonces = nonces.filter { now.timeIntervalSince($0.value) < 300 }
+    replay.used[request.nonce] = now
+    replay.used = replay.used.filter { now.timeIntervalSince($0.value) < 600 }
+    if secure { replay.upgraded.insert(device.physicalDeviceID) }
+    guard saveReplayState(replay) else { return nil }
     if state.revokedDevices.contains(where: {
       $0.physicalDeviceID == device.physicalDeviceID
     }) {

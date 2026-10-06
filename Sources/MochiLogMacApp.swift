@@ -109,6 +109,7 @@ final class CompanionModel: ObservableObject {
   @Published var collectionTotal = 0
   @Published var staleAnalyticsDeviceIDs: Set<UUID> = []
   @Published var lastAppRequestAt: [UUID: Date] = [:]
+  @Published var legacyClientIDs: Set<UUID> = []
   @Published private var appPresence: [UUID: AppPresence] = [:]
   @Published private var activeTransfers: [UUID: Int] = [:]
   @Published private var presenceClock = Date()
@@ -169,6 +170,12 @@ final class CompanionModel: ObservableObject {
     }
     server.onAuthenticatedRequest = { [weak self] deviceID, date in
       Task { @MainActor in self?.lastAppRequestAt[deviceID] = date }
+    }
+    server.onLegacyClient = { [weak self] deviceID in
+      Task { @MainActor in self?.legacyClientIDs.insert(deviceID) }
+    }
+    server.onSecureClient = { [weak self] deviceID in
+      Task { @MainActor in self?.legacyClientIDs.remove(deviceID) }
     }
     server.onAppPresence = { [weak self] deviceID, isForeground, date in
       Task { @MainActor in
@@ -304,6 +311,7 @@ final class CompanionModel: ObservableObject {
     components.host = "pair"
     components.queryItems = [
       .init(name: "v", value: "3"),
+      .init(name: "transfer", value: "3"),
       .init(name: "platform", value: "macOS"),
       .init(name: "host", value: invitation.hostID.uuidString),
       .init(name: "model", value: invitation.model),
@@ -604,6 +612,17 @@ private struct CompanionView: View {
 
   private var overview: some View {
     VStack(alignment: .leading, spacing: 22) {
+      if !model.legacyClientIDs.isEmpty {
+        GroupBox {
+          VStack(alignment: .leading, spacing: 8) {
+            Label(MacTransferL10n.text("mt_mobile_update_needed"),
+              systemImage: "exclamationmark.shield")
+              .foregroundStyle(.orange)
+            Link(MacTransferL10n.text("mt_mobile_update_link"),
+              destination: URL(string: "https://apps.apple.com/app/mochilog/id6756904240")!)
+          }.frame(maxWidth: .infinity, alignment: .leading).padding(8)
+        }
+      }
       GroupBox(MacTransferL10n.text("mt_guide_title")) {
         VStack(alignment: .leading, spacing: 16) {
           workflowDiagram

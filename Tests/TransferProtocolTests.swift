@@ -37,7 +37,8 @@ private func request(_ endpoint: NWEndpoint, hostID: UUID, device: PairedDevice,
   diagnostics: Data? = nil, presence: String? = nil, version2: Bool = true,
   expectNoResponse: Bool = false, delayedChunks: Bool = false,
   overridePayload: [String: String]? = nil, offerEnabled: Bool = false,
-  offer: (token: String, digest: String, decision: String)? = nil) throws -> Data {
+  offer: (token: String, digest: String, decision: String)? = nil,
+  sealed: Bool = false, issuedAt: Int64? = nil) throws -> Data {
   let message = presence == "background"
     ? "v2|background|\(hostID.uuidString)|\(device.physicalDeviceID.uuidString)|\(nonce.uuidString)"
     : "\(version2 ? "v2|" : "")\(hostID.uuidString)|\(device.physicalDeviceID.uuidString)|\(nonce.uuidString)|\(ack)"
@@ -90,8 +91,19 @@ private func request(_ endpoint: NWEndpoint, hostID: UUID, device: PairedDevice,
         .map { String(format: "%02x", $0) }.joined()
     }
   }
-  let data = try JSONSerialization.data(withJSONObject: overridePayload ?? payload)
-    + Data([10])
+  var wirePayload: [String: Any] = overridePayload ?? payload
+  if sealed {
+    let timestamp = issuedAt ?? Int64(Date().timeIntervalSince1970)
+    let context = Data("v3|request|\(hostID.uuidString)|\(device.physicalDeviceID.uuidString)|\(nonce.uuidString)|\(timestamp)".utf8)
+    let plain = try JSONSerialization.data(withJSONObject: wirePayload)
+    let box = try AES.GCM.seal(plain, using: SymmetricKey(data: device.secret),
+      authenticating: context).combined!
+    wirePayload = ["version": "3", "hostID": hostID.uuidString,
+      "physicalDeviceID": device.physicalDeviceID.uuidString,
+      "nonce": nonce.uuidString, "issuedAt": timestamp,
+      "box": box.base64EncodedString()]
+  }
+  let data = try JSONSerialization.data(withJSONObject: wirePayload) + Data([10])
   let connection = NWConnection(to: endpoint, using: .tcp)
   let queue = DispatchQueue(label: "mochilog.transfer.test.connection")
   let finished = DispatchSemaphore(value: 0)
@@ -735,6 +747,26 @@ struct TransferProtocolTests {
     let v3Paired = try checkPairedDevice(secondPhone.udid, key: v3Key)
     try check(v3Paired.physicalDeviceID == mobilePhysicalID,
       "V3 pairing replaced the mobile device's physical ID")
+    print("Checking sealed transfer and protocol upgrade")
+    let secureNonce = UUID()
+    _ = try opened(request(endpoint, hostID: hostID, device: v3Paired,
+      nonce: secureNonce, sealed: true), secret: v3Key,
+      context: (hostID, mobilePhysicalID, secureNonce))
+    let replayFile = Collector.root.appendingPathComponent("transfer-replay.json")
+    let persistedReplay = try Data(contentsOf: replayFile)
+    try check(String(decoding: persistedReplay, as: UTF8.self).contains(secureNonce.uuidString) &&
+      String(decoding: persistedReplay, as: UTF8.self).contains(mobilePhysicalID.uuidString),
+      "Sealed transfer replay state was not persisted")
+    let secureReplay = try request(endpoint, hostID: hostID, device: v3Paired,
+      nonce: secureNonce, expectNoResponse: true, sealed: true)
+    try check(secureReplay.isEmpty, "Sealed request replay was accepted")
+    let stale = try request(endpoint, hostID: hostID, device: v3Paired,
+      expectNoResponse: true, sealed: true,
+      issuedAt: Int64(Date().timeIntervalSince1970) - 3600)
+    try check(stale.isEmpty, "Expired sealed request was accepted")
+    let downgraded = try request(endpoint, hostID: hostID, device: v3Paired,
+      expectNoResponse: true)
+    try check(downgraded.isEmpty, "Upgraded pairing accepted plaintext transfer")
     try server.revoke(device.physicalDeviceID)
     let afterRevocation = Collector.loadState()
     try check(afterRevocation.devices.contains(where: { $0.physicalDeviceID == mobilePhysicalID }) &&

@@ -42,6 +42,8 @@ Mac内の転送待ちログ、ペアリング情報、診断情報の扱いは[�
 
 転送プロトコルの認証・応答・iPhone/Watch別キュー・受信確認・再送防止は `bash scripts/test-transfer-protocol.sh` で自動検証できます。一時ディレクトリだけを使い、実機の記録やMacの転送キューは変更しません。
 
+新しいスマホ版は要求本文（受信確認、重複判定、診断情報を含む）をAES-GCMで封印した転送v3を使用します。外側の端末ID・nonce・発行時刻は認証付き追加データにも含まれ、5分を超えた要求は拒否します。使用済みnonceとv3へ移行済みの端末IDはMac上に保存し、再起動後の再送とv2への戻りを拒否します。未認証のLAN接続は同時16件・25秒までです。旧スマホ版は更新前に限り従来のv2で接続でき、画面からTestFlightまたはApp Storeでの更新を案内します。新旧を混在更新してもペアリングは維持します。旧v2要求には発行時刻がないため、完全な時刻検証はv3移行後に適用されます。
+
 対応するモバイル版にはログ本体の送信前にSHA-256を暗号化したofferとして提示します。端末が保存済みなら本体を送らずキューを完了し、ユーザーが指定した手動再送にはこの省略を適用しません。旧モバイル版には従来の転送を続けます。
 
 Actionsの「Signed beta DMG」を手動実行すると、macOS 27/Xcode 27のランナーでビルドし、Developer ID署名、公証、ステープル、Gatekeeper検証を行います。完了後、実行結果の「Artifacts」から`MochiLog-Mac-Beta-notarized-<実行番号>`をダウンロードすると、DMGとSHA-256チェックサムを取得できます。成果物の保存期間は90日です。このワークフローはGitHub Releaseを作成しません。リポジトリのActions secretsに`MOCHILOG_CERTIFICATE_P12_BASE64`（空パスワードのDeveloper ID Application p12をbase64化した値）、`MOCHILOG_NOTARY_KEY_BASE64`（App Store Connect APIキーp8のbase64）、`MOCHILOG_NOTARY_KEY_ID`、`MOCHILOG_NOTARY_ISSUER_ID`を設定してください。証明書やAPIキーの実体はリポジトリへコミットしません。
