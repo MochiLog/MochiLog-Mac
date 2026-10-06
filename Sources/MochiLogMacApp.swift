@@ -118,6 +118,33 @@ final class CompanionModel: ObservableObject {
   private var server: TransferServer?
   private var pairProcess: Process?
   private var lastAutomaticDecision: [UUID: String] = [:]
+  private var automaticFailures: [UUID: (message: String, first: Date, count: Int)] = [:]
+
+  private func finishAutomaticFailures(for device: PairedDevice, outcome: String) {
+    guard let failure = automaticFailures.removeValue(forKey: device.physicalDeviceID),
+      failure.count > 1 else { return }
+    SupportDiagnostics.record("\(device.name): automatic collection \(outcome) after \(failure.count) attempts; first=\(SupportDiagnostics.localTime(failure.first)); last error=\(failure.message)")
+  }
+
+  private func recordCollectionFailure(for device: PairedDevice, trigger: String,
+    error: Error, manual: Bool) {
+    let message = error.localizedDescription
+    if manual {
+      SupportDiagnostics.record("\(device.name): collection failed; trigger=manual request; error=\(message)")
+      return
+    }
+    if var previous = automaticFailures[device.physicalDeviceID], previous.message == message {
+      previous.count += 1
+      automaticFailures[device.physicalDeviceID] = previous
+      if previous.count.isMultiple(of: 12) {
+        SupportDiagnostics.record("\(device.name): automatic collection still waiting; trigger=\(trigger); attempts=\(previous.count); first=\(SupportDiagnostics.localTime(previous.first)); error=\(message)")
+      }
+    } else {
+      finishAutomaticFailures(for: device, outcome: "failure changed")
+      automaticFailures[device.physicalDeviceID] = (message, Date(), 1)
+      SupportDiagnostics.record("\(device.name): collection failed; trigger=\(trigger); error=\(message)")
+    }
+  }
 
   init() {
     try? BatteryLogStorage.prune()
@@ -331,6 +358,7 @@ final class CompanionModel: ObservableObject {
         resume = now
       }
       if let reason {
+        finishAutomaticFailures(for: device, outcome: "paused")
         let key = "\(reason)|\(Int(resume.timeIntervalSince1970))"
         if lastAutomaticDecision[device.physicalDeviceID] != key {
           SupportDiagnostics.record("\(device.name): automatic collection stopped; trigger=\(reason); resume=\(SupportDiagnostics.localTime(resume))")
@@ -349,7 +377,9 @@ final class CompanionModel: ObservableObject {
     var savedAny = false
     for device in devices {
       do {
-        SupportDiagnostics.record("\(device.name): collection started; trigger=\(manual ? "manual request" : trigger)")
+        if manual || automaticFailures[device.physicalDeviceID] == nil {
+          SupportDiagnostics.record("\(device.name): collection started; trigger=\(manual ? "manual request" : trigger)")
+        }
         collectionDone = 0
         collectionTotal = 0
         let report = try await Task.detached(priority: .utility) { [weak self] in
@@ -361,6 +391,7 @@ final class CompanionModel: ObservableObject {
             }
           }
         }.value
+        finishAutomaticFailures(for: device, outcome: "recovered")
         SupportDiagnostics.saveCollection(report, error: nil, for: device)
         let isStale = report.newestHostAnalyticsAt.map {
           Date().timeIntervalSince($0) >= 48 * 60 * 60
@@ -377,7 +408,7 @@ final class CompanionModel: ObservableObject {
           ? MacTransferL10n.format("mt_m_08", device.name, report.saved, report.skipped)
           : MacTransferL10n.format("mt_m_09", device.name, report.saved, report.skipped, report.failed, report.lastError ?? "")
       } catch {
-        SupportDiagnostics.record("\(device.name): collection failed; trigger=\(manual ? "manual request" : trigger); error=\(error.localizedDescription)")
+        recordCollectionFailure(for: device, trigger: trigger, error: error, manual: manual)
         SupportDiagnostics.saveCollection(nil, error: error, for: device)
         if selectedUDID == device.udid { osPairingState = .failed }
         status = "\(device.name): \(error.localizedDescription)"
