@@ -4,7 +4,7 @@
 
 The requested state is **after first unlock (AFU), followed by screen lock**. Before-first-unlock after reboot is deliberately excluded. This investigation does not remove a passcode, reset trust, re-pair a device, modify protection settings, or delete diagnostic files.
 
-On the paired iPhone 17 running iOS 27.2, no working locked-state Analytics-content acquisition route was verified. Metadata remains visible while the file body is protected. This is a result for the tested device, pairing records and OS versions, not proof that every service or future authentication route is impossible.
+On the paired iPhone 17 running iOS 27.2, no working locked-state Analytics-content acquisition route was verified. Metadata remains visible while the file body is protected. A separate live-battery diagnostic snapshot succeeded shortly after relocking; see the [detailed reproduction recipe](LOCKED_BATTERY_SNAPSHOT_RECIPE.md). That snapshot is not the daily file. These are results for the tested device, pairing records and OS versions, not proof that every service or future authentication route is impossible.
 
 ## Live evidence
 
@@ -38,7 +38,7 @@ Live results on the same AFU-locked iPhone, approximately 20:07–20:30 JST:
 
 The Mac's installed `com.apple.osanalytics.osanalyticshelper.plist` restricts its logTransfer endpoint with `com.apple.ReportCrash.antenna-access` and a `compute-node` device-type limit. That is **Mac-side policy**, not proof of the iPhone service's access policy. Do not request or forge private entitlements, send guessed mutation/submission RPCs, or claim this alternate route works based on a service name alone.
 
-The iPhone was reported `passcodeRequired: true`, `unlockedSinceBoot: true` before and after the final independent probes. No trust reset or new pairing was performed. A while-unlocked control and a freshly accepted unlock credential were not established in this follow-up. Developer Mode-off and Windows checks also remain required if a working acquisition route is later found.
+The iPhone was reported `passcodeRequired: true`, `unlockedSinceBoot: true` before and after these independent probes. No trust reset or new pairing was performed. A while-unlocked control was not established in this early batch; the later control below succeeded. Developer Mode-off and Windows checks remain required if a working acquisition route is later found.
 
 Nine offline tests cover fragmented plist/HTTP2 replies, invalid/oversized/truncated frames, unexpected stream IDs, known XPC fixtures, denied and incomplete AFC reads, and private atomic output publication without overwriting existing files. The C helper builds with `-Wall -Wextra -Werror`. This is research tooling, not a replacement for the packaged collector; no product behavior or release changed.
 
@@ -56,7 +56,7 @@ Further independent probes, approximately 20:51–21:24 JST:
 | osanalytics.logTransfer custom RemoteXPC transport | A transport-only negotiation probe was implemented with no guessed service RPC. The live attempt was blocked by native tunnel error 1016 before reaching this service; no conclusion about its body-read permission can be drawn. |
 | Existing OS RemotePairing credential | The native paired-device snapshot already contained `remoteUnlockHostKey`. It was read through a private binary parent pipe, kept in process memory, and compared with the saved tool credential. They **differed**. No key bytes, length, hash or device identifier were printed or saved. No key-creation or refresh request was made. |
 
-Different keys do not by themselves mean corruption or expiry: the OS and a separate tool can have distinct pairing identities. The earlier experiment combined an OS native tunnel/RSD context with the tool's saved unlock credential, so EscrowFailure cannot rule out an identity-matched credential. The independent client now supports `--checkin os-escrow` using only the already-present OS snapshot key. Its first live attempt was blocked at tunnel creation with 1016; **the OS credential has not yet been submitted to RSDCheckin**. A user-assisted one-time unlock and immediate relock was requested solely to restore the test connection and compare that route. Do not call it a successful locked-state acquisition or claim that collecting a key removes future recent-unlock requirements.
+Different keys do not by themselves mean corruption or expiry: the OS and a separate tool can have distinct pairing identities. The earlier experiment combined an OS native tunnel/RSD context with the tool's saved unlock credential, so EscrowFailure cannot rule out an identity-matched credential. The independent client supports `--checkin os-escrow` using only the already-present OS snapshot key. Its first live attempt was blocked at tunnel creation with 1016. The user subsequently unlocked and relocked the phone, permitting the controlled comparison below. Do not claim that collecting a key removes future recent-unlock requirements.
 
 `CopyRemoteUnlockHostKeyRequest` and remote-unlock support were found in the installed framework's protocol metadata. That request is deliberately not sent because obtaining a missing credential may involve initialization. The read-only snapshot route fails if no existing key is present. Private entitlement changes, blind assertion-flag experiments, trust resets, credential regeneration and security-policy changes were not performed.
 
@@ -64,13 +64,31 @@ The live-battery alternatives return metric field availability only, with `daily
 
 The expanded tooling has **13 passing offline tests**, including private credential-pipe bounds/missing-key handling, absence of credential/serial data in stage output, and an alternate transport bootstrap that sends no service operation. Product collection still requires unlock as before; Windows live verification has not occurred in this follow-up.
 
+## Unlocked control and fresh AFU-locked comparison
+
+The user unlocked the phone, then explicitly relocked it. The state check before the control returned `passcodeRequired: false`, `unlockedSinceBoot: true`. Before the locked-file probes, after them, and after the battery snapshot probes it returned `passcodeRequired: true`, `unlockedSinceBoot: true`. Tests ran approximately 22:02–22:08 JST.
+
+| Probe | Observation | Limit |
+| --- | --- | --- |
+| Unlocked, plain check-in, independent AFC | Complete read of the same 21,327,604-byte Analytics file, 36,136 lines, SHA-256 computed; private temporary body discarded. | Positive control: the independent reader and report path work when unlocked. |
+| Unlocked, existing OS key attached to check-in | RSDCheckin and StartService responses had no reported error; connection closed before the first complete AFC reply. | This closure also occurs unlocked, so it cannot be attributed to screen-lock policy or claimed as a working authenticated file channel. |
+| AFU-locked, existing OS key attached | Same check-in responses, then connection closed before the first complete AFC reply. | Key submitted successfully at the protocol stage, but no file body or metadata was acquired on this channel. |
+| AFU-locked, plain check-in, independent AFC | Stat still returned 21,327,604 bytes; FILE_OPEN again returned PERM_DENIED (10). | The identical body is readable unlocked and denied locked. Changing the client library did not remove this denial. |
+| AFU-locked, plain check-in, GasGauge | Status Success; numeric CycleCount and FullChargeCapacity fields present. | Current diagnostic snapshot only. Field names logged; raw numeric values and identities not persisted. |
+| AFU-locked, plain check-in, IORegistry / IOPMPowerSource | Status Success; numeric AppleRawMaxCapacity, CurrentCapacity, CycleCount, DesignCapacity, FullChargeCapacity, MaxCapacity and NominalChargeCapacity present. | Current diagnostic snapshot only; units, precision and equality with daily Analytics values unverified. |
+| AFU-locked, existing OS key, GasGauge | Check-in responses arrived, then connection closed before a complete diagnostic reply. | Plain check-in is the successful snapshot route; do not imply the OS key enabled it. |
+| osanalytics.logTransfer | Service port discovered; normal RemoteXPC bootstrap timed out. No service-specific request sent. | Transport negotiation remains unverified, not evidence of a definitive permission rejection. |
+| Remote file_relay availability | Plain RSDCheckin/StartService completed and a connection was available. No Sources request or archive requested. | Service availability is not permission to collect an archive. No daily content acquisition proven. |
+
+The detailed [locked battery snapshot recipe](LOCKED_BATTERY_SNAPSHOT_RECIPE.md) records the exact requests, commands, fields and state checks for future work. It may be a candidate for a separate snapshot feature after further validation; it is not an implementation of unattended daily-log collection. Successful snapshots were obtained only within minutes of relocking. The later final state-check attempt timed out; it did not return new state fields or change the earlier successful before/after snapshot checks. No long-lock threshold was measured.
+
 ## Why escrow remains a candidate, not a solution
 
 [Apple's physical pairing model](https://support.apple.com/guide/security/physical-pairing-model-security-secadb5b6434/web) distinguishes services requiring a recently unlocked device from services requiring a currently unlocked device. It does not guarantee locked-state access to Analytics files. [Apple's escrow keybag description](https://support.apple.com/guide/security/keybags-for-data-protection-sec6483d5760/web) explains authorized backup/sync without repeated passcode entry; that is not a guarantee for crash-report AFC.
 
 pymobiledevice3 supports passing an escrow bag to classic StartService, and an existing RemotePairing `remote_unlock_host_key` to [RSDCheckin](https://github.com/doronz88/pymobiledevice3/blob/v11.19.1/pymobiledevice3/remote/remote_service_discovery.py). Its CrashReportsManager/AfcService does not enable this by default. These are different credentials and must not be substituted for each other or copied into MochiLog's app-pairing JSON.
 
-The next controlled experiment, if the user unlocks the phone, is to validate the existing credential while unlocked, establish whether an authorized fresh RemotePairing unlock credential is needed, and then retry after screen lock. Preserve the existing pairing and key storage. A successful read while unlocked is only a control; require a nonempty complete file and locked state before and after the final read. A working result must then be checked with Developer Mode off and on Windows' userspace RSD transport before changing product promises.
+The unlocked and relocked comparisons above are now complete for the existing OS snapshot key. The next investigation must explain its post-check-in channel closure before treating that credential route as usable. Preserve the existing pairing and key storage. A successful read while unlocked is only a control; require a nonempty complete file and locked state before and after the final read. A working result must then be checked with Developer Mode off and on Windows' userspace RSD transport before changing product promises. The successful plain-check-in battery snapshots need separate long-lock, platform, units and accuracy checks.
 
 Keeping an already-open file handle across screen lock is a separate unverified experiment. It cannot by itself solve daily collection of files that did not exist when the device was unlocked. Do not keep sessions indefinitely or advertise unattended acquisition on that basis.
 

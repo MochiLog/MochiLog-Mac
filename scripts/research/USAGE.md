@@ -1,6 +1,6 @@
 # Independent locked-state diagnostic probe
 
-Developer research only. This is a read-only protocol client, not MochiLog's shipped collector. It targets an already trusted iPhone after first unlock, then screen lock. Before-first-unlock after reboot is excluded. See [results and limits](../../docs/LOCKED_ANALYTICS_RESEARCH.md).
+Developer research only. This is a read-only protocol client, not MochiLog's shipped collector. It targets an already trusted iPhone after first unlock, then screen lock. Before-first-unlock after reboot is excluded. See [results and limits](../../docs/LOCKED_ANALYTICS_RESEARCH.md) and the [successful locked battery snapshot recipe](../../docs/LOCKED_BATTERY_SNAPSHOT_RECIPE.md); the snapshot is separate from daily-file acquisition.
 
 ## Build and run
 
