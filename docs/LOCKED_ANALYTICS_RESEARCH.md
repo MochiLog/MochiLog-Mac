@@ -18,7 +18,29 @@ Host: macOS 27.2 (26B5101f), pymobiledevice3 11.19.1 (both packaged helper and l
 | Classic paired Wi-Fi lockdownd, with escrow | Classic escrow information exists; connection to the requested service port was refused. | No successful acquisition; transport/service failure cannot establish why the escrow route failed. |
 | Apple CoreDevice `systemCrashLogs` | File listing marked the 21.3 MB file Readable. Copy failed with CoreDevice 7000 → remoteservices 11001 → remote openat POSIX 1 (EPERM). | The Readable metadata flag is not a guarantee of locked-state content access. The underlying failure occurred on the device. |
 
-No keys, certificates, pairing records, diagnostic contents, phone UDIDs or addresses are included in this memo. Research scripts and command result files remain outside tracked source. The probe did not flush/move reports or use destructive pull options.
+No keys, certificates, pairing records, diagnostic contents, phone UDIDs or addresses are included in this memo. Raw command results remain outside tracked source. The follow-up independent research client is tracked under `scripts/research/`; it contains no device data. The probe did not flush/move reports or use destructive pull options.
+
+## Independent implementation follow-up
+
+At the user's request, an independent read-only client was implemented in C and Python's standard library. It does not import, execute or link pymobiledevice3 or libimobiledevice. Protocol formats were studied from their upstream source; this is not an independent invention of Apple's protocols. See [research client instructions](../scripts/research/README.md).
+
+The code implements macOS XPC tunnel assertions for an **already paired** device, HTTP/2 framing, RemoteXPC encoding/decoding and RSD discovery, length-prefixed plist check-in, classic lockdownd sessions with mutually authenticated TLS and an exact device-certificate pin, and read-only AFC stat/open/read/close. The tunnel uses Apple's installed `remotepairingd`/`remoted` services. It is not a new implementation of the OS's trust or tunnel cryptography. `nettop` and `remotectl dumpstate` supply the existing OS endpoint and host identity; neither performs file acquisition for the remote-mode client.
+
+Live results on the same AFU-locked iPhone, approximately 20:07–20:30 JST:
+
+| Independent route | Result |
+| --- | --- |
+| C tunnel + custom HTTP/2/RemoteXPC + plain RSD check-in + custom AFC | Peer identifier verified, service started, file stat reported 21,327,604 bytes. Read-only FILE_OPEN returned status 10 (PERM_DENIED). Repeated at 20:28 with the same result. No file body was copied. |
+| Same transport, existing RemotePairing unlock credential | RSDCheckin was accepted, but StartService returned EscrowFailure. This confirms that this stored credential did not authorize this service request. |
+| Classic TCP, existing usbmuxd trust record | StartSession and pinned mutual TLS succeeded; the device identifier matched. StartService was accepted but connection to its requested service port was refused. |
+| Stock `remotectl netcat` bridge | Could not connect to the named diagnostic service. The independent socket implementation above succeeded further, so this bridge failure is not the basis of the locked-file conclusion. |
+| Independent service inventory | Found `com.apple.osanalytics.logTransfer`, advertising UsesRemoteXPC. No supported read-only Analytics-content request was established for it. Its presence is not acquisition success. |
+
+The Mac's installed `com.apple.osanalytics.osanalyticshelper.plist` restricts its logTransfer endpoint with `com.apple.ReportCrash.antenna-access` and a `compute-node` device-type limit. That is **Mac-side policy**, not proof of the iPhone service's access policy. Do not request or forge private entitlements, send guessed mutation/submission RPCs, or claim this alternate route works based on a service name alone.
+
+The iPhone was reported `passcodeRequired: true`, `unlockedSinceBoot: true` before and after the final independent probes. No trust reset or new pairing was performed. A while-unlocked control and a freshly accepted unlock credential were not established in this follow-up. Developer Mode-off and Windows checks also remain required if a working acquisition route is later found.
+
+Nine offline tests cover fragmented plist/HTTP2 replies, invalid/oversized/truncated frames, unexpected stream IDs, known XPC fixtures, denied and incomplete AFC reads, and private atomic output publication without overwriting existing files. The C helper builds with `-Wall -Wextra -Werror`. This is research tooling, not a replacement for the packaged collector; no product behavior or release changed.
 
 ## Why escrow remains a candidate, not a solution
 
