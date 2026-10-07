@@ -14,8 +14,10 @@ struct LiveBatterySimulatorServer {
       "FullChargeCapacity": 3800, "CurrentCapacity": 67]
     let digest = SHA256.hash(data: try JSONSerialization.data(withJSONObject: values, options: [.sortedKeys]))
       .map { String(format: "%02x", $0) }.joined()
+    let details = "[{\"path\":[\"BatteryData\",\"Huge\"],\"kind\":\"number\",\"value\":\"18446744073709551615\"},{\"path\":[\"Flag\"],\"kind\":\"boolean\",\"value\":\"false\"}]"
+    let detailDigest = SHA256.hash(data: Data(details.utf8)).map { String(format: "%02x", $0) }.joined()
     server.liveBattery.set(LiveBatterySnapshot(version: 1, values: values, revision: digest,
-      acquiredAt: ISO8601DateFormatter().string(from: Date()), charging: nil), for: id)
+      acquiredAt: ISO8601DateFormatter().string(from: Date()), charging: nil, detailsJSON: details, detailsRevision: detailDigest), for: id)
     server.onLiveBatteryRequested = { _, _ in
       print("authenticated live request")
       fflush(stdout)

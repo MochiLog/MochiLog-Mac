@@ -1,9 +1,10 @@
 """Current battery values through the maintained pymobiledevice3 API.
 
-No raw registry dump, serial number, history file, or record import is emitted.
-The wrapper only chooses an existing paired transport and filters its response.
+The selected battery entry is displayed in memory only, including all returned
+fields. It is never written to history, diagnostic files or battery records.
 """
 import argparse
+import base64
 import asyncio
 from datetime import datetime, timezone
 import hashlib
@@ -44,11 +45,52 @@ def filter_values(raw):
     return values
 
 
+def detail_fields(raw):
+    if not isinstance(raw, dict) or not raw:
+        raise ValueError('No battery entry')
+    rows = []
+    def visit(value, path):
+        if len(path) > 32 or len(rows) >= 10000:
+            raise ValueError('Battery entry exceeds display bounds')
+        if isinstance(value, dict) and value:
+            for key in sorted(value):
+                if not isinstance(key, str) or len(key) > 512:
+                    raise ValueError('Invalid battery key')
+                visit(value[key], path + [key])
+            return
+        if isinstance(value, (list, tuple)) and value:
+            for index, item in enumerate(value):
+                visit(item, path + [f'[{index}]'])
+            return
+        if value is None: kind, text = 'null', 'null'
+        elif type(value) is bool: kind, text = 'boolean', 'true' if value else 'false'
+        elif type(value) in (int, float): kind, text = 'number', str(value)
+        elif isinstance(value, str): kind, text = 'string', value
+        elif isinstance(value, (bytes, bytearray)): kind, text = 'data', base64.b64encode(value).decode('ascii')
+        elif isinstance(value, datetime): kind, text = 'date', value.isoformat()
+        elif isinstance(value, dict): kind, text = 'dictionary', '{}'
+        elif isinstance(value, (list, tuple)): kind, text = 'array', '[]'
+        else: raise ValueError('Unsupported battery value type')
+        if len(text) > 131072:
+            raise ValueError('Battery value exceeds display bounds')
+        rows.append({'path': path, 'kind': kind, 'value': text})
+    visit(raw, [])
+    canonical = json.dumps(rows, sort_keys=True, separators=(',', ':'), ensure_ascii=True, allow_nan=False)
+    if len(canonical.encode()) > 262144:
+        raise ValueError('Battery entry exceeds display bounds')
+    return canonical
+
+
 def snapshot(raw):
-    values = filter_values(raw)
+    details = detail_fields(raw)
+    try:
+        values = filter_values(raw)
+    except ValueError:
+        values = {}
     revision = hashlib.sha256(json.dumps(values, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
     return {'version': 1, 'values': values, 'revision': revision,
-            'acquiredAt': datetime.now(timezone.utc).isoformat(timespec='seconds')}
+            'acquiredAt': datetime.now(timezone.utc).isoformat(timespec='seconds'),
+            'detailsJSON': details, 'detailsRevision': hashlib.sha256(details.encode()).hexdigest()}
 
 
 async def read(provider):
@@ -58,6 +100,13 @@ async def read(provider):
 
 
 async def run(args):
+    if not args.host and getattr(args, "fallback_host", None):
+        try:
+            local = argparse.Namespace(udid=args.udid, host=None, port=args.port)
+            return await asyncio.wait_for(run(local), 8)
+        except Exception:
+            remote = argparse.Namespace(udid=args.udid, host=args.fallback_host, port=args.port)
+            return await run(remote)
     if args.host:
         from pymobiledevice3.remote import userspace_tunnel
         from pymobiledevice3.remote.tunnel_service import create_core_device_tunnel_service_using_remotepairing
@@ -90,6 +139,7 @@ def main(argv):
     parser = argparse.ArgumentParser()
     parser.add_argument('--udid', required=True)
     parser.add_argument('--host')
+    parser.add_argument('--fallback-host')
     parser.add_argument('--port', type=int, default=49152)
     args = parser.parse_args(argv)
     # Library exceptions can embed a full registry reply. Never log them.

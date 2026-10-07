@@ -18,6 +18,8 @@ private struct PullRequest: Decodable {
   let dailyResumeMAC: String?
   let liveBatteryVersion: String?
   let liveBatteryRevision: String?
+  let liveBatteryDetailsVersion: String?
+  let liveBatteryDetailsRevision: String?
   let liveBatteryRefresh: String?
   let offerVersion: String?
   let offerMAC: String?
@@ -105,6 +107,8 @@ final class TransferServer: @unchecked Sendable {
   private var tailnetReadSource: DispatchSourceRead?
   private var tailnetAddress: String?
   private var activeTailnetClients = 0
+  private var liveBatteryPeerAddresses: [UUID: String] = [:]
+  func liveBatteryPeerAddress(for id: UUID) -> String? { queue.sync { liveBatteryPeerAddresses[id] } }
   private var state: CompanionState
   private var replayState: ReplayState?
   private var activeLANConnections: [ObjectIdentifier: NWConnection] = [:]
@@ -344,7 +348,13 @@ final class TransferServer: @unchecked Sendable {
           _ = Darwin.recv(client, &buffer, 1, 0)
           return
         }
-        let response = queue.sync { makeResponse(to: body) }
+        var peer = sockaddr_in()
+        var peerLength = socklen_t(MemoryLayout<sockaddr_in>.size)
+        let hasPeer = withUnsafeMutablePointer(to: &peer) { pointer in
+          pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { getpeername(client, $0, &peerLength) == 0 }
+        }
+        let peerAddress = hasPeer ? String(cString: inet_ntoa(peer.sin_addr)) : nil
+        let response = queue.sync { makeResponse(to: body, peerAddress: peerAddress) }
         guard let response else { return }
         onTransferActivity?(response.deviceID, true)
         defer { onTransferActivity?(response.deviceID, false) }
@@ -448,7 +458,11 @@ final class TransferServer: @unchecked Sendable {
       })
       return
     }
-    guard let response = makeResponse(to: requestData) else {
+    let peerAddress: String? = {
+      guard case .hostPort(let host, _) = connection.endpoint else { return nil }
+      return String(describing: host)
+    }()
+    guard let response = makeResponse(to: requestData, peerAddress: peerAddress) else {
       connection.cancel()
       return
     }
@@ -604,7 +618,7 @@ final class TransferServer: @unchecked Sendable {
     return (request, false)
   }
 
-  private func makeResponse(to requestData: Data) -> PreparedResponse? {
+  private func makeResponse(to requestData: Data, peerAddress: String? = nil) -> PreparedResponse? {
     guard let (request, secure) = decodePullRequest(requestData),
       request.version == "2",
       request.hostID == state.hostID,
@@ -647,6 +661,13 @@ final class TransferServer: @unchecked Sendable {
       return PreparedResponse(data: withUnsafeBytes(of: &length) { Data($0) } + sealed,
         deviceID: device.physicalDeviceID)
     }
+    // Learn only the authenticated socket peer; never trust a client-supplied address.
+    if secure, let peerAddress, let address = IPv4Address(peerAddress) {
+      let bytes = Array(address.rawValue)
+      if bytes[0] == 100 && (64...127).contains(bytes[1]) {
+        liveBatteryPeerAddresses[device.physicalDeviceID] = peerAddress
+      }
+    }
     onAuthenticatedRequest?(device.physicalDeviceID, now)
     if backgroundNotice {
       onAppPresence?(device.physicalDeviceID, false, now)
@@ -678,7 +699,8 @@ final class TransferServer: @unchecked Sendable {
       // daily-pause changes, diagnostics persistence, or file queue access here.
       guard secure, request.liveBatteryVersion == "1", request.ack == "",
         let control = liveBattery.response(for: device.physicalDeviceID,
-          revision: request.liveBatteryRevision) else { return nil }
+          revision: request.liveBatteryRevision, includesDetails: request.liveBatteryDetailsVersion == "1",
+          detailsRevision: request.liveBatteryDetailsRevision) else { return nil }
       onLiveBatteryRequested?(device.physicalDeviceID, request.liveBatteryRefresh == "1")
       return try? encryptedLogResponse(control, name: "", request: request, device: device)
     }

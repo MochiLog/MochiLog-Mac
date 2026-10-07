@@ -78,3 +78,7 @@ Values refresh periodically while the app is open. Only changed values are sent,
 These are current diagnostic values, separate from daily Analytics files. They are not saved as history, battery records or iCloud data, and are discarded when the app exits. Available fields and their meaning depend on the device and OS; they may differ from daily Analytics values. A locked-device query has succeeded in testing, but long locks and connection conditions can prevent acquisition. This feature does not measure live Apple Watch battery values. Manual log import on mobile remains available without a computer.
 
 Use the new MochiLog 4.0.0 beta with MochiLog Mac 0.2.14 or MochiLog Windows 0.1.11 or later. Cellular access requires the companion cellular setting and connectivity through Tailscale.
+
+「APIの全項目」を展開すると、APIが返す製造情報・状態フラグ・バッテリー識別情報なども確認できます。元の項目名・値を表示し、単位は推測しません。これらもメモリ内だけで扱い、履歴・サポートログには保存しません。TailscaleとPC連携のモバイル通信許可を使って外出先からも受信できます。PCから新しい値を取得するには端末の診断サービスに接続できる必要があり、VPNの接続だけで取得を保証するものではありません。
+
+Expand **All API fields** to view manufacturing metadata, flags, battery identifiers and other returned fields. Original names and values are preserved without guessing units; fields remain in memory and are not saved to history or support logs. Existing Tailscale routes and the PC Link cellular permission also allow receiving outside the local network. Fresh acquisition additionally requires a reachable device diagnostics service; VPN connectivity alone does not guarantee acquisition.

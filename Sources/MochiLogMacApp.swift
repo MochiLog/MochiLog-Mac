@@ -239,7 +239,8 @@ final class CompanionModel: ObservableObject {
     isBusy = true
     defer { isBusy = false; liveBatteryBusy.remove(id); lastBatteryAttempt[id] = Date() }
     do {
-      let snapshot = try await Task.detached { try Collector.currentBattery(device) }.value
+      let peerAddress = server?.liveBatteryPeerAddress(for: id)
+      let snapshot = try await Task.detached { try Collector.currentBattery(device, peerAddress: peerAddress) }.value
       guard state.devices.contains(where: { $0.physicalDeviceID == id }) else {
         server?.liveBattery.remove(id); liveBatterySnapshots.removeValue(forKey: id); return
       }

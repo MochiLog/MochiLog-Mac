@@ -755,15 +755,20 @@ struct TransferProtocolTests {
     print("Checking session-only live battery responses, unchanged values and replay")
     let fixture: [String: Any] = ["version": 1, "values": ["CycleCount": 245, "DesignCapacity": 4000],
       "revision": String(repeating: "a", count: 64), "acquiredAt": "2026-10-07T12:00:00Z"]
-    let live = try LiveBatterySnapshot.decode(JSONSerialization.data(withJSONObject: fixture))
+    let details = "[{\"path\":[\"BatteryData\",\"Huge\"],\"kind\":\"number\",\"value\":\"18446744073709551615\"}]"
+    let detailDigest = SHA256.hash(data: Data(details.utf8)).map { String(format: "%02x", $0) }.joined()
+    var fullFixture = fixture
+    fullFixture["detailsJSON"] = details; fullFixture["detailsRevision"] = detailDigest
+    let live = try LiveBatterySnapshot.decode(JSONSerialization.data(withJSONObject: fullFixture))
     server.liveBattery.set(live, for: mobilePhysicalID)
-    func liveRequest(_ revision: String = "", nonce: UUID = UUID(), sealed: Bool = true) throws -> [String: Any] {
-      let payload = ["version": "2", "hostID": hostID.uuidString,
+    func liveRequest(_ revision: String = "", nonce: UUID = UUID(), sealed: Bool = true, detailsRevision: String? = nil) throws -> [String: Any] {
+      var payload = ["version": "2", "hostID": hostID.uuidString,
         "physicalDeviceID": mobilePhysicalID.uuidString, "nonce": nonce.uuidString, "ack": "",
         "mac": HMAC<SHA256>.authenticationCode(for: Data(
           "v2|\(hostID.uuidString)|\(mobilePhysicalID.uuidString)|\(nonce.uuidString)|".utf8),
           using: SymmetricKey(data: v3Key)).map { String(format: "%02x", $0) }.joined(),
         "liveBatteryVersion": "1", "liveBatteryRevision": revision]
+      if let detailsRevision { payload["liveBatteryDetailsVersion"] = "1"; payload["liveBatteryDetailsRevision"] = detailsRevision }
       let wire = try request(endpoint, hostID: hostID, device: v3Paired, nonce: nonce,
         expectNoResponse: !sealed, overridePayload: payload, sealed: sealed)
       if !sealed { try check(wire.isEmpty, "Live fields accepted without v3"); return [:] }
@@ -774,6 +779,16 @@ struct TransferProtocolTests {
     let firstLive = try liveRequest()
     try check(firstLive["type"] as? String == "live-battery" && firstLive["values"] != nil,
       "First snapshot omitted values")
+    try check(firstLive["detailsJSON"] == nil, "Legacy client received opt-in details")
+    let fullLive = try liveRequest(live.revision, detailsRevision: "")
+    try check(fullLive["detailsJSON"] as? String == details && fullLive["values"] == nil,
+      "Full details change was coupled to core revision")
+    let sameDetails = try liveRequest(live.revision, detailsRevision: detailDigest)
+    try check(sameDetails["detailsJSON"] == nil && sameDetails["detailsRevision"] as? String == detailDigest,
+      "Unchanged details were resent")
+    try check(live.fields.first?.value == "18446744073709551615", "Large integer lost precision")
+    do { _ = try RawBatteryField.decode(details + " ", revision: detailDigest); fatalError("Tampered details accepted") }
+    catch { }
     let unchangedLive = try liveRequest(live.revision)
     try check(unchangedLive["values"] == nil && unchangedLive["acquiredAt"] != nil,
       "Unchanged snapshot resent values or lost acquisition time")
