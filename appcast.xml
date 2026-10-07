@@ -1,79 +1,36 @@
-<?xml version="1.0" standalone="yes"?>
-<!-- sparkle-sign-warning:
+<?xml version="1.0" standalone="yes"?><!-- sparkle-sign-warning:
 IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
--->
-<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+--><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
     <channel>
         <title>MochiLog Mac</title>
         <item>
-            <title>0.2.13</title>
-            <pubDate>Sat, 26 Sep 2026 02:20:52 +0900</pubDate>
-            <sparkle:version>16</sparkle:version>
-            <sparkle:shortVersionString>0.2.13</sparkle:shortVersionString>
+            <title>0.2.14</title>
+            <pubDate>Wed, 07 Oct 2026 14:58:47 +0000</pubDate>
+            <sparkle:version>17</sparkle:version>
+            <sparkle:shortVersionString>0.2.14</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>27.0</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[# MochiLog Mac 0.2.13 Beta
+            <description sparkle:format="markdown"><![CDATA[# MochiLog Mac 0.2.14 Beta
 
 ## 日本語
 
-スマホアプリからの受信確認、重複判定、診断情報を含む転送要求全体を暗号化しました。要求の有効期限と再送防止情報を保存し、アプリ再起動後の再送や新方式から旧方式への戻りを防ぎます。未認証接続の数と待ち時間にも上限を設けました。
+日次ログとは別に、ペアリング済みiPhone・iPadの現在の充放電回数・設計容量・最大容量などを確認できるベータ機能を追加しました。PCの概要画面に端末別で表示し、スマホの高度な設定でオンにすると専用タブでも表示できます（初期状態はオフ）。既存のペアリングを引き継ぎます。
 
-旧版のiPhone・iPadアプリは、更新するまで既存のペアリングのまま利用できます。旧方式を検出するとTestFlightまたはApp Storeでの更新を案内します。ログの解析と記録は引き続きスマホ側で行います。
+アプリを開いている間に定期取得し、変化した値だけを暗号化して転送します。最終取得日時、欠けている項目、取得失敗時の古い値を区別し、今すぐ受信／送信・PCへの更新要求にも対応します。現在値はメモリだけで扱い、履歴・記録・iCloud・診断ログには保存しません。
 
-## English
-
-The full transfer request, including acknowledgements, duplicate checks, and diagnostics, is now encrypted. Request expiry and persistent replay protection reject repeated requests after an app restart and prevent a connection upgraded to the new protocol from silently falling back. Unauthenticated connections are also bounded by count and time.
-
-Older iPhone and iPad builds can keep their existing pairing until updated. The Mac prompts for a TestFlight or App Store update when it detects the previous protocol. Parsing and record storage remain on the mobile app.
-]]></description>
-            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.13/MochiLog-Mac-Beta.dmg" length="55989419" type="application/octet-stream" sparkle:edSignature="1HUQMzhwqd1uwgTrbCU5owKgKoDtBmqQ0OGn/rbUfUEYv5GHY7gX4fenku1YAhoruY758r3htHGD0kRDLaypBA=="/>
-        </item>
-        <item>
-            <title>0.2.12</title>
-            <pubDate>Sat, 26 Sep 2026 02:20:52 +0900</pubDate>
-            <sparkle:version>15</sparkle:version>
-            <sparkle:shortVersionString>0.2.12</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>27.0</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[# MochiLog Mac 0.2.12 Beta
-
-## 日本語
-
-iPhone・iPadへ送信済みの電池ログをPC側から削除した後も、取得済みの日付を確認できるようにしました。必要なiPhone本体とApple Watchのログが揃った日は、自動収集を翌日まで休止します。「今すぐログを収集」は引き続き利用できます。
-
-電池ログではない短い解析ファイルを繰り返し取得する問題も修正しました。同じ内容を複数回確認してから対象外にするため、取得途中の電池ログを早まって除外しません。
+取得にはpymobiledevice3の診断APIを使用します。機種・OS・接続状態によって取得できない項目があります。ロック中の取得成功を確認していますが、常に成功することや日次ログのロック中取得を保証するものではありません。Apple Watchの現在値は対象外です。スマホの新しい4.0.0ベータと組み合わせてください。
 
 ## English
 
-The Mac now remembers confirmed daily logs after their raw files are delivered and removed. Once the required iPhone and Apple Watch logs are available, automatic collection pauses until the next day. **Collect Logs Now** remains available.
+Added a beta view of current cycle count, design capacity and other capacity fields for paired iPhones and iPads, separate from daily Analytics logs. Each device has a card on the computer dashboard. Enable Live Battery in the mobile app’s Advanced Settings to show a dedicated tab; it is off by default. Existing pairings are preserved.
 
-The collector also stops repeatedly downloading short analytics files that are not battery logs. It checks for unchanged content across multiple attempts before excluding a file, so an incomplete battery log remains eligible for retry.
+While the app is open, values refresh periodically and only changed values are transferred using encryption. Acquisition time, unavailable fields and outdated values after a failed refresh are shown separately. Receive Now, Send Now and mobile requests to refresh the computer are available. Values remain in memory only and are never saved to history, records, iCloud or diagnostic logs.
+
+Acquisition uses the maintained pymobiledevice3 diagnostics API. Field availability depends on device, OS and connectivity. A locked query has succeeded in testing, but this does not guarantee all locked queries or locked-state daily Analytics collection. Live Apple Watch values are not included. Use with the new MochiLog 4.0.0 beta.
 ]]></description>
-            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.12/MochiLog-Mac-Beta.dmg" length="56246418" type="application/octet-stream" sparkle:edSignature="r5h4N3VlTnmsoPbXonpQ4g6c4zkIlr76tTV1cH81A0Zyhaq5k40fOMdOagHdzeY3sr211wD/t/5kzzthzgj7AQ=="/>
-        </item>
-        <item>
-            <title>0.2.11</title>
-            <pubDate>Sat, 26 Sep 2026 02:20:52 +0900</pubDate>
-            <sparkle:version>14</sparkle:version>
-            <sparkle:shortVersionString>0.2.11</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>27.0</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[# MochiLog Mac 0.2.11 Beta
-
-## 日本語
-
-ウィンドウの×ボタンを押すとMochiLog Macが終了し、ログの自動収集と転送が止まってしまう問題を修正しました。初期設定ではウィンドウを閉じてもメニューバーで動作を続けます。アイコンからウィンドウを再表示でき、「終了」を選ぶと完全に停止します。
-
-「設定 → ウィンドウを閉じたとき」から、×ボタンで完全に終了する動作も選べます。バックグラウンドで動作を続ける設定では、メニューバーのアイコンが常に表示されます。
-
-## English
-
-Closing the MochiLog Mac window could quit the app and stop automatic log collection and transfers. The window now closes while the app keeps running in the menu bar by default. Reopen it from the menu bar icon, or choose **Quit** to stop the app completely.
-
-Under **Settings → When closing the window**, you can instead choose to quit when closing the window. The menu bar icon remains visible whenever background operation is selected.
-]]></description>
-            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.11/MochiLog-Mac-Beta.dmg" length="55210820" type="application/octet-stream" sparkle:edSignature="EniQPNrepDOn6iRSe49Nw8fGMymA3q42TBWeR221TvlQeVj6SKM9Wc+wUNZdGKtaFIbzmA4BXQuc3dDUXL8MCw=="/>
+            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.14/MochiLog-Mac-Beta.dmg" length="56654919" type="application/octet-stream" sparkle:edSignature="off5SFa/Xzc61p2Hh23jvlF5pBFDT6rK9yv+efmGkYA3YMLhWosqksRc6yNfF4oVReeKuxzxwpiil1oIp5lkAw=="></enclosure>
         </item>
     </channel>
-</rss>
-<!-- sparkle-signatures:
-edSignature: 0EJMJwl0YQEFkCAEep/E0dAXqc1bhIwTe/jUriZIf6v7QEHBb30Rz7kVqZhah+SR2oOcRSB1rMTyEpQWkuxnAA==
-length: 5919
+</rss><!-- sparkle-signatures:
+edSignature: 9QASZGSlu+x3mhXYqHYPbZzXTGXIUzP9gMtgELevcQlsvPo24GL/HaSJxerdMc3hh4J/HFYBqlMBiXXn8C85BA==
+length: 3437
 -->
