@@ -752,6 +752,39 @@ struct TransferProtocolTests {
     _ = try opened(request(endpoint, hostID: hostID, device: v3Paired,
       nonce: secureNonce, sealed: true), secret: v3Key,
       context: (hostID, mobilePhysicalID, secureNonce))
+    print("Checking session-only live battery responses, unchanged values and replay")
+    let fixture: [String: Any] = ["version": 1, "values": ["CycleCount": 245, "DesignCapacity": 4000],
+      "revision": String(repeating: "a", count: 64), "acquiredAt": "2026-10-07T12:00:00Z"]
+    let live = try LiveBatterySnapshot.decode(JSONSerialization.data(withJSONObject: fixture))
+    server.liveBattery.set(live, for: mobilePhysicalID)
+    func liveRequest(_ revision: String = "", nonce: UUID = UUID(), sealed: Bool = true) throws -> [String: Any] {
+      let payload = ["version": "2", "hostID": hostID.uuidString,
+        "physicalDeviceID": mobilePhysicalID.uuidString, "nonce": nonce.uuidString, "ack": "",
+        "mac": HMAC<SHA256>.authenticationCode(for: Data(
+          "v2|\(hostID.uuidString)|\(mobilePhysicalID.uuidString)|\(nonce.uuidString)|".utf8),
+          using: SymmetricKey(data: v3Key)).map { String(format: "%02x", $0) }.joined(),
+        "liveBatteryVersion": "1", "liveBatteryRevision": revision]
+      let wire = try request(endpoint, hostID: hostID, device: v3Paired, nonce: nonce,
+        expectNoResponse: !sealed, overridePayload: payload, sealed: sealed)
+      if !sealed { try check(wire.isEmpty, "Live fields accepted without v3"); return [:] }
+      let plain = try opened(wire, secret: v3Key, context: (hostID, mobilePhysicalID, nonce))
+      try check(plain.0.isEmpty, "Live request returned a log filename")
+      return try JSONSerialization.jsonObject(with: plain.1) as! [String: Any]
+    }
+    let firstLive = try liveRequest()
+    try check(firstLive["type"] as? String == "live-battery" && firstLive["values"] != nil,
+      "First snapshot omitted values")
+    let unchangedLive = try liveRequest(live.revision)
+    try check(unchangedLive["values"] == nil && unchangedLive["acquiredAt"] != nil,
+      "Unchanged snapshot resent values or lost acquisition time")
+    server.liveBattery.set(nil, for: mobilePhysicalID)
+    let staleLive = try liveRequest(live.revision)
+    try check(staleLive["state"] as? String == "stale" && staleLive["values"] == nil,
+      "Acquisition failure appeared as a new current value")
+    _ = try liveRequest(sealed: false)
+    let savedCompanion = try Data(contentsOf: Collector.stateURL)
+    try check(!String(decoding: savedCompanion, as: UTF8.self)
+      .contains("DesignCapacity"), "Live values entered persisted companion state")
     let replayFile = Collector.root.appendingPathComponent("transfer-replay.json")
     let persistedReplay = try Data(contentsOf: replayFile)
     try check(String(decoding: persistedReplay, as: UTF8.self).contains(secureNonce.uuidString) &&

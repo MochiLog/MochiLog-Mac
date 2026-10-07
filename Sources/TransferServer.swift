@@ -16,6 +16,9 @@ private struct PullRequest: Decodable {
   let dailyPauseUntil: String?
   let dailyPauseMAC: String?
   let dailyResumeMAC: String?
+  let liveBatteryVersion: String?
+  let liveBatteryRevision: String?
+  let liveBatteryRefresh: String?
   let offerVersion: String?
   let offerMAC: String?
   let offerToken: String?
@@ -107,6 +110,8 @@ final class TransferServer: @unchecked Sendable {
   private var activeLANConnections: [ObjectIdentifier: NWConnection] = [:]
   private var announcementRevision = 0
   private var pairingSession: PairingSession?
+  let liveBattery = LiveBatteryCache()
+  var onLiveBatteryRequested: ((UUID, Bool) -> Void)?
   var onStatus: ((String) -> Void)?
   var onConfirmed: ((UUID) -> Void)?
   var onAuthenticatedRequest: ((UUID, Date) -> Void)?
@@ -236,6 +241,7 @@ final class TransferServer: @unchecked Sendable {
   }
 
   #if TRANSFER_TESTING
+  var testListeningPort: UInt16? { queue.sync { listener?.port?.rawValue } }
   func startTestTailnetReceiver() {
     queue.sync { updateTailnetSocket(address: "127.0.0.1") }
   }
@@ -666,6 +672,15 @@ final class TransferServer: @unchecked Sendable {
       } catch {
         onStatus?(MacTransferL10n.format("mt_m_17", error.localizedDescription))
       }
+    }
+    if request.liveBatteryVersion != nil {
+      // Optional fields require whole-request v3 authentication. No log ACK,
+      // daily-pause changes, diagnostics persistence, or file queue access here.
+      guard secure, request.liveBatteryVersion == "1", request.ack == "",
+        let control = liveBattery.response(for: device.physicalDeviceID,
+          revision: request.liveBatteryRevision) else { return nil }
+      onLiveBatteryRequested?(device.physicalDeviceID, request.liveBatteryRefresh == "1")
+      return try? encryptedLogResponse(control, name: "", request: request, device: device)
     }
     if let encoded = request.clientDiagnosticsBox,
       let combined = Data(base64Encoded: encoded), combined.count <= 8_256,

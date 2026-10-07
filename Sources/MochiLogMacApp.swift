@@ -116,6 +116,12 @@ final class CompanionModel: ObservableObject {
   @Published var showPairingQR = false
   @Published var pairingInvitation: PairingInvitation?
   @Published var state = Collector.loadState()
+  @Published var liveBatterySnapshots: [UUID: LiveBatterySnapshot] = [:]
+  @Published var liveBatteryFailures: Set<UUID> = []
+  @Published var liveBatteryBusy: Set<UUID> = []
+  private var liveBatteryInterest: [UUID: Date] = [:]
+  private var liveBatteryViews: Set<UUID> = []
+  private var lastBatteryAttempt: [UUID: Date] = [:]
   private var server: TransferServer?
   private var pairProcess: Process?
   private var lastAutomaticDecision: [UUID: String] = [:]
@@ -151,6 +157,12 @@ final class CompanionModel: ObservableObject {
     try? BatteryLogStorage.prune()
     let server = TransferServer(state: state)
     self.server = server
+    server.onLiveBatteryRequested = { [weak self] id, manual in
+      Task { @MainActor in
+        self?.liveBatteryInterest[id] = Date()
+        await self?.refreshBattery(id, manual: manual)
+      }
+    }
     server.onStatus = { [weak self] message in
       Task { @MainActor in self?.status = message }
     }
@@ -199,8 +211,50 @@ final class CompanionModel: ObservableObject {
       Task { @MainActor in await self?.collectAll(trigger: "5-minute timer") }
     }
     Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
-      Task { @MainActor in self?.presenceClock = Date() }
+      Task { @MainActor in
+        guard let self else { return }
+        self.presenceClock = Date()
+        for device in self.state.devices where (self.liveBatteryViews.contains(device.physicalDeviceID)
+          && NSApp.windows.contains(where: { $0.isVisible }))
+          || Date().timeIntervalSince(self.liveBatteryInterest[device.physicalDeviceID] ?? .distantPast) < 45 {
+          await self.refreshBattery(device.physicalDeviceID)
+        }
+      }
     }
+  }
+
+  func watchBattery(_ id: UUID, visible: Bool) {
+    if visible { liveBatteryViews.insert(id); Task { await refreshBattery(id) } }
+    else { liveBatteryViews.remove(id) }
+  }
+
+  func refreshBattery(_ id: UUID, manual: Bool = false) async {
+    guard !isBusy, liveBatteryBusy.isEmpty,
+      let device = state.devices.first(where: { $0.physicalDeviceID == id }),
+      manual || Date().timeIntervalSince(lastBatteryAttempt[id] ?? .distantPast) >=
+        (liveBatteryFailures.contains(id) ? 60 : 15) else { return }
+    lastBatteryAttempt[id] = Date()
+    liveBatteryBusy.insert(id)
+    // Share the existing collector exclusion so trust/collection cannot race.
+    isBusy = true
+    defer { isBusy = false; liveBatteryBusy.remove(id); lastBatteryAttempt[id] = Date() }
+    do {
+      let snapshot = try await Task.detached { try Collector.currentBattery(device) }.value
+      guard state.devices.contains(where: { $0.physicalDeviceID == id }) else {
+        server?.liveBattery.remove(id); liveBatterySnapshots.removeValue(forKey: id); return
+      }
+      liveBatterySnapshots[id] = snapshot
+      liveBatteryFailures.remove(id)
+      server?.liveBattery.set(snapshot, for: id)
+    } catch {
+      liveBatteryFailures.insert(id)
+      server?.liveBattery.set(nil, for: id)
+    }
+  }
+
+  func sendBatteryNow(_ id: UUID) async {
+    await refreshBattery(id, manual: true)
+    server?.announceQueuedFiles()
   }
 
   fileprivate func presenceState(for deviceID: UUID) -> AppPresenceDisplay {
@@ -676,6 +730,7 @@ private struct CompanionView: View {
               .foregroundStyle(.secondary)
           } else {
             ForEach(model.state.devices) { device in
+              VStack(alignment: .leading, spacing: 12) {
               HStack {
                 Image(systemName: "iphone.gen3").foregroundStyle(.green)
                 VStack(alignment: .leading) {
@@ -708,6 +763,14 @@ private struct CompanionView: View {
                   Image(systemName: "checkmark.circle").foregroundStyle(.secondary)
                     .help(MacTransferL10n.text("mt_paired"))
                 }
+              }
+              LiveBatteryCard(snapshot: model.liveBatterySnapshots[device.physicalDeviceID],
+                failed: model.liveBatteryFailures.contains(device.physicalDeviceID),
+                busy: model.liveBatteryBusy.contains(device.physicalDeviceID),
+                receive: { Task { await model.refreshBattery(device.physicalDeviceID, manual: true) } },
+                send: { Task { await model.sendBatteryNow(device.physicalDeviceID) } })
+                .onAppear { model.watchBattery(device.physicalDeviceID, visible: true) }
+                .onDisappear { model.watchBattery(device.physicalDeviceID, visible: false) }
               }
             }
           }

@@ -10,7 +10,7 @@ mkdir -p Build
 Build/venv/bin/python -m pip install --disable-pip-version-check -r requirements-build.txt
 Build/venv/bin/pyinstaller --onefile --noconfirm --clean \
   --name pymobiledevice3 --collect-all pymobiledevice3 \
-  --hidden-import DirectRsd \
+  --hidden-import DirectRsd --hidden-import BatterySnapshot \
   --recursive-copy-metadata pymobiledevice3 \
   --codesign-identity "$identity" --osx-entitlements-file MacCompanion.entitlements \
   --distpath Build/Collector --workpath Build/PyInstaller CollectorEntry.py

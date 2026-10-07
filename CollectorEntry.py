@@ -10,7 +10,10 @@ from pymobiledevice3.__main__ import main
 
 if __name__ == "__main__":
     try:
-        if len(sys.argv) > 1 and sys.argv[1] == "direct-rsd":
+        if len(sys.argv) > 1 and sys.argv[1] == "battery-snapshot":
+            from BatterySnapshot import main as snapshot_main
+            snapshot_main(sys.argv[2:])
+        elif len(sys.argv) > 1 and sys.argv[1] == "direct-rsd":
             from DirectRsd import main as direct_main
             direct_main(sys.argv[2:])
         else:
