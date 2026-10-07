@@ -10,6 +10,7 @@ macOS remote mode holds an existing OS tunnel with our C helper, then uses our
 HTTP/2/RemoteXPC discovery, plist check-in and AFC implementation over sockets.
 Classic mode implements lockdownd, mutual TLS and AFC over TCP.
 No pairing, unlocking, mover, write, erase or security-setting requests exist.
+The optional CrashReporter relay probe drains/discards its diagnostic archive.
 """
 import argparse
 import base64
@@ -264,6 +265,27 @@ class Plists:
         return response
 
 
+def validate_checkin_response(response, expected, credential):
+    """Inspect only fixed protocol fields; never log a full service response."""
+    known = {"Request", "Error", "Status", "EnableServiceSSL"}
+    emit("rsd_checkin_shape", response=expected,
+         fields=sorted(set(response) & known),
+         other_field_count=len(set(response) - known),
+         error_present=response.get("Error") is not None,
+         service_ssl_required=response.get("EnableServiceSSL") is True)
+    if response.get("Error") is not None:
+        error = response["Error"]
+        safe = error if isinstance(error, str) and re.fullmatch(r"[A-Za-z0-9_.-]{1,100}", error) else "DeviceError"
+        raise ProbeError("RSD authentication rejected: " + safe)
+    if response.get("Request") != expected:
+        raise ProbeError("Unexpected RSD authentication response")
+    if response.get("EnableServiceSSL") is True:
+        # Do not send plaintext AFC after a peer asks for TLS. An OS remote
+        # credential is not the classic pinned TLS certificate identity.
+        raise ProbeError("RSD service requires TLS; this research channel has no matching TLS identity")
+    emit("rsd_checkin", response=expected, credential=credential)
+
+
 class Afc:
     def __init__(self, stream):
         self.stream = stream
@@ -416,7 +438,7 @@ def read_only_diagnostic_query(stream, probe):
 
 
 def run(args):
-    if args.probe == "analytics-file" and not args.inventory:
+    if args.probe in ("analytics-file", "file-relay-archive", "coredevice-file-open") and not args.inventory:
         if not isinstance(args.file, str) or not re.fullmatch(r"/(?:ProxiedDevice-[a-fA-F0-9]+/)?(?:Retired/)?Analytics-\d{4}-\d{2}-\d{2}-\d{6}[A-Za-z0-9._-]*\.ips\.ca\.synced", args.file) or "session" in args.file.lower():
             raise ProbeError("Select an existing non-session Analytics report")
     resources = []
@@ -437,9 +459,14 @@ def run(args):
         "power-registry": "com.apple.mobile.diagnostics_relay.shim.remote",
         "analytics-transport": "com.apple.osanalytics.logTransfer",
         "file-relay-availability": "com.apple.mobile.file_relay.shim.remote",
+        "file-relay-archive": "com.apple.mobile.file_relay.shim.remote",
+        "coredevice-lock-state": "com.apple.coredevice.deviceinfo",
+        "coredevice-file-open": "com.apple.coredevice.fileservice.control",
     }[args.probe]
     if args.probe == "analytics-transport" and args.mode != "remote":
         raise ProbeError("Alternate RemoteXPC transport requires independent remote mode")
+    if args.probe.startswith("coredevice-") and (args.mode != "remote" or args.checkin != "plain"):
+        raise ProbeError("CoreDevice probes use remote mode and the default transport authentication")
     if args.probe != "analytics-file" and args.mode == "os-service":
         raise ProbeError("Stock bridge comparison only supports the Analytics file probe")
     try:
@@ -507,9 +534,20 @@ def run(args):
                 service_port = int(metadata["Services"][service]["Port"])
                 if not 0 < service_port < 65536:
                     raise ProbeError("RSD advertised an invalid service port")
-                if args.probe == "analytics-transport":
+                if args.probe.startswith("coredevice-"):
+                    path = Path(__file__).with_name("coredevice_readonly.py")
+                    spec = importlib.util.spec_from_file_location("mochilog_research_coredevice", path)
+                    core = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(core)
                     alternate = wire.Rsd(assertion.address, service_port, args.timeout)
                     resources.append(alternate)
+                    core.probe(alternate, wire, args.probe, args.file, emit, ProbeError)
+                    return
+                if args.probe == "analytics-transport":
+                    emit("alternate_transport_connecting", body_access_tested=False)
+                    alternate = wire.Rsd(assertion.address, service_port, args.timeout)
+                    resources.append(alternate)
+                    emit("alternate_socket_connected", body_access_tested=False)
                     alternate.bootstrap()
                     emit("alternate_transport_negotiated", service=service, body_access_tested=False)
                     # Only wait for an unsolicited protocol message. No guessed service RPC.
@@ -540,12 +578,7 @@ def run(args):
                 channel.send(request)
                 for expected in ("RSDCheckin", "StartService"):
                     response = channel.receive()
-                    if response.get("Error"):
-                        error = response["Error"]
-                        raise ProbeError(f"RSD authentication rejected: {error if isinstance(error, str) and re.fullmatch(r'[A-Za-z0-9_.-]{1,100}', error) else 'DeviceError'}")
-                    if response.get("Request") != expected:
-                        raise ProbeError("Unexpected RSD authentication response")
-                    emit("rsd_checkin", response=expected, credential=args.checkin)
+                    validate_checkin_response(response, expected, args.checkin)
         else:
             if not args.host:
                 raise ProbeError("Classic TCP mode needs the currently discovered device address")
@@ -565,6 +598,7 @@ def run(args):
                 "gas-gauge": "com.apple.mobile.diagnostics_relay",
                 "power-registry": "com.apple.mobile.diagnostics_relay",
                 "file-relay-availability": "com.apple.mobile.file_relay",
+                "file-relay-archive": "com.apple.mobile.file_relay",
             }[args.probe]
             fields = {"Service": classic_service}
             if args.checkin == "escrow":
@@ -580,7 +614,27 @@ def run(args):
             resources.append(stream)
             if response.get("EnableServiceSSL"):
                 stream.tls(record)
-        if args.probe == "file-relay-availability":
+        if args.probe == "file-relay-archive":
+            channel = Plists(stream)
+            emit("relay_archive_requested", source="CrashReporter")
+            channel.send({"Sources": ["CrashReporter"]})
+            response = channel.receive()
+            error = response.get("Error")
+            if error is not None:
+                safe = error if isinstance(error, str) and re.fullmatch(r"[A-Za-z0-9_.-]{1,100}", error) else "DeviceError"
+                raise ProbeError("CrashReporter archive request rejected: " + safe)
+            if response.get("Status") != "Acknowledged":
+                raise ProbeError("CrashReporter archive was not acknowledged")
+            emit("relay_archive_acknowledged")
+            path = Path(__file__).with_name("relay_archive.py")
+            spec = importlib.util.spec_from_file_location("mochilog_research_relay_archive", path)
+            archive = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(archive)
+            try:
+                archive.read_archive(stream, args.file.rsplit("/", 1)[-1], emit)
+            except archive.ArchiveError as error:
+                raise ProbeError(str(error)) from None
+        elif args.probe == "file-relay-availability":
             emit("file_relay_connection_available", body_access_tested=False,
                  daily_analytics_acquired=False)
         elif args.probe in ("gas-gauge", "power-registry"):
@@ -597,7 +651,7 @@ def main():
     parser.add_argument("--udid", required=True)
     parser.add_argument("--file", help="Existing non-session Analytics path, required for the file probe")
     parser.add_argument("--mode", choices=("remote", "classic", "os-service"), default="remote")
-    parser.add_argument("--probe", choices=("analytics-file", "gas-gauge", "power-registry", "analytics-transport", "os-key-status", "file-relay-availability"),
+    parser.add_argument("--probe", choices=("analytics-file", "gas-gauge", "power-registry", "analytics-transport", "os-key-status", "file-relay-availability", "file-relay-archive", "coredevice-lock-state", "coredevice-file-open"),
                         default="analytics-file", help="Read-only alternate service query; never starts a backup")
     parser.add_argument("--checkin", choices=("plain", "escrow", "os-escrow", "skip"), default="plain")
     parser.add_argument("--host")

@@ -2,7 +2,7 @@
 
 Protocol reference: pymobiledevice3 v11.19.1 remote/xpc_message.py and
 remote/remotexpc.py (MIT). No reference library code is imported or executed.
-This implements discovery messages only, not arbitrary RPC or file-write APIs.
+Used for discovery and fixed read-only research requests, not file-write APIs.
 """
 import re
 import socket
@@ -11,6 +11,10 @@ import subprocess
 import uuid
 
 LIMIT = 2 * 1024 * 1024
+
+
+class Signed(int):
+    """Explicit signed wire type for CoreDevice protocol-version fields."""
 
 
 def padded(data):
@@ -22,6 +26,8 @@ def encode(value):
         return struct.pack("<I", 0x1000)
     if isinstance(value, bool):
         return struct.pack("<II", 0x2000, int(value))
+    if isinstance(value, Signed):
+        return struct.pack("<Iq", 0x3000, value)
     if isinstance(value, int):
         return struct.pack("<IQ", 0x4000, value)
     if isinstance(value, uuid.UUID):
@@ -34,6 +40,13 @@ def encode(value):
         for key, item in value.items():
             body += padded(key.encode() + b"\0") + encode(item)
         return struct.pack("<II", 0xf000, len(body)) + body
+    if isinstance(value, list):
+        if len(value) > 4096:
+            raise ValueError("Outgoing XPC array exceeds limit")
+        body = struct.pack("<I", len(value)) + b"".join(encode(item) for item in value)
+        if len(body) > LIMIT:
+            raise ValueError("Outgoing XPC array exceeds byte limit")
+        return struct.pack("<II", 0xe000, len(body)) + body
     raise ValueError("Unsupported outgoing discovery value")
 
 

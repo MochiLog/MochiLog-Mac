@@ -1,6 +1,8 @@
 """Offline protocol tests: fragmented replies, hostile framing and denied reads."""
 import importlib.util
 import contextlib
+import gzip
+import hashlib
 import io
 import json
 import pathlib
@@ -22,6 +24,8 @@ def load(name):
 
 probe = load("independent_diagnostics")
 wire = load("remote_wire")
+archive = load("relay_archive")
+core = load("coredevice_readonly")
 
 
 class Fragmented:
@@ -43,6 +47,118 @@ def reply(sequence, operation, data):
 
 
 class ProtocolTests(unittest.TestCase):
+    def test_coredevice_wire_types_and_fixed_readonly_requests(self):
+        self.assertEqual(wire.encode(wire.Signed(2)), bytes.fromhex("003000000200000000000000"))
+        self.assertEqual(wire.Decoder(wire.encode([629, wire.Signed(2)])).value(), [629, 2])
+        class Channel:
+            def __init__(self):
+                self.requests = []
+            def bootstrap(self):
+                pass
+            def frame(self, kind, stream, data):
+                self.requests.append(wire.decode_wrapper(data))
+            def receive(self):
+                return {"CoreDevice.output": {"passcodeRequired": True,
+                    "unlockedSinceBoot": True, "deviceIdentifier": "private-test-device"}}
+        channel, events = Channel(), []
+        core.probe(channel, wire, "coredevice-lock-state", None,
+            lambda stage, **values: events.append((stage, values)), probe.ProbeError)
+        self.assertEqual(channel.requests[0]["CoreDevice.featureIdentifier"], "com.apple.coredevice.feature.getlockstate")
+        self.assertNotIn("private-test-device", str(events))
+        self.assertTrue(events[-1][1]["state_fields_complete"])
+
+    def test_coredevice_file_denial_never_becomes_body_success(self):
+        class Channel:
+            def __init__(self):
+                self.requests = []
+            def bootstrap(self):
+                pass
+            def frame(self, kind, stream, data):
+                self.requests.append(wire.decode_wrapper(data))
+            def receive(self):
+                return {"NewSessionID": "private-test-session"} if len(self.requests) == 1 else {"EncodedError": b"private-test-error"}
+        channel, events = Channel(), []
+        with self.assertRaises(probe.ProbeError):
+            core.probe(channel, wire, "coredevice-file-open", "/Retired/Analytics-report",
+                lambda stage, **values: events.append((stage, values)), probe.ProbeError)
+        self.assertEqual([item["Cmd"] for item in channel.requests], ["CreateSession", "RetrieveFile"])
+        self.assertEqual(channel.requests[0]["Domain"], 5)
+        self.assertEqual(channel.requests[1]["Path"], "Retired/Analytics-report")
+        self.assertNotIn("private-test", str(events))
+        self.assertNotIn("file_complete", str(events))
+
+    @staticmethod
+    def cpio_member(name, body=b"", newc=False):
+        name = name.encode() + b"\0"
+        if newc:
+            fields = [0, 0o100600, 0, 0, 1, 0, len(body), 0, 0, 0, 0, len(name), 0]
+            header = b"070701" + b"".join(f"{value:08x}".encode() for value in fields)
+            return header + name + b"\0" * (-(len(header) + len(name)) % 4) + body + b"\0" * (-len(body) % 4)
+        fields = [0, 0, 0o100600, 0, 0, 1, 0]
+        header = b"070707" + b"".join(f"{value:06o}".encode() for value in fields)
+        header += f"{0:011o}{len(name):06o}{len(body):011o}".encode()
+        return header + name + body
+
+    def test_relay_complete_stream_requires_gzip_and_cpio_completion(self):
+        filename = "Analytics-2026-10-07-090004.ips.ca.synced"
+        body = b"test-report\n"
+        for newc in (False, True):
+            raw = self.cpio_member("var/mobile/Library/Logs/CrashReporter/Retired/" + filename, body, newc)
+            raw += self.cpio_member("TRAILER!!!", newc=newc)
+            events = []
+            archive.read_archive(Fragmented(gzip.compress(raw)), filename,
+                                 lambda stage, **values: events.append((stage, values)))
+            self.assertEqual(events[-1], ("file_complete", {"acquisition": "file_relay_archive",
+                "bytes": len(body), "lines": 1, "sha256": hashlib.sha256(body).hexdigest()}))
+
+    def test_relay_malformed_archive_is_drained_without_success(self):
+        for data in (gzip.compress(b"not-cpio"), gzip.compress(b"invalid-header")[:-4]):
+            stream, events = Fragmented(data), []
+            with self.assertRaises(archive.ArchiveError):
+                archive.read_archive(stream, "report", lambda stage, **values: events.append(stage))
+            self.assertFalse(stream.replies)
+            self.assertIn("relay_archive_drained", events)
+            self.assertNotIn("file_complete", events)
+
+    def test_relay_ignores_watch_and_rejects_ambiguous_or_missing_body(self):
+        filename = "Analytics-report"
+        watch = self.cpio_member("ProxiedDevice-123/Retired/" + filename, b"watch\n")
+        phone = self.cpio_member("Retired/" + filename, b"phone\n")
+        for raw in (watch, phone + phone, b""):
+            raw += self.cpio_member("TRAILER!!!")
+            with self.assertRaises(archive.ArchiveError):
+                archive.read_archive(Fragmented(gzip.compress(raw)), filename, lambda *a, **k: None)
+
+    def test_relay_member_and_decode_bounds_are_enforced(self):
+        oversized = bytearray(self.cpio_member("report"))
+        oversized[59:65] = b"777777"
+        parser = archive.Cpio("report")
+        with self.assertRaises(archive.ArchiveError):
+            parser.feed(oversized)
+        raw = self.cpio_member("report", b"test") + self.cpio_member("TRAILER!!!")
+        stream = Fragmented(gzip.compress(raw))
+        with mock.patch.object(archive, "DECODED_LIMIT", 10), self.assertRaises(archive.ArchiveError):
+            archive.read_archive(stream, "report", lambda *a, **k: None)
+        self.assertFalse(stream.replies)
+
+    def test_checkin_shape_omits_private_values_and_unknown_field_names(self):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            probe.validate_checkin_response({"Request": "StartService", "Error": None,
+                "private-test-identifier": "private-test-key", "EnableServiceSSL": False}, "StartService", "plain")
+        shape = json.loads(output.getvalue().splitlines()[0])
+        self.assertEqual(shape["other_field_count"], 1)
+        self.assertFalse(shape["service_ssl_required"])
+        self.assertNotIn("private-test", output.getvalue())
+
+    def test_checkin_rejects_empty_error_and_tls_downgrade(self):
+        for response in ({"Request": "StartService", "Error": ""},
+                         {"Request": "StartService", "Error": {}},
+                         {"Request": "StartService", "EnableServiceSSL": True},
+                         {"Request": "DifferentResponse"}):
+            with contextlib.redirect_stdout(io.StringIO()), self.assertRaises(probe.ProbeError):
+                probe.validate_checkin_response(response, "StartService", "os-escrow")
+
     def test_private_os_key_pipe_is_bounded_and_missing_key_fails(self):
         args = SimpleNamespace(tunnel_helper=pathlib.Path("/fixture/native_tunnel"), udid="test-device")
         fixture = b"private-test-credential"

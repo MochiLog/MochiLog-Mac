@@ -113,3 +113,14 @@ xcrun devicectl device info lockState --device '<device>' --timeout 15
 ```
 
 Keep the raw file and command output private. Do not use crash-report deletion, a pull tool's default erase mode, security-policy changes, or a reboot as part of this AFU experiment.
+
+## Additional bounded routes (22:36–22:54 JST)
+
+After the user explicitly relocked the phone, both installed Xcode versions timed out when checking lock state. These later probes therefore have user-confirmed screen lock, not new independently returned lock-state fields.
+
+- Existing OS escrow check-in: both replies contained only the expected Request field. No Error, Status, EnableServiceSSL or extra fields were present. The channel still closed before an AFC reply. An overlooked TLS-upgrade instruction was not found.
+- Remote file_relay: one fixed CrashReporter Sources request was sent after successful plain check-in. The peer closed before a complete acknowledgement; no archive bytes or Analytics body were obtained. The bounded receiver supports gzip and CPIO, drains malformed streams when possible, and never unpacks archive paths. Availability-only tests earlier in this document did not send this request.
+- CoreDevice deviceinfo: RemoteXPC negotiation completed, but the fixed getlockstate request returned a CoreDevice error rather than lock-state output.
+- CoreDevice fileservice.control: negotiation and CreateSession for systemCrashLogs completed. RetrieveFile failed in the independent wire decoder. This is an unresolved protocol-decoding result, **not evidence of a permission denial or successful body read**. The separately framed data service has not been read.
+
+The research tools now have 21 passing offline tests. No new successful daily-log body acquisition while locked was established. For the new current-battery feature, prefer the maintained pymobiledevice3 DiagnosticsService API; these independent clients remain research tools and are a fallback only if the maintained library cannot perform the required read.

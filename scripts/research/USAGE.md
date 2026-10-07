@@ -68,3 +68,7 @@ Classic mode reads Apple's existing trust record from usbmuxd if no local record
 - This tooling does not parse battery metrics or import records, and does not establish a new supported collection promise.
 
 Protocol references: [libimobiledevice AFC](https://github.com/libimobiledevice/libimobiledevice/blob/master/src/afc.c), [lockdownd](https://github.com/libimobiledevice/libimobiledevice/blob/master/src/lockdown.c), [libusbmuxd](https://github.com/libimobiledevice/libusbmuxd/blob/master/src/libusbmuxd.c), and MIT-licensed [pymobiledevice3 v11.19.1 RemoteXPC](https://github.com/doronz88/pymobiledevice3/tree/v11.19.1/pymobiledevice3/remote). These are wire-format references; their libraries are not imported, linked or executed by this client.
+
+## Other bounded research routes
+
+`--probe coredevice-lock-state` sends only the known getlockstate request. `--probe coredevice-file-open --file '<existing-path>'` checks control-channel file authorization only; it does not read a data-channel body. `--probe file-relay-archive --file '<existing-path>'` requests the fixed CrashReporter source and validates a matching gzip/CPIO stream in memory without unpacking paths. This last probe may stage a temporary archive on the device; the receiver drains the stream on parse failures when the connection remains available. Do not repeat it indiscriminately. The live attempt received no acknowledgement or archive.
