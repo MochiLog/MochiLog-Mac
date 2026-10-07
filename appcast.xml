@@ -4,33 +4,31 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>MochiLog Mac</title>
         <item>
-            <title>0.2.14</title>
-            <pubDate>Wed, 07 Oct 2026 14:58:47 +0000</pubDate>
-            <sparkle:version>17</sparkle:version>
-            <sparkle:shortVersionString>0.2.14</sparkle:shortVersionString>
+            <title>0.2.15</title>
+            <pubDate>Wed, 07 Oct 2026 23:31:27 +0000</pubDate>
+            <sparkle:version>18</sparkle:version>
+            <sparkle:shortVersionString>0.2.15</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>27.0</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[# MochiLog Mac 0.2.14 Beta
+            <description sparkle:format="markdown"><![CDATA[日本語
 
-## 日本語
+現在のバッテリー表示を拡張しました。充放電回数や容量のカードに加え、「APIの全項目」から製造情報、状態フラグ、バッテリー識別情報など、診断APIが返す全項目を分類して表示できます。大きな整数も丸めず、バイナリ情報はBase64で表示します。項目の単位や意味は推測しません。
 
-日次ログとは別に、ペアリング済みiPhone・iPadの現在の充放電回数・設計容量・最大容量などを確認できるベータ機能を追加しました。PCの概要画面に端末別で表示し、スマホの高度な設定でオンにすると専用タブでも表示できます（初期状態はオフ）。既存のペアリングを引き継ぎます。
+現在値はメモリ内のみで扱い、履歴・バッテリー記録・iCloud・サポートログには保存しません。既存ペアリングの暗号化通信を利用し、主要項目と詳細項目それぞれの変化を検出して変更がない値は再送しません。旧版の主要項目表示も引き続き使えます。
 
-アプリを開いている間に定期取得し、変化した値だけを暗号化して転送します。最終取得日時、欠けている項目、取得失敗時の古い値を区別し、今すぐ受信／送信・PCへの更新要求にも対応します。現在値はメモリだけで扱い、履歴・記録・iCloud・診断ログには保存しません。
+Tailscale経由の現在値受信に対応し、PC連携のモバイル通信許可を尊重します。PCから端末への診断問い合わせは、MacとWindowsの双方でTailscale接続のiPadに成功しました。ただし端末の診断サービスへの接続可否に依存し、モバイル回線・長時間ロック・全機種での取得を保証しません。取得できない場合は以前の値と最終取得日時を示します。日次Analyticsファイルのロック中取得とは別の機能です。
 
-取得にはpymobiledevice3の診断APIを使用します。機種・OS・接続状態によって取得できない項目があります。ロック中の取得成功を確認していますが、常に成功することや日次ログのロック中取得を保証するものではありません。Apple Watchの現在値は対象外です。スマホの新しい4.0.0ベータと組み合わせてください。
+English
 
-## English
+Live Battery now displays all fields returned by the diagnostics battery API, grouped under All API fields, alongside the main cycle-count and capacity cards. Manufacturing metadata, battery identifiers and flags are retained. Large integers keep their precision; binary data is shown as Base64. Units and field meanings are not guessed.
 
-Added a beta view of current cycle count, design capacity and other capacity fields for paired iPhones and iPads, separate from daily Analytics logs. Each device has a card on the computer dashboard. Enable Live Battery in the mobile app’s Advanced Settings to show a dedicated tab; it is off by default. Existing pairings are preserved.
+Values remain in memory only and are never saved to history, records, iCloud or support logs. Existing encrypted pairings are preserved. Core and full-detail revisions are tracked independently; unchanged values are not resent. Older clients can still use core fields.
 
-While the app is open, values refresh periodically and only changed values are transferred using encryption. Acquisition time, unavailable fields and outdated values after a failed refresh are shown separately. Receive Now, Send Now and mobile requests to refresh the computer are available. Values remain in memory only and are never saved to history, records, iCloud or diagnostic logs.
-
-Acquisition uses the maintained pymobiledevice3 diagnostics API. Field availability depends on device, OS and connectivity. A locked query has succeeded in testing, but this does not guarantee all locked queries or locked-state daily Analytics collection. Live Apple Watch values are not included. Use with the new MochiLog 4.0.0 beta.
+Current-value reception supports Tailscale routes and respects the mobile PC Link cellular permission. Fresh acquisition from an iPad over Tailscale succeeded from both Mac and Windows. Availability still depends on the device diagnostics service; cellular-radio operation, long locks and every model are not guaranteed. Failed refreshes retain previous values and acquisition time. This does not enable locked daily Analytics-file acquisition.
 ]]></description>
-            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.14/MochiLog-Mac-Beta.dmg" length="56654919" type="application/octet-stream" sparkle:edSignature="off5SFa/Xzc61p2Hh23jvlF5pBFDT6rK9yv+efmGkYA3YMLhWosqksRc6yNfF4oVReeKuxzxwpiil1oIp5lkAw=="></enclosure>
+            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.15/MochiLog-Mac-Beta.dmg" length="55830989" type="application/octet-stream" sparkle:edSignature="jlQ8MBnV4g9UvOHQAsNU8dvhheKTPeThs/iaUz2kR7/Iaw2D6TgnSBn/wdddbKjbjz6x+LnqxC/oMh4BqSvRCw=="></enclosure>
         </item>
     </channel>
 </rss><!-- sparkle-signatures:
-edSignature: 9QASZGSlu+x3mhXYqHYPbZzXTGXIUzP9gMtgELevcQlsvPo24GL/HaSJxerdMc3hh4J/HFYBqlMBiXXn8C85BA==
-length: 3437
+edSignature: r5naZ9Wv8m1kWyeRaE64KzAupNXGGpx04CTB58/X0YySB9cBiF4XtDwxWyQU+LVjgkKHYDNymoABn2wb0wB8Cg==
+length: 3478
 -->
