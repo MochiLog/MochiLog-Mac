@@ -46,8 +46,9 @@ static void finish(int status) {
 }
 
 int main(int argc, char **argv) {
-    if (argc != 2 || strlen(argv[1]) > 80) return 64;
-    const char *target = argv[1];
+    int key_only = argc == 3 && !strcmp(argv[1], "--existing-key-only");
+    if ((!key_only && argc != 2) || strlen(argv[key_only ? 2 : 1]) > 80) return 64;
+    const char *target = argv[key_only ? 2 : 1];
     setbuf(stdout, NULL);
     queue = dispatch_queue_create("net.ryuya-dev.mochilog.research", DISPATCH_QUEUE_SERIAL);
     browser = xpc_connection_create_mach_service("com.apple.CoreDevice.remotepairingd", queue, 0);
@@ -58,6 +59,21 @@ int main(int argc, char **argv) {
         xpc_object_t endpoint = at(info, "endpoint");
         if (!udid || strcmp(udid, target) || !endpoint || xpc_get_type(endpoint) != XPC_TYPE_ENDPOINT) return;
         requested = 1;
+        if (key_only) {
+            /* Read only a credential already present in the OS's paired-device
+             * snapshot. Never issue CopyRemoteUnlockHostKeyRequest: that API
+             * may initialize a missing key. Binary data goes to a private pipe.
+             */
+            size_t size = 0;
+            const void *key = xpc_dictionary_get_data(info, "remoteUnlockHostKey", &size);
+            if (!key || !size || size > 4096) {
+                puts("{\"stage\":\"existing_os_key_unavailable\"}");
+                finish(1);
+            }
+            printf("{\"stage\":\"existing_os_key_ready\",\"length\":%zu}\n", size);
+            if (fwrite(key, 1, size, stdout) != size) finish(1);
+            finish(0);
+        }
         device = xpc_connection_create_from_endpoint(endpoint);
         xpc_connection_set_target_queue(device, queue);
         xpc_connection_set_event_handler(device, ^(xpc_object_t error) {
@@ -74,7 +90,14 @@ int main(int argc, char **argv) {
             xpc_object_t connection_info = at(response, "info");
             const char *ip = connection_info ? xpc_dictionary_get_string(connection_info, "tunnelIPAddress") : NULL;
             if (!response || !identifier || !ip || !*ip) {
-                puts("{\"stage\":\"native_assertion_failed\"}");
+                xpc_object_t error = at(reply, "error");
+                const char *domain = error ? xpc_dictionary_get_string(error, "domain") : NULL;
+                if (domain && strspn(domain, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-") == strlen(domain)) {
+                    printf("{\"stage\":\"native_assertion_failed\",\"domain\":\"%s\",\"code\":%lld}\n",
+                           domain, (long long)xpc_dictionary_get_int64(error, "code"));
+                } else {
+                    puts("{\"stage\":\"native_assertion_failed\"}");
+                }
                 finish(1);
             }
             assertion = xpc_retain(identifier);

@@ -188,6 +188,9 @@ class TunnelAssertion:
                 raise ProbeError("Timed out opening existing OS tunnel")
             response = json.loads(self.process.stdout.readline())
             if response.get("stage") != "native_assertion_ready":
+                domain, code = response.get("domain"), response.get("code")
+                if isinstance(domain, str) and re.fullmatch(r"[A-Za-z0-9_.-]{1,120}", domain) and isinstance(code, int):
+                    emit("native_tunnel_rejected", domain=domain, code=code)
                 raise ProbeError("OS did not grant an existing-pairing tunnel assertion")
             self.address = response["address"]
         except Exception:
@@ -203,6 +206,33 @@ class TunnelAssertion:
                 self.process.kill()
                 self.process.wait(timeout=2)
         self.process.stdout.close()
+
+
+def existing_os_remote_key(args):
+    helper = args.tunnel_helper or Path(__file__).resolve().parents[2] / "Build/research/native_tunnel"
+    process = subprocess.Popen([str(helper), "--existing-key-only", args.udid], stdout=subprocess.PIPE,
+                               stderr=subprocess.DEVNULL, start_new_session=True)
+    try:
+        if not select.select([process.stdout], [], [], 16)[0]:
+            raise ProbeError("Timed out reading existing OS credential")
+        line = process.stdout.readline(1024)
+        response = json.loads(line)
+        length = response.get("length")
+        if response.get("stage") != "existing_os_key_ready" or not isinstance(length, int) or not 0 < length <= 4096:
+            raise ProbeError("OS paired-device snapshot has no existing remote unlock credential")
+        key = process.stdout.read(length)
+        if len(key) != length:
+            raise ProbeError("Truncated existing OS credential response")
+        return key
+    finally:
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=2)
+        process.stdout.close()
 
 
 class Plists:
@@ -354,10 +384,64 @@ def existing_record(args, remote=False):
         return record
 
 
+def read_only_diagnostic_query(stream, probe):
+    request = {"Request": "GasGauge"} if probe == "gas-gauge" else {
+        "Request": "IORegistry", "EntryClass": "IOPMPowerSource"}
+    channel = Plists(stream)
+    channel.send(request)
+    response = channel.receive()
+    status = response.get("Status")
+    if status != "Success":
+        safe = status if isinstance(status, str) and re.fullmatch(r"[A-Za-z0-9_.-]{1,100}", status) else "DeviceError"
+        raise ProbeError("Diagnostic query rejected: " + safe)
+    # Expose only battery metric field names, never identities or entire registry.
+    names = set()
+    allowed = {"CycleCount", "DesignCapacity", "FullChargeCapacity", "NominalChargeCapacity",
+               "RawMaxCapacity", "MaximumCapacityPercent", "Temperature", "AppleRawMaxCapacity",
+               "CurrentCapacity", "MaxCapacity", "ChargeCounter"}
+    def fields(value, depth=0):
+        if depth > 32:
+            raise ProbeError("Diagnostic response nesting exceeds limit")
+        if isinstance(value, dict):
+            for key, item in value.items():
+                if key in allowed and isinstance(item, (int, float)) and not isinstance(item, bool):
+                    names.add(key)
+                fields(item, depth + 1)
+        elif isinstance(value, list):
+            for item in value:
+                fields(item, depth + 1)
+    fields(response.get("Diagnostics", {}))
+    emit("live_battery_query", query=probe, status="Success", available_metrics=sorted(names),
+         daily_analytics_acquired=False)
+
+
 def run(args):
-    if not re.fullmatch(r"/(?:ProxiedDevice-[a-fA-F0-9]+/)?(?:Retired/)?Analytics-\d{4}-\d{2}-\d{2}-\d{6}[A-Za-z0-9._-]*\.ips\.ca\.synced", args.file) or "session" in args.file.lower():
-        raise ProbeError("Select an existing non-session Analytics report")
+    if args.probe == "analytics-file" and not args.inventory:
+        if not isinstance(args.file, str) or not re.fullmatch(r"/(?:ProxiedDevice-[a-fA-F0-9]+/)?(?:Retired/)?Analytics-\d{4}-\d{2}-\d{2}-\d{6}[A-Za-z0-9._-]*\.ips\.ca\.synced", args.file) or "session" in args.file.lower():
+            raise ProbeError("Select an existing non-session Analytics report")
     resources = []
+    if args.probe == "os-key-status":
+        key = existing_os_remote_key(args)
+        matching = None
+        try:
+            saved = existing_record(args, remote=True).get("remote_unlock_host_key")
+            if isinstance(saved, str):
+                matching = key == base64.b64decode(saved, validate=True)
+        except (ProbeError, OSError, ValueError):
+            pass
+        emit("existing_os_credential", available=True, same_as_saved_tool_credential=matching)
+        return
+    service = {
+        "analytics-file": REMOTE_SERVICE,
+        "gas-gauge": "com.apple.mobile.diagnostics_relay.shim.remote",
+        "power-registry": "com.apple.mobile.diagnostics_relay.shim.remote",
+        "analytics-transport": "com.apple.osanalytics.logTransfer",
+        "file-relay-availability": "com.apple.mobile.file_relay.shim.remote",
+    }[args.probe]
+    if args.probe == "analytics-transport" and args.mode != "remote":
+        raise ProbeError("Alternate RemoteXPC transport requires independent remote mode")
+    if args.probe != "analytics-file" and args.mode == "os-service":
+        raise ProbeError("Stock bridge comparison only supports the Analytics file probe")
     try:
         if args.mode in ("remote", "os-service"):
             helper = args.tunnel_helper or Path(__file__).resolve().parents[2] / "Build/research/native_tunnel"
@@ -418,9 +502,27 @@ def run(args):
                         emit("service_protocol_hint", service=name,
                              uses_remote_xpc=properties.get("UsesRemoteXPC") is True)
                     return
-                service_port = int(metadata["Services"][REMOTE_SERVICE]["Port"])
+                if service not in metadata["Services"]:
+                    raise ProbeError("Requested alternate service is not advertised")
+                service_port = int(metadata["Services"][service]["Port"])
                 if not 0 < service_port < 65536:
                     raise ProbeError("RSD advertised an invalid service port")
+                if args.probe == "analytics-transport":
+                    alternate = wire.Rsd(assertion.address, service_port, args.timeout)
+                    resources.append(alternate)
+                    alternate.bootstrap()
+                    emit("alternate_transport_negotiated", service=service, body_access_tested=False)
+                    # Only wait for an unsolicited protocol message. No guessed service RPC.
+                    alternate.socket.settimeout(2)
+                    try:
+                        message = alternate.receive()
+                        safe_fields = {"MessageType", "ProtocolVersion", "MessagingProtocolVersion", "Properties",
+                                       "Services", "UUID", "Event", "Request", "Response", "Error", "Status"}
+                        emit("alternate_unsolicited_message", fields=sorted(set(message) & safe_fields),
+                             other_field_count=len(set(message) - safe_fields), body_access_tested=False)
+                    except socket.timeout:
+                        emit("alternate_no_unsolicited_message", body_access_tested=False)
+                    return
                 stream = Tcp(assertion.address, service_port, args.timeout)
             resources.append(stream)
             emit("diagnostic_service_connected", implementation="stdlib_and_macos")
@@ -433,6 +535,8 @@ def run(args):
                     if not isinstance(key, str) or not key:
                         raise ProbeError("Existing remote unlock credential is unavailable")
                     request["EscrowBag"] = base64.b64decode(key, validate=True)
+                elif args.checkin == "os-escrow":
+                    request["EscrowBag"] = existing_os_remote_key(args)
                 channel.send(request)
                 for expected in ("RSDCheckin", "StartService"):
                     response = channel.receive()
@@ -456,7 +560,13 @@ def run(args):
             actual = channel.request("GetValue", Key="UniqueDeviceID").get("Value")
             if actual != args.udid:
                 raise ProbeError("Connected device identifier does not match requested device")
-            fields = {"Service": SERVICE}
+            classic_service = {
+                "analytics-file": SERVICE,
+                "gas-gauge": "com.apple.mobile.diagnostics_relay",
+                "power-registry": "com.apple.mobile.diagnostics_relay",
+                "file-relay-availability": "com.apple.mobile.file_relay",
+            }[args.probe]
+            fields = {"Service": classic_service}
             if args.checkin == "escrow":
                 if not record.get("EscrowBag"):
                     raise ProbeError("Existing classic escrow credential is unavailable")
@@ -470,7 +580,13 @@ def run(args):
             resources.append(stream)
             if response.get("EnableServiceSSL"):
                 stream.tls(record)
-        Afc(stream).read_file(args.file, args.output)
+        if args.probe == "file-relay-availability":
+            emit("file_relay_connection_available", body_access_tested=False,
+                 daily_analytics_acquired=False)
+        elif args.probe in ("gas-gauge", "power-registry"):
+            read_only_diagnostic_query(stream, args.probe)
+        else:
+            Afc(stream).read_file(args.file, args.output)
     finally:
         for resource in reversed(resources):
             resource.close()
@@ -479,9 +595,11 @@ def run(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--udid", required=True)
-    parser.add_argument("--file", required=True)
+    parser.add_argument("--file", help="Existing non-session Analytics path, required for the file probe")
     parser.add_argument("--mode", choices=("remote", "classic", "os-service"), default="remote")
-    parser.add_argument("--checkin", choices=("plain", "escrow", "skip"), default="plain")
+    parser.add_argument("--probe", choices=("analytics-file", "gas-gauge", "power-registry", "analytics-transport", "os-key-status", "file-relay-availability"),
+                        default="analytics-file", help="Read-only alternate service query; never starts a backup")
+    parser.add_argument("--checkin", choices=("plain", "escrow", "os-escrow", "skip"), default="plain")
     parser.add_argument("--host")
     parser.add_argument("--pair-record")
     parser.add_argument("--tunnel-helper", help="Compiled independent C helper for the existing OS tunnel")
@@ -493,6 +611,10 @@ def main():
         parser.error("invalid device identifier")
     if not 0 < args.timeout <= 30:
         parser.error("timeout must be between 0 and 30 seconds")
+    if args.checkin == "os-escrow" and args.mode != "remote":
+        parser.error("OS RemotePairing credential requires remote mode")
+    if args.output and (args.probe != "analytics-file" or args.inventory):
+        parser.error("--output is only supported for an Analytics file read")
     started = time.monotonic()
     if hasattr(signal, "SIGALRM"):
         def deadline(_signal, _frame):

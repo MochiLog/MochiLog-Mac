@@ -22,7 +22,7 @@ No keys, certificates, pairing records, diagnostic contents, phone UDIDs or addr
 
 ## Independent implementation follow-up
 
-At the user's request, an independent read-only client was implemented in C and Python's standard library. It does not import, execute or link pymobiledevice3 or libimobiledevice. Protocol formats were studied from their upstream source; this is not an independent invention of Apple's protocols. See [research client instructions](../scripts/research/README.md).
+At the user's request, an independent read-only client was implemented in C and Python's standard library. It does not import, execute or link pymobiledevice3 or libimobiledevice. Protocol formats were studied from their upstream source; this is not an independent invention of Apple's protocols. See [research client instructions](../scripts/research/USAGE.md).
 
 The code implements macOS XPC tunnel assertions for an **already paired** device, HTTP/2 framing, RemoteXPC encoding/decoding and RSD discovery, length-prefixed plist check-in, classic lockdownd sessions with mutually authenticated TLS and an exact device-certificate pin, and read-only AFC stat/open/read/close. The tunnel uses Apple's installed `remotepairingd`/`remoted` services. It is not a new implementation of the OS's trust or tunnel cryptography. `nettop` and `remotectl dumpstate` supply the existing OS endpoint and host identity; neither performs file acquisition for the remote-mode client.
 
@@ -41,6 +41,28 @@ The Mac's installed `com.apple.osanalytics.osanalyticshelper.plist` restricts it
 The iPhone was reported `passcodeRequired: true`, `unlockedSinceBoot: true` before and after the final independent probes. No trust reset or new pairing was performed. A while-unlocked control and a freshly accepted unlock credential were not established in this follow-up. Developer Mode-off and Windows checks also remain required if a working acquisition route is later found.
 
 Nine offline tests cover fragmented plist/HTTP2 replies, invalid/oversized/truncated frames, unexpected stream IDs, known XPC fixtures, denied and incomplete AFC reads, and private atomic output publication without overwriting existing files. The C helper builds with `-Wall -Wextra -Werror`. This is research tooling, not a replacement for the packaged collector; no product behavior or release changed.
+
+## Additional routes and credential identity
+
+The user excluded backup and iPhone Mirroring from the intended solution. No backup was created and no Mirroring authentication or collection session was established. Those routes are not a fallback for automatic collection in this investigation.
+
+Further independent probes, approximately 20:51–21:24 JST:
+
+| Route | Evidence and limit |
+| --- | --- |
+| Native OS tunnel after a longer locked interval | CreateAssertion returned `com.apple.dt.RemotePairingError` 1016. CoreDevice independently reported that the device had not been unlocked recently. This occurs before RSD or file access. It is separate from the earlier AFC body denial. The latest call could not return lock-state fields; the last successful state measurement at 20:30 was AFU-locked. No exact unlock-age limit was measured. |
+| Classic diagnostics_relay, GasGauge query | Existing paired mutual TLS and peer verification still worked. StartService returned PasswordProtected, with and without the existing classic EscrowBag. The query itself was not reached; this does not establish that battery metric values are inaccessible under every locked-state condition. |
+| Classic file_relay availability with escrow | Paired TLS worked, but StartService returned PasswordProtected. No Sources request or compressed archive was requested. [Apple documents](https://support.apple.com/guide/security/physical-pairing-model-security-secadb5b6434/web) a signed-profile requirement for file_relay; the [upstream service header](https://github.com/libimobiledevice/libimobiledevice/blob/master/include/libimobiledevice/file_relay.h) names the classic service and warns about staging left behind by undrained archive requests. This is not an ordinary app route to promise users. |
+| osanalytics.logTransfer custom RemoteXPC transport | A transport-only negotiation probe was implemented with no guessed service RPC. The live attempt was blocked by native tunnel error 1016 before reaching this service; no conclusion about its body-read permission can be drawn. |
+| Existing OS RemotePairing credential | The native paired-device snapshot already contained `remoteUnlockHostKey`. It was read through a private binary parent pipe, kept in process memory, and compared with the saved tool credential. They **differed**. No key bytes, length, hash or device identifier were printed or saved. No key-creation or refresh request was made. |
+
+Different keys do not by themselves mean corruption or expiry: the OS and a separate tool can have distinct pairing identities. The earlier experiment combined an OS native tunnel/RSD context with the tool's saved unlock credential, so EscrowFailure cannot rule out an identity-matched credential. The independent client now supports `--checkin os-escrow` using only the already-present OS snapshot key. Its first live attempt was blocked at tunnel creation with 1016; **the OS credential has not yet been submitted to RSDCheckin**. A user-assisted one-time unlock and immediate relock was requested solely to restore the test connection and compare that route. Do not call it a successful locked-state acquisition or claim that collecting a key removes future recent-unlock requirements.
+
+`CopyRemoteUnlockHostKeyRequest` and remote-unlock support were found in the installed framework's protocol metadata. That request is deliberately not sent because obtaining a missing credential may involve initialization. The read-only snapshot route fails if no existing key is present. Private entitlement changes, blind assertion-flag experiments, trust resets, credential regeneration and security-policy changes were not performed.
+
+The live-battery alternatives return metric field availability only, with `daily_analytics_acquired: false`. Even a future successful GasGauge/IORegistry snapshot would not be the daily Analytics log, and would not preserve its history, Watch reports or all battery metrics. No record format or parser was changed. Holding an already-open handle also remains untested; [CompleteUnlessOpen](https://developer.apple.com/documentation/foundation/fileprotectiontype/completeunlessopen) is one protection class, not evidence that these Analytics files use it or that a new file can be opened after lock.
+
+The expanded tooling has **13 passing offline tests**, including private credential-pipe bounds/missing-key handling, absence of credential/serial data in stage output, and an alternate transport bootstrap that sends no service operation. Product collection still requires unlock as before; Windows live verification has not occurred in this follow-up.
 
 ## Why escrow remains a candidate, not a solution
 

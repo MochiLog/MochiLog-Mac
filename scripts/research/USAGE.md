@@ -25,6 +25,28 @@ python3 -I -B scripts/research/independent_diagnostics.py \
 
 Use `--inventory` to list diagnostic service names without requesting a report body. Use `--checkin escrow --pair-record '/private/existing-remote-record.plist'` to test an existing authorized RemotePairing credential. An existing record may also be found in the previous tool's local data directory; reading that saved credential does not execute the tool. No key is created, refreshed or printed. Do not interchange classic EscrowBag and RemotePairing unlock credentials.
 
+Further read-only probes:
+
+```sh
+# Report availability/equality only. No key bytes, hash, or length in the stage log.
+python3 -I -B scripts/research/independent_diagnostics.py --udid '<paired-device-UDID>' --probe os-key-status
+
+# Use only the already-present OS credential for RSD check-in.
+python3 -I -B scripts/research/independent_diagnostics.py --udid '<paired-device-UDID>' \
+  --file '/Retired/Analytics-YYYY-MM-DD-HHMMSS.ips.ca.synced' --checkin os-escrow
+
+# Live battery snapshot queries, not the daily Analytics file.
+python3 -I -B scripts/research/independent_diagnostics.py --udid '<paired-device-UDID>' --probe gas-gauge
+python3 -I -B scripts/research/independent_diagnostics.py --udid '<paired-device-UDID>' --probe power-registry
+
+# Standard RemoteXPC transport negotiation only. No guessed logTransfer RPC.
+python3 -I -B scripts/research/independent_diagnostics.py --udid '<paired-device-UDID>' --probe analytics-transport
+```
+
+The native helper reads `remoteUnlockHostKey` only if it already exists in the OS's paired-device snapshot. If absent, the probe fails; it does not request creation or export the data to a file. Its private-pipe credential mode must never be run with stdout redirected to a terminal, log, or file. Use the Python client, which consumes the binary response internally. `CopyRemoteUnlockHostKeyRequest` was found in the framework's protocol metadata but is deliberately not called because this experiment must not initialize a missing credential.
+
+`--probe gas-gauge` and `--probe power-registry` also support `--mode classic --host '<current-discovered-device-address>'`, with optional classic `--checkin escrow`. Successful snapshot replies report only whitelisted metric field names and explicitly say `daily_analytics_acquired: false`. They do not establish acquisition of the daily file or a replacement battery record format. `--probe file-relay-availability` checks only service availability; it never requests a compressed archive. A successful socket alone is not body access.
+
 Classic paired TCP comparison:
 
 ```sh

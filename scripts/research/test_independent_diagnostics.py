@@ -1,12 +1,15 @@
 """Offline protocol tests: fragmented replies, hostile framing and denied reads."""
 import importlib.util
+import contextlib
 import io
+import json
 import pathlib
 import plistlib
 import struct
 import tempfile
 import unittest
 import uuid
+from types import SimpleNamespace
 from unittest import mock
 
 
@@ -40,6 +43,67 @@ def reply(sequence, operation, data):
 
 
 class ProtocolTests(unittest.TestCase):
+    def test_private_os_key_pipe_is_bounded_and_missing_key_fails(self):
+        args = SimpleNamespace(tunnel_helper=pathlib.Path("/fixture/native_tunnel"), udid="test-device")
+        fixture = b"private-test-credential"
+        headers = ({"stage": "existing_os_key_ready", "length": len(fixture)},
+                   {"stage": "existing_os_key_ready", "length": 4097},
+                   {"stage": "existing_os_key_unavailable"})
+        for header in headers:
+            stream = io.BytesIO(json.dumps(header).encode() + b"\n" + fixture)
+            process = SimpleNamespace(stdout=stream, poll=lambda: 0)
+            with mock.patch.object(probe.subprocess, "Popen", return_value=process) as launch, \
+                    mock.patch.object(probe.select, "select", return_value=([stream], [], [])):
+                if header.get("length") == len(fixture):
+                    self.assertEqual(probe.existing_os_remote_key(args), fixture)
+                else:
+                    with self.assertRaises(probe.ProbeError):
+                        probe.existing_os_remote_key(args)
+                self.assertEqual(launch.call_args.args[0], ["/fixture/native_tunnel", "--existing-key-only", "test-device"])
+            self.assertTrue(stream.closed)
+
+    def test_alternate_xpc_bootstrap_does_not_send_service_rpc(self):
+        incoming = b"\0\0\0\x04\0" + struct.pack(">I", 0)
+        class Socket:
+            def __init__(self):
+                self.channel = Fragmented(incoming)
+            def recv(self, length):
+                return self.channel.read(length)
+            def sendall(self, data):
+                self.channel.write(data)
+        rsd = wire.Rsd.__new__(wire.Rsd)
+        rsd.socket, rsd.buffers = Socket(), {}
+        rsd.bootstrap()
+        messages = [wire.decode_wrapper(frame[9:]) for frame in rsd.socket.channel.requests[1:]
+                    if frame[3] == 0]
+        self.assertEqual(messages, [{}, None, None])
+
+    def test_existing_os_key_never_printed_or_regenerated(self):
+        fixture = b"test-only-key-material"
+        args = SimpleNamespace(file="/Retired/Analytics-2026-10-07-090004.ips.ca.synced", probe="os-key-status")
+        output = io.StringIO()
+        with mock.patch.object(probe, "existing_os_remote_key", return_value=fixture), \
+                mock.patch.object(probe, "existing_record", return_value={"remote_unlock_host_key": "dGVzdC1vbmx5LWtleS1tYXRlcmlhbA=="}), \
+                contextlib.redirect_stdout(output):
+            probe.run(args)
+        event = json.loads(output.getvalue())
+        self.assertTrue(event["same_as_saved_tool_credential"])
+        self.assertNotIn(fixture.decode(), output.getvalue())
+        self.assertNotIn("dGVzdC1vbmx5", output.getvalue())
+
+    def test_live_diagnostics_are_not_daily_analytics_and_do_not_expose_serial(self):
+        data = plistlib.dumps({"Status": "Success", "Diagnostics": {
+            "IORegistry": {"CycleCount": 20, "BatterySerialNumber": "private-test-serial", "DesignCapacity": 100}}})
+        stream = Fragmented(struct.pack(">I", len(data)) + data)
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            probe.read_only_diagnostic_query(stream, "power-registry")
+        event = json.loads(output.getvalue())
+        self.assertFalse(event["daily_analytics_acquired"])
+        self.assertEqual(event["available_metrics"], ["CycleCount", "DesignCapacity"])
+        self.assertNotIn("private-test-serial", output.getvalue())
+        self.assertEqual(plistlib.loads(stream.requests[0][4:]), {"Request": "IORegistry", "EntryClass": "IOPMPowerSource"})
+
     def test_fragmented_http2_and_unexpected_stream(self):
         def frame(kind, stream, data):
             return len(data).to_bytes(3, "big") + bytes((kind, 0)) + struct.pack(">I", stream) + data

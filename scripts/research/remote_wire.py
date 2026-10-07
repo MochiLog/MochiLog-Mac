@@ -221,7 +221,8 @@ class Rsd:
                         return value
         raise ValueError("RSD discovery frame budget exceeded")
 
-    def discover(self):
+    def bootstrap(self):
+        """Negotiate RemoteXPC transport without sending a service operation."""
         self.socket.sendall(b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n")
         self.frame(4, data=struct.pack(">HIHI", 3, 100, 4, 2 * 1024 * 1024))
         self.frame(8, data=struct.pack(">I", 2 * 1024 * 1024 - 65535))
@@ -244,6 +245,9 @@ class Rsd:
                 raise ValueError(f"Unexpected initial RSD frame type {kind}")
         else:
             raise ValueError("Device did not send RSD SETTINGS")
+
+    def discover(self):
+        self.bootstrap()
         self.frame(0, 1, wrapper({"MessageType": "Handshake", "MessagingProtocolVersion": 7,
                                  "UUID": host_identity(), "Services": {},
                                  "Properties": {"RemoteXPCVersionFlags": 0x0100000000000006,
