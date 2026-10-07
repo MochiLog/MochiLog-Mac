@@ -61,3 +61,15 @@ OSの言語設定に合わせて、日本語・英語・簡体字中国語・繁
 開発者はXcode 27、XcodeGen、fastlane、Python 3.13以降とDeveloper ID Application証明書を用意し、`fastlane mac beta_dmg`を実行します。完成した配布物は`Build/MochiLog-Mac-Beta.dmg`です。使用者側にはこれらの依存は不要です。公証用のkeychain profileがある場合は`MOCHILOG_NOTARY_PROFILE=<profile> fastlane mac notarize_beta`で**アプリ本体とDMGの両方**を公証・stapleします。APIキーを使う場合は`MOCHILOG_NOTARY_KEY_PATH`、`MOCHILOG_NOTARY_KEY_ID`、`MOCHILOG_NOTARY_ISSUER_ID`を環境変数で渡します。認証情報はリポジトリへ保存しません。
 
 `pymobiledevice3`およびビルド時依存のバージョンは`requirements-build.txt`で固定しています。ライセンスはMacアプリの「ライセンスとお知らせ」画面、または`LICENSE`と`THIRD_PARTY.md`を参照してください。
+
+## Current battery protocol (2026-10-07)
+
+The production collector uses pinned pymobiledevice3 11.19.1 DiagnosticsService.get_battery(), not the independent research wire client. BatterySnapshot filters only CycleCount, DesignCapacity, FullChargeCapacity, NominalChargeCapacity, AppleRawMaxCapacity, root CurrentCapacity (percent) and IsCharging. Capacity fields can be nested in BatteryData; nested CurrentCapacity is not treated as percent. Missing, sentinel, invalid or fractional values are not substituted with zero. The revision is SHA-256 of canonical sorted scalar JSON, including the charging boolean, excluding timestamps and identities.
+
+The subprocess emits filtered scalars through bounded private stdout pipes. Neither raw IORegistry replies nor filtered values are written to collector logs. LiveBatteryCache is memory-only and excluded from CompanionState, daily archives, support attachments and battery-log storage. Requests use the existing v3 AES-GCM request envelope, expiry, persistent replay protection, authentication, pairing identity and response AAD. Version-1 live controls are bounded to 8 KiB; unchanged revisions return only state, revision and acquisition time. No log acknowledgements, daily completion state, import, iCloud or archive mutation occurs in this branch. Cached values are scoped to the authenticated target device.
+
+Automatic acquisition is serialized with existing collection/pairing. Visible desktop cards or recent authenticated mobile requests trigger polling; failed acquisition backs off. Mobile polling runs only while enabled and foreground, honors cellular/Tailscale settings, and uses existing pairings and discovered/cached routes. Restart discards values. Unsupported older companions require an update, not a pairing reset. A successful current diagnostic query is not proof of locked-state Analytics file acquisition.
+
+Verification: Python whitelist/revision tests; secure transfer protocol tests covering changed/unchanged/stale responses, no persisted values, and v3-only live controls; mobile iPhone/iPad opt-in and rotation tests; an isolated synthetic Mac server → iPad simulator v3 encrypted exchange. Fixtures have synthetic identities and values and never modify real pairings. The full Windows app also builds with zero errors/warnings.
+
+Actionsの`prepare_update_feed`を有効にすると、既存のSparkle署名キーで検証済み更新フィードも成果物に含めます。Release作成やフィード公開は行いません。配布物確認後、同じコミットのDMGをReleaseへ掲載し、検証済みXMLを変更せず公開してください。

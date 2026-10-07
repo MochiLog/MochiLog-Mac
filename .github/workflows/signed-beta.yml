@@ -2,6 +2,11 @@ name: Signed beta DMG
 
 on:
   workflow_dispatch:
+    inputs:
+      prepare_update_feed:
+        description: Prepare a signed update feed artifact without publishing a release
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -57,11 +62,24 @@ jobs:
           spctl --assess --type execute --verbose 'Build/DerivedData/Build/Products/Release/MochiLog Mac.app'
           cd Build
           shasum -a 256 MochiLog-Mac-Beta.dmg > MochiLog-Mac-Beta.sha256
+      - name: Prepare signed update feed
+        if: inputs.prepare_update_feed
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.MOCHILOG_SPARKLE_EDDSA_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$SPARKLE_PRIVATE_KEY"
+          key="$RUNNER_TEMP/sparkle-key.txt"
+          printf '%s' "$SPARKLE_PRIVATE_KEY" > "$key"
+          chmod 600 "$key"
+          trap 'rm -f "$key"' EXIT
+          MOCHILOG_SPARKLE_KEY_PATH="$key" bash scripts/prepare-update-feed.sh
       - uses: actions/upload-artifact@v4
         with:
           name: MochiLog-Mac-Beta-notarized-${{ github.run_number }}
           path: |
             Build/MochiLog-Mac-Beta.dmg
             Build/MochiLog-Mac-Beta.sha256
+            Build/UpdateFeed/appcast.xml
           if-no-files-found: error
           retention-days: 90

@@ -124,3 +124,9 @@ After the user explicitly relocked the phone, both installed Xcode versions time
 - CoreDevice fileservice.control: negotiation and CreateSession for systemCrashLogs completed. RetrieveFile failed in the independent wire decoder. This is an unresolved protocol-decoding result, **not evidence of a permission denial or successful body read**. The separately framed data service has not been read.
 
 The research tools now have 21 passing offline tests. No new successful daily-log body acquisition while locked was established. For the new current-battery feature, prefer the maintained pymobiledevice3 DiagnosticsService API; these independent clients remain research tools and are a fallback only if the maintained library cannot perform the required read.
+
+## Maintained-library follow-up
+
+The production live-value implementation now uses pymobiledevice3 11.19.1 DiagnosticsService.get_battery(). An existing-pairing query returned CycleCount, DesignCapacity, FullChargeCapacity, NominalChargeCapacity, AppleRawMaxCapacity, root CurrentCapacity and IsCharging. Only field availability was reported; the numeric snapshot was not retained. The four capacity fields can be nested inside BatteryData. This observation is not a long-lock guarantee.
+
+A subsequent pymobiledevice3 FileServiceService SYSTEM_CRASH_LOGS probe reached RSD and created the file session. retrieve_file for the previously tested Analytics report ended in IncompleteReadError, with no complete body. The screen remained user-confirmed locked; no new independent lock-state fields were obtained. This is a closed/truncated library transfer, not a decoded permission error and not proof that all CoreDevice body routes are impossible. No file, snapshot or new credential was persisted. Independent wire clients remain research fallbacks only.
