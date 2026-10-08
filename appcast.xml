@@ -4,41 +4,25 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>MochiLog Mac</title>
         <item>
-            <title>0.2.20</title>
-            <pubDate>Thu, 08 Oct 2026 16:25:03 +0000</pubDate>
-            <sparkle:version>23</sparkle:version>
-            <sparkle:shortVersionString>0.2.20</sparkle:shortVersionString>
+            <title>0.2.21</title>
+            <pubDate>Thu, 08 Oct 2026 22:58:37 +0000</pubDate>
+            <sparkle:version>24</sparkle:version>
+            <sparkle:shortVersionString>0.2.21</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>27.0</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[# MochiLog Mac 0.2.20 Beta
+            <description sparkle:format="markdown"><![CDATA[# 日本語
 
-## 日本語
+- 端末内取得へ既存のOSペアリングを引き継ぐ際、ホスト名の大文字・小文字の変換により認証に失敗する問題を修正しました。既存の信頼情報を使用し、再ペアリングは不要です。
+- iPhoneとiPadの実機で、認証・バッテリー情報の取得・解析ログの読み取りを検証しています。
 
-今回の更新では、双方のiCloud同期がオン・同じApple Accountと確認できた端末同士で、現在のバッテリー値も共有します。既存ペアリング・旧版の自分の端末の転送は維持し、同期オフ・別アカウント・未確認では他の端末の値を共有しません。現在値はメモリ内だけで扱い、履歴や診断ログには保存しません。
+# English
 
-自動更新確認は初期状態でオフです。最初の選択画面と設定で有効にできます。手動の更新確認はこれまで通り使えます。スマホの「自動ログ収集」へ案内を更新しました。
-
-新しいスマホの端末内取得（実験機能）では、認証済みの暗号化接続を使い、その端末自身のOSペアリング情報を明示的に引き継げます。ほかの端末の鍵は渡しません。VPN／リフレクターなどの対応経路と初期OS信頼設定が必要で、MochiLogのQRだけでOS信頼設定を作る機能ではありません。初回設定の完全無線化・バックグラウンド・Developer Modeオフでの取得を保証しません。
-
-共有と引き継ぎにはスマホ4.0.0 (1041)、Mac 0.2.20／Windows 0.1.17以降が必要です。許可の取り消しが通信不能でPCへ届かない場合、直前の許可は最大15分で期限切れになります。
-
-macOS 27、iOS/iPadOS 27以降向け。署名・公証付きDMGです。
-
-## English
-
-This update also shares current battery values between devices with confirmed iCloud sync enabled on the same Apple Account. Existing pairings and older own-device transfers remain compatible. Sync-off, different-account and unconfirmed cases do not share other devices’ readings. Current values remain in memory and are not saved to history or diagnostic logs.
-
-Automatic update checks are off by default. Choose in the initial prompt or settings; manual checks remain available. Mobile navigation now points to Automatic Log Collection.
-
-Experimental on-device collection in the new mobile beta can explicitly reuse its own OS pairing over an authenticated encrypted connection. Another device’s keys are never exported. It still requires a compatible VPN/reflector route and initial OS trust. The MochiLog QR alone does not establish Apple OS trust. Fully wireless initial setup, background collection and Developer Mode-off operation are not guaranteed.
-
-Sharing and pairing reuse require mobile 4.0.0 (1041), Mac 0.2.20 or Windows 0.1.17. If a device cannot deliver revocation, previous computer-side consent expires within 15 minutes.
-
-Signed and notarized DMG for macOS 27 and iOS/iPadOS 27 or later.
+- Fixed authentication failures when reusing an existing OS pairing for on-device collection. The original hostname spelling is now preserved when deriving the trusted host identifier. Existing pairings remain intact.
+- Verified authentication, current battery data, and read-only analytics-file acquisition on physical iPhone and iPad devices.
 ]]></description>
-            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.20/MochiLog-Mac-Beta.dmg" length="57018213" type="application/octet-stream" sparkle:edSignature="5yCso1yXKDhbp/krijE+nnkCJtZwKHCgXPIrnFV8AjHuEhLTV56VEoWheezgFijC0mWVD/9eY7N5z38AOpQjAA=="></enclosure>
+            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.21/MochiLog-Mac-Beta.dmg" length="57026642" type="application/octet-stream" sparkle:edSignature="Yn23r7daRjLKfs1vtyJDzW+ev1NiSFn321v22DTj4QvGj8xVfWtxGzbJ4lGtPpb6R0tD9h/gmtNVvzWS3W6JAQ=="></enclosure>
         </item>
     </channel>
 </rss><!-- sparkle-signatures:
-edSignature: g72uvjtxEfSEmf+Mi0W1lnicG3PCK5XZkqvv6yJci3wkTEN/nVDbtyZZrBeQutc13K9XWMzzIgO3m8JN/AvJDA==
-length: 3862
+edSignature: LiIfjuS4HBUL7Us2Xa6YkLB+CK2iJeCbJO6jqJN1+xlaItnOoAC06mBtnENDxZRiK9Bd1myXHuBT4i8mWRnzAw==
+length: 1877
 -->
