@@ -573,12 +573,13 @@ final class CompanionModel: ObservableObject {
 
 private struct CompanionView: View {
   private enum Page: String, CaseIterable, Identifiable {
-    case overview, devices, batteryLogs, support, settings
+    case overview, devices, currentBattery, batteryLogs, support, settings
     var id: Self { self }
     var titleKey: String {
       switch self {
       case .overview: "mt_nav_overview"
       case .devices: "mt_nav_devices"
+      case .currentBattery: "live_title"
       case .batteryLogs: "mt_battery_logs"
       case .support: "mt_022"
       case .settings: "mt_nav_settings"
@@ -588,6 +589,7 @@ private struct CompanionView: View {
       switch self {
       case .overview: "square.grid.2x2"
       case .devices: "iphone.gen3"
+      case .currentBattery: "battery.100percent"
       case .batteryLogs: "archivebox"
       case .support: "questionmark.circle"
       case .settings: "gearshape"
@@ -641,6 +643,7 @@ private struct CompanionView: View {
           switch page ?? .overview {
           case .overview: overview
           case .devices: devices
+          case .currentBattery: currentBattery
           case .batteryLogs: BatteryLogLibraryView()
           case .support: support
           case .settings: settings
@@ -667,6 +670,7 @@ private struct CompanionView: View {
 
   private var overview: some View {
     VStack(alignment: .leading, spacing: 22) {
+      pairedDevices
       if !model.legacyClientIDs.isEmpty {
         GroupBox {
           VStack(alignment: .leading, spacing: 8) {
@@ -724,6 +728,22 @@ private struct CompanionView: View {
             .font(.caption).foregroundStyle(.secondary)
         }.padding(12)
       }
+      GroupBox(MacTransferL10n.text("mt_help_title")) {
+        VStack(alignment: .leading, spacing: 14) {
+          helpDiagram
+          DisclosureGroup(MacTransferL10n.text("mt_help_remote_title")) {
+            Text(MacTransferL10n.text("mt_help_remote_detail"))
+              .foregroundStyle(.secondary).padding(.top, 8)
+          }
+          Button(MacTransferL10n.text("mt_help_support")) { page = .support }
+            .buttonStyle(.link)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading).padding(12)
+      }
+    }
+  }
+
+  private var pairedDevices: some View {
       GroupBox(MacTransferL10n.text("mt_nav_connected")) {
         VStack(alignment: .leading, spacing: 12) {
           if model.state.devices.isEmpty {
@@ -765,13 +785,7 @@ private struct CompanionView: View {
                     .help(MacTransferL10n.text("mt_paired"))
                 }
               }
-              LiveBatteryCard(snapshot: model.liveBatterySnapshots[device.physicalDeviceID],
-                failed: model.liveBatteryFailures.contains(device.physicalDeviceID),
-                busy: model.liveBatteryBusy.contains(device.physicalDeviceID),
-                receive: { Task { await model.refreshBattery(device.physicalDeviceID, manual: true) } },
-                send: { Task { await model.sendBatteryNow(device.physicalDeviceID) } })
-                .onAppear { model.watchBattery(device.physicalDeviceID, visible: true) }
-                .onDisappear { model.watchBattery(device.physicalDeviceID, visible: false) }
+
               }
             }
           }
@@ -781,17 +795,27 @@ private struct CompanionView: View {
             .buttonStyle(.link)
         }.frame(maxWidth: .infinity, alignment: .leading).padding(12)
       }
-      GroupBox(MacTransferL10n.text("mt_help_title")) {
-        VStack(alignment: .leading, spacing: 14) {
-          helpDiagram
-          DisclosureGroup(MacTransferL10n.text("mt_help_remote_title")) {
-            Text(MacTransferL10n.text("mt_help_remote_detail"))
-              .foregroundStyle(.secondary).padding(.top, 8)
-          }
-          Button(MacTransferL10n.text("mt_help_support")) { page = .support }
-            .buttonStyle(.link)
+  }
+
+  private var currentBattery: some View {
+    VStack(alignment: .leading, spacing: 20) {
+      if model.state.devices.isEmpty {
+        Text(MacTransferL10n.text("mt_nav_no_devices")).foregroundStyle(.secondary)
+        Button(MacTransferL10n.text("mt_nav_manage_devices")) { page = .devices }
+      }
+      ForEach(model.state.devices) { device in
+        VStack(alignment: .leading, spacing: 12) {
+          Label(device.name, systemImage: device.model.hasPrefix("iPad") ? "ipad" : "iphone")
+            .font(.title3.weight(.semibold))
+          Text(device.model).font(.caption).foregroundStyle(.secondary)
+              LiveBatteryCard(snapshot: model.liveBatterySnapshots[device.physicalDeviceID],
+                failed: model.liveBatteryFailures.contains(device.physicalDeviceID),
+                busy: model.liveBatteryBusy.contains(device.physicalDeviceID),
+                receive: { Task { await model.refreshBattery(device.physicalDeviceID, manual: true) } },
+                send: { Task { await model.sendBatteryNow(device.physicalDeviceID) } })
+                .onAppear { model.watchBattery(device.physicalDeviceID, visible: true) }
+                .onDisappear { model.watchBattery(device.physicalDeviceID, visible: false) }
         }
-        .frame(maxWidth: .infinity, alignment: .leading).padding(12)
       }
     }
   }
