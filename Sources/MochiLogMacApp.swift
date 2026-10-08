@@ -11,14 +11,25 @@ struct MochiLogMacApp: App {
   @StateObject private var model = CompanionModel()
   @AppStorage(MacAppPreferences.menuBarKey) private var showMenuBar = true
   @AppStorage(MacAppPreferences.hideDockKey) private var hideDock = false
+  @AppStorage("automaticUpdateChecks") private var automaticUpdateChecks = false
+  @State private var showingUpdateConsent = false
   private let updaterController: SPUStandardUpdaterController
 
   init() {
     MacAppPreferences.ensureMenuBarForBackgroundMode()
     SingleInstanceGuard.claim()
     CrashDiagnostics.start()
+    // A pre-existing Sparkle preference does not imply consent to the new opt-in.
+    UserDefaults.standard.set(UserDefaults.standard.bool(forKey: "automaticUpdateChecks"), forKey: "SUEnableAutomaticChecks")
+    UserDefaults.standard.set(false, forKey: "SUAutomaticallyUpdate")
     updaterController = SPUStandardUpdaterController(startingUpdater: true,
       updaterDelegate: nil, userDriverDelegate: nil)
+  }
+
+  private func setUpdateConsent(_ enabled: Bool) {
+    UserDefaults.standard.set(true, forKey: "updateConsentAnswered")
+    automaticUpdateChecks = enabled
+    updaterController.updater.automaticallyChecksForUpdates = enabled
   }
 
   var body: some Scene {
@@ -26,7 +37,17 @@ struct MochiLogMacApp: App {
       CompanionView(checkForUpdates: { updaterController.checkForUpdates(nil) })
         .environmentObject(model)
         .frame(minWidth: 780, minHeight: 620)
-        .onAppear { MacAppPreferences.applyDockVisibility() }
+        .onAppear {
+          MacAppPreferences.applyDockVisibility()
+          if !UserDefaults.standard.bool(forKey: "updateConsentAnswered") { showingUpdateConsent = true }
+        }
+        .onChange(of: automaticUpdateChecks) { _, enabled in
+          updaterController.updater.automaticallyChecksForUpdates = enabled
+        }
+        .alert(MacTransferL10n.text("update_optin_title"), isPresented: $showingUpdateConsent) {
+          Button(MacTransferL10n.text("update_optin_yes")) { setUpdateConsent(true) }
+          Button(MacTransferL10n.text("update_optin_no"), role: .cancel) { setUpdateConsent(false) }
+        } message: { Text(MacTransferL10n.text("update_optin_note")) }
         .onChange(of: showMenuBar) { _, _ in MacAppPreferences.applyDockVisibility() }
         .onChange(of: hideDock) { _, _ in MacAppPreferences.applyDockVisibility() }
     }
@@ -609,6 +630,7 @@ private struct CompanionView: View {
   @State private var showingLicenses = false
   @State private var supportDeviceID: String?
   @State private var launchesAtLogin = MacAppPreferences.launchesAtLogin
+  @AppStorage("automaticUpdateChecks") private var automaticUpdateChecks = false
   @State private var preferencesError: String?
   @State private var manualDeviceAddress = ""
   @State private var showingUnpairConfirmation = false
@@ -1309,8 +1331,13 @@ private struct CompanionView: View {
         }.frame(maxWidth: .infinity, alignment: .leading).padding(12)
       }
       GroupBox(MacTransferL10n.text("mt_nav_updates")) {
+        VStack(alignment: .leading, spacing: 12) {
+        Toggle(MacTransferL10n.text("update_optin_title"), isOn: $automaticUpdateChecks)
+          .onChange(of: automaticUpdateChecks) { _, _ in UserDefaults.standard.set(true, forKey: "updateConsentAnswered") }
+        Text(MacTransferL10n.text("update_optin_note")).font(.caption).foregroundStyle(.secondary)
         Button(MacTransferL10n.text("mt_002")) { checkForUpdates() }
           .frame(maxWidth: .infinity, alignment: .leading).padding(12)
+        }
       }
     }
   }

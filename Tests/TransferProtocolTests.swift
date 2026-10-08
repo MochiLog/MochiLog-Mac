@@ -1033,6 +1033,34 @@ struct TransferProtocolTests {
     try check(revoked.0.isEmpty && revoked.1 != foreignBytes, "Source OFF did not revoke an outstanding offer")
     _ = try cloudRequest(3, scope: scope, ack: foreignToken)
     try check(FileManager.default.fileExists(atPath: sourceFile.path), "Revoked ACK removed a source file")
+    print("Checking current-value sharing is consent-scoped and independent of raw logs")
+    cloudServer.liveBattery.set(live, for: peers[1].physicalDeviceID)
+    func sharedLive(_ recipient: Int, _ source: Int, consent: String?, deny: Bool = false) throws -> [String: Any] {
+      let nonce = UUID()
+      let extra = ["liveBatteryVersion": "1", "liveBatterySharedVersion": "1",
+        "liveBatterySourceID": peers[source].physicalDeviceID.uuidString,
+        "cloudSharingVersion": "1", "cloudSharingScope": consent ?? ""]
+      let wire = try request(cloudEndpoint, hostID: cloudHost, device: peers[recipient],
+        nonce: nonce, expectNoResponse: deny, sealed: true, extra: extra)
+      if deny { try check(wire.isEmpty, "Unauthorized current values returned"); return [:] }
+      let plain = try opened(wire, secret: peers[recipient].secret,
+        context: (cloudHost, peers[recipient].physicalDeviceID, nonce))
+      try check(plain.0.isEmpty, "Current values were returned as a file")
+      return try JSONSerialization.jsonObject(with: plain.1) as! [String: Any]
+    }
+    _ = try sharedLive(0, 1, consent: scope, deny: true) // Source currently OFF.
+    _ = try cloudRequest(1, scope: scope, policy: true)
+    let ownWithManifest = try sharedLive(0, 0, consent: scope)
+    let sources = ownWithManifest["sources"] as? [[String: String]] ?? []
+    try check(sources.contains { $0["physicalDeviceID"] == peers[1].physicalDeviceID.uuidString }, "Eligible source absent from manifest")
+    let sharedCurrent = try sharedLive(0, 1, consent: scope)
+    try check(sharedCurrent["sourcePhysicalDeviceID"] as? String == peers[1].physicalDeviceID.uuidString &&
+      sharedCurrent["values"] != nil && sharedCurrent["sharedVersion"] as? Int == 1,
+      "Same-account recipient lost source current values")
+    _ = try sharedLive(0, 1, consent: nil, deny: true)
+    _ = try sharedLive(0, 1, consent: String(repeating: "c", count: 64), deny: true)
+    _ = try sharedLive(0, 0, consent: nil) // Own values still available without iCloud.
+    try check(FileManager.default.fileExists(atPath: sourceFile.path), "Current-value request consumed a raw log")
     let audit = SupportDiagnostics.logText(for: String(SupportDiagnostics.localTime(Date()).prefix(10)))
     try check(audit.contains("Cloud sharing: source=") && audit.contains("recipient=") && audit.contains("decision="), "Sharing decisions cannot be traced")
     try check(audit.contains("Transfer trace:") && audit.contains("elapsedMs="), "Transfer timing missing")

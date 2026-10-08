@@ -16,11 +16,14 @@ private struct PullRequest: Decodable {
   let dailyPauseUntil: String?
   let dailyPauseMAC: String?
   let dailyResumeMAC: String?
+  let liveBatterySourceID: UUID?
+  let liveBatterySharedVersion: String?
   let liveBatteryVersion: String?
   let liveBatteryRevision: String?
   let liveBatteryDetailsVersion: String?
   let liveBatteryDetailsRevision: String?
   let liveBatteryRefresh: String?
+  let localDiagnosticsPairing: String?
   let cloudSharingVersion: String?
   let cloudSharingScope: String?
   let cloudSharingOnly: String?
@@ -716,9 +719,14 @@ final class TransferServer: @unchecked Sendable {
         onStatus?(MacTransferL10n.format("mt_m_17", error.localizedDescription))
       }
     }
-    if request.liveBatteryVersion == nil {
+    if request.localDiagnosticsPairing == nil && (request.liveBatteryVersion == nil || request.liveBatterySharedVersion == "1") {
       cloudSharing.update(device.physicalDeviceID,
         scope: secure && request.cloudSharingVersion == "1" ? request.cloudSharingScope : nil, now: now)
+    }
+    if request.localDiagnosticsPairing != nil {
+      guard secure, request.localDiagnosticsPairing == "1", request.ack == "", request.offerToken == nil,
+        let control = LocalDiagnosticsPairing.control(for: device) else { return nil }
+      return try? encryptedLogResponse(control, name: "", request: request, device: device)
     }
     if request.cloudSharingOnly != nil {
       guard secure, request.cloudSharingOnly == "1", request.cloudSharingVersion == "1",
@@ -732,13 +740,32 @@ final class TransferServer: @unchecked Sendable {
     if request.liveBatteryVersion != nil {
       // Optional fields require whole-request v3 authentication. No log ACK,
       // daily-pause changes, diagnostics persistence, or file queue access here.
-      guard secure, request.liveBatteryVersion == "1", request.ack == "",
-        let control = liveBattery.response(for: device.physicalDeviceID,
+      guard secure, request.liveBatteryVersion == "1", request.ack == "" else { return nil }
+      let scope = cloudSharing.scope(device.physicalDeviceID, now: now)
+      let allowed = state.devices.filter { source in
+        source.physicalDeviceID == device.physicalDeviceID ||
+          (request.liveBatterySharedVersion == "1" && scope != nil &&
+            cloudSharing.scope(source.physicalDeviceID, now: now) == scope)
+      }
+      let sourceID = request.liveBatterySourceID ?? device.physicalDeviceID
+      guard allowed.contains(where: { $0.physicalDeviceID == sourceID }),
+        let bytes = liveBattery.response(for: sourceID,
           revision: request.liveBatteryRevision, includesDetails: request.liveBatteryDetailsVersion == "1",
-          detailsRevision: request.liveBatteryDetailsRevision) else { return nil }
-      onLiveBatteryRequested?(device.physicalDeviceID, request.liveBatteryRefresh == "1")
+          detailsRevision: request.liveBatteryDetailsRevision),
+        var object = (try? JSONSerialization.jsonObject(with: bytes)) as? [String: Any] else { return nil }
+      if request.liveBatterySharedVersion == "1" {
+        object["sharedVersion"] = 1
+        object["sourcePhysicalDeviceID"] = sourceID.uuidString
+        object["scope"] = scope ?? ""
+        object["sources"] = allowed.prefix(64).map {
+          ["physicalDeviceID": $0.physicalDeviceID.uuidString, "model": $0.model]
+        }
+      }
+      guard let control = try? JSONSerialization.data(withJSONObject: object) else { return nil }
+      onLiveBatteryRequested?(sourceID, request.liveBatteryRefresh == "1")
       return try? encryptedLogResponse(control, name: "", request: request, device: device)
     }
+
     if let encoded = request.clientDiagnosticsBox,
       let combined = Data(base64Encoded: encoded), combined.count <= 8_256,
       let box = try? AES.GCM.SealedBox(combined: combined),
