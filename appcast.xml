@@ -4,33 +4,41 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>MochiLog Mac</title>
         <item>
-            <title>0.2.19</title>
-            <pubDate>Thu, 08 Oct 2026 13:45:56 +0000</pubDate>
-            <sparkle:version>22</sparkle:version>
-            <sparkle:shortVersionString>0.2.19</sparkle:shortVersionString>
+            <title>0.2.20</title>
+            <pubDate>Thu, 08 Oct 2026 16:25:03 +0000</pubDate>
+            <sparkle:version>23</sparkle:version>
+            <sparkle:shortVersionString>0.2.20</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>27.0</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[# MochiLog Mac 0.2.19 Beta
+            <description sparkle:format="markdown"><![CDATA[# MochiLog Mac 0.2.20 Beta
 
 ## 日本語
 
-今回の更新：同じPCとペアリングしたiPhone・iPadで、双方のiCloud同期がオン・同じApple Accountと確認できた場合だけ、ほかの端末のログも暗号化して受信します。3台・4台でも受信先ごとに条件を確認し、同期オフ・別アカウント・未確認なら共有しません。共有元のアプリをしばらく開いていない場合は確認まで保留します。元端末の個体IDとWatchの区別を保持し、同じログの重複転送・重複記録を回避します。別の端末が受信しても元端末向けの未転送ログは保護します。旧版とは自分の端末のログを従来どおり扱い、既存ペアリングを引き継ぎます。
+今回の更新では、双方のiCloud同期がオン・同じApple Accountと確認できた端末同士で、現在のバッテリー値も共有します。既存ペアリング・旧版の自分の端末の転送は維持し、同期オフ・別アカウント・未確認では他の端末の値を共有しません。現在値はメモリ内だけで扱い、履歴や診断ログには保存しません。
 
-Mac・Windowsとも日次ログ収集と現在のバッテリー情報を独立して並列動作させます。収集ツール、接続、事前照会、応答準備・送信、受領確認・解析までの経過時間をデバッグログへ追加しました。共有を許可・保留した理由と元端末・受信先も追跡でき、秘密鍵・アカウント照合値・現在のバッテリー値自体は記録しません。Windowsは低速回線で転送が進んでいれば合計25秒を超えても継続し、通信停止にはタイムアウトします。
+自動更新確認は初期状態でオフです。最初の選択画面と設定で有効にできます。手動の更新確認はこれまで通り使えます。スマホの「自動ログ収集」へ案内を更新しました。
 
-共有には新しいスマホ4.0.0 (1039)、MochiLog Mac 0.2.19 Beta / Windows 0.1.16 Alphaが必要です。PC同士は同期しません。PCが削除済みのログは復元できません。許可の通知が通信不能で届かない場合、PCが保持する直前の許可は最大15分で期限切れになります。実際のCloudKit・モバイル回線・OSの条件で差があるため、ベータ版としてご確認ください。
+新しいスマホの端末内取得（実験機能）では、認証済みの暗号化接続を使い、その端末自身のOSペアリング情報を明示的に引き継げます。ほかの端末の鍵は渡しません。VPN／リフレクターなどの対応経路と初期OS信頼設定が必要で、MochiLogのQRだけでOS信頼設定を作る機能ではありません。初回設定の完全無線化・バックグラウンド・Developer Modeオフでの取得を保証しません。
+
+共有と引き継ぎにはスマホ4.0.0 (1041)、Mac 0.2.20／Windows 0.1.17以降が必要です。許可の取り消しが通信不能でPCへ届かない場合、直前の許可は最大15分で期限切れになります。
+
+macOS 27、iOS/iPadOS 27以降向け。署名・公証付きDMGです。
 
 ## English
 
-This update adds encrypted sharing of logs between iPhone and iPad paired with the same computer, only when both have iCloud sync enabled and the same Apple Account is confirmed. Conditions are checked per recipient with three or four devices too. Sync off, different accounts or unconfirmed settings prevent sharing. If the source app has not been opened recently, sharing waits for confirmation. Source and Watch identities are preserved, and duplicate transfers and records are avoided. Another recipient’s ACK protects the source’s pending queue. Existing pairings and own-device transfers remain compatible with earlier versions.
+This update also shares current battery values between devices with confirmed iCloud sync enabled on the same Apple Account. Existing pairings and older own-device transfers remain compatible. Sync-off, different-account and unconfirmed cases do not share other devices’ readings. Current values remain in memory and are not saved to history or diagnostic logs.
 
-Mac and Windows now run daily-log collection and current battery acquisition independently and in parallel. Debug logs trace collection jobs, connection, preflight decisions, response preparation/write, application acknowledgement and parsing times. Sharing reasons, source and recipient are recorded without secret keys, account-matching scopes or battery values themselves. Windows allows progressing slow transfers to exceed 25 seconds overall, while timing out stalled communication.
+Automatic update checks are off by default. Choose in the initial prompt or settings; manual checks remain available. Mobile navigation now points to Automatic Log Collection.
 
-Sharing requires mobile 4.0.0 (1039), MochiLog Mac 0.2.19 Beta / Windows 0.1.16 Alpha. Computers do not synchronize with each other, and deleted raw logs cannot be recovered. If a device cannot send revocation, the computer’s previous consent expires within 15 minutes. Actual CloudKit, cellular and OS conditions vary; this remains a beta feature.
+Experimental on-device collection in the new mobile beta can explicitly reuse its own OS pairing over an authenticated encrypted connection. Another device’s keys are never exported. It still requires a compatible VPN/reflector route and initial OS trust. The MochiLog QR alone does not establish Apple OS trust. Fully wireless initial setup, background collection and Developer Mode-off operation are not guaranteed.
+
+Sharing and pairing reuse require mobile 4.0.0 (1041), Mac 0.2.20 or Windows 0.1.17. If a device cannot deliver revocation, previous computer-side consent expires within 15 minutes.
+
+Signed and notarized DMG for macOS 27 and iOS/iPadOS 27 or later.
 ]]></description>
-            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.19/MochiLog-Mac-Beta.dmg" length="55915510" type="application/octet-stream" sparkle:edSignature="q7VGrkvci643ETEgf73Fl42VDKsKJsr3FYO9UAqyQpcgSTFa5Uuw99HtHruY3v9y69lcUR+4yzMhB2hQJhW8Bg=="></enclosure>
+            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.20/MochiLog-Mac-Beta.dmg" length="57018213" type="application/octet-stream" sparkle:edSignature="5yCso1yXKDhbp/krijE+nnkCJtZwKHCgXPIrnFV8AjHuEhLTV56VEoWheezgFijC0mWVD/9eY7N5z38AOpQjAA=="></enclosure>
         </item>
     </channel>
 </rss><!-- sparkle-signatures:
-edSignature: 1tyzuaxFOg4TJYGsMaRLkt7a15VWLmHrQ5jonrCpsVfFv1AUGXy1XtGTlSkF826PfJAoWJ4BcwVhULxaxK98Dg==
-length: 4443
+edSignature: g72uvjtxEfSEmf+Mi0W1lnicG3PCK5XZkqvv6yJci3wkTEN/nVDbtyZZrBeQutc13K9XWMzzIgO3m8JN/AvJDA==
+length: 3862
 -->
