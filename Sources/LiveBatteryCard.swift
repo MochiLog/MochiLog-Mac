@@ -14,17 +14,21 @@ struct LiveBatteryCard: View {
         Spacer()
         if busy { ProgressView().controlSize(.small) }
       }
-      LazyVGrid(columns: [GridItem(.adaptive(minimum: 145))], alignment: .leading, spacing: 12) {
-        ForEach(["CycleCount", "DesignCapacity", "NominalChargeCapacity", "AppleRawMaxCapacity", "FullChargeCapacity", "CurrentCapacity"], id: \.self) { key in
-          VStack(alignment: .leading, spacing: 4) {
-            Text(MacTransferL10n.text("live_" + key)).font(.caption).foregroundStyle(.secondary)
-            Text(snapshot?.values[key].map { value in
-              value.formatted() + (key == "CycleCount" ? "" : key == "CurrentCapacity" ? "%" : " mAh")
-            } ?? MacTransferL10n.text("live_missing"))
-            .font(.title3.weight(.semibold)).monospacedDigit()
+      Grid(alignment: .leading, horizontalSpacing: 24, verticalSpacing: 10) {
+        GridRow {
+          Text(MacTransferL10n.text("live_field"))
+          Text(MacTransferL10n.text("live_value"))
+        }.font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+        ForEach(BatteryPresentation.summary(values: snapshot?.values ?? [:], charging: snapshot?.charging,
+          fields: snapshot?.fields ?? [])) { row in
+          Divider().gridCellColumns(2)
+          GridRow(alignment: .top) {
+            Text(MacTransferL10n.text("live_" + row.key)).frame(maxWidth: .infinity, alignment: .leading)
+            Text(row.display(text: MacTransferL10n.text)).monospacedDigit().textSelection(.enabled)
+              .fixedSize(horizontal: false, vertical: true)
           }
         }
-      }
+      }.font(.callout)
       if let snapshot, let date = ISO8601DateFormatter().date(from: snapshot.acquiredAt) {
         HStack {
           Text(MacTransferL10n.text("live_last"))
@@ -34,7 +38,8 @@ struct LiveBatteryCard: View {
       if let snapshot {
         DisclosureGroup {
           if snapshot.fields.isEmpty { Text(MacTransferL10n.text("live_details_missing")).font(.caption) }
-          else { RawBatteryFieldsView(fields: snapshot.fields, text: MacTransferL10n.text) }
+          else { RawBatteryFieldsView(fields: BatteryPresentation.details(values: snapshot.values,
+            charging: snapshot.charging, fields: snapshot.fields), text: MacTransferL10n.text) }
         } label: { Label(MacTransferL10n.text("live_details"), systemImage: "list.bullet.rectangle") }
       }
       if failed { Label(MacTransferL10n.text("live_unavailable"), systemImage: "exclamationmark.triangle")
@@ -56,6 +61,7 @@ private struct RawBatteryFieldsView: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 14) {
       Text(text("live_details_note")).font(.caption).foregroundStyle(.secondary)
+      if fields.isEmpty { Text(text("live_details_empty")).font(.caption) }
       ForEach(groups.keys.sorted(), id: \.self) { group in
         DisclosureGroup {
           VStack(alignment: .leading, spacing: 12) {

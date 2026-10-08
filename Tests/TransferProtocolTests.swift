@@ -753,6 +753,41 @@ struct TransferProtocolTests {
       nonce: secureNonce, sealed: true), secret: v3Key,
       context: (hostID, mobilePhysicalID, secureNonce))
     print("Checking session-only live battery responses, unchanged values and replay")
+    let registryData = try Data(contentsOf: URL(fileURLWithPath: "Tests/Fixtures/battery-registry.xml"))
+    let native = try LiveBatterySnapshot.decode(registryData)
+    try check(native.values == ["CycleCount": 245, "DesignCapacity": 3000,
+      "FullChargeCapacity": 3100, "CurrentCapacity": 67] && native.charging == true,
+      "Native plist validation lost precedence, accepted a boolean capacity or guessed unknown values")
+    try check(native.fields.contains { $0.path == ["BatteryData", "Huge"] && $0.value == "18446744073709551615" },
+      "Native plist lost UInt64 precision")
+    try check(native.fields.contains { $0.path == ["Binary"] && $0.kind == "data" && $0.value == "AQI=" } &&
+      native.fields.contains { $0.path == ["Date"] && $0.kind == "date" } &&
+      native.fields.contains { $0.path == ["EmptyDictionary"] && $0.kind == "dictionary" } &&
+      native.fields.contains { $0.path == ["EmptyArray"] && $0.kind == "array" }, "Native plist lost typed leaves")
+    let table = BatteryPresentation.summary(values: native.values, charging: native.charging, fields: native.fields)
+    let optional = BatteryPresentation.details(values: native.values, charging: native.charging, fields: native.fields)
+    try check(table.contains { $0.key == "Voltage" && $0.value == "4010" && $0.unit == " mV" } &&
+      table.contains { $0.key == "ExternalConnected" && $0.kind == "boolean" } &&
+      !table.contains { $0.key == "UnknownCode" || $0.key == "Huge" }, "Summary guessed an unknown field")
+    try check(optional.contains { $0.path == ["BatteryData", "CurrentCapacity"] } &&
+      optional.contains { $0.path == ["DesignCapacity"] && $0.value == "4000" } &&
+      optional.contains { $0.path.first == "IOReportLegend" } &&
+      !optional.contains { $0.path == ["Voltage"] }, "Details lost ambiguous fields or repeated verified rows")
+    let contradictory = RawBatteryField(path: ["IsCharging"], kind: "boolean", value: "false")
+    let invalidVoltage = RawBatteryField(path: ["Voltage"], kind: "string", value: "4010")
+    try check(BatteryPresentation.details(values: [:], charging: true,
+      fields: [contradictory, invalidVoltage]).count == 2, "Invalid or contradictory raw values disappeared")
+    var changedRegistry = try PropertyListSerialization.propertyList(from: registryData, options: [], format: nil) as! [String: Any]
+    changedRegistry["UnknownCode"] = 8
+    let changedNative = try LiveBatterySnapshot.fromRegistry(PropertyListSerialization.data(
+      fromPropertyList: changedRegistry, format: .xml, options: 0))
+    try check(native.revision == changedNative.revision && native.detailsRevision != changedNative.detailsRevision,
+      "Native detail changes altered the core revision")
+    do { _ = try LiveBatterySnapshot.fromRegistry(Data(repeating: 65, count: 1048577)); fatalError("Oversized plist accepted") }
+    catch { }
+    changedRegistry["Voltage"] = String(repeating: "a", count: 131073)
+    do { _ = try LiveBatterySnapshot.fromRegistry(PropertyListSerialization.data(fromPropertyList: changedRegistry,
+      format: .xml, options: 0)); fatalError("Oversized leaf accepted") } catch { }
     let fixture: [String: Any] = ["version": 1, "values": ["CycleCount": 245, "DesignCapacity": 4000],
       "revision": String(repeating: "a", count: 64), "acquiredAt": "2026-10-07T12:00:00Z"]
     let details = "[{\"path\":[\"BatteryData\",\"Huge\"],\"kind\":\"number\",\"value\":\"18446744073709551615\"}]"

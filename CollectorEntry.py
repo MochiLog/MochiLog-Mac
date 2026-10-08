@@ -1,3 +1,10 @@
+"""Packaged entry point for the maintained Apple-device library.
+
+Native Swift/C# code launches this executable without requiring users to
+install Python. The two local adapters add bounded direct-IP and battery API
+calls; application state, log selection, retention and encryption stay native.
+"""
+
 from multiprocessing import freeze_support
 import os
 import sys
@@ -19,7 +26,12 @@ if __name__ == "__main__":
         else:
             main()
     except SystemExit as error:
-        code = 0 if error.code is None else (error.code if isinstance(error.code, int) else 1)
+        if error.code is None:
+            code = 0
+        elif isinstance(error.code, int):
+            code = error.code
+        else:
+            code = 1
     except BaseException:
         traceback.print_exc()
         code = 1

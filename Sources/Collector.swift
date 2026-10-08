@@ -727,7 +727,8 @@ enum Collector {
         remote.path.hasPrefix(base + "Analytics-")
       return validLocation && !remote.name.hasPrefix("Analytics-Census-") &&
         !remote.name.localizedCaseInsensitiveContains("session") &&
-        remote.name.hasSuffix(".ips.ca.synced") && seen.insert(remote.token).inserted
+        remote.name.range(of: #"^Analytics-[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{6}[A-Za-z0-9._-]*\.ips\.ca\.synced$"#,
+          options: .regularExpression) != nil && seen.insert(remote.token).inserted
     }
   }
 }

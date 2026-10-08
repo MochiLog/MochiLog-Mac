@@ -18,7 +18,8 @@ from pymobiledevice3.remote.tunnel_service import (
 from pymobiledevice3.services.crash_reports import CrashReportsManager
 
 
-async def run(arguments):
+async def run(arguments: argparse.Namespace) -> None:
+    """Connect through the maintained library and perform one bounded operation."""
     async def direct_provider(serial, autopair, remotepairing_fallback=True):
         provider = await create_core_device_tunnel_service_using_remotepairing(
             arguments.udid, arguments.host, arguments.port, autopair=False
@@ -56,15 +57,14 @@ async def run(arguments):
                             raise
                         continue
                     for entry in entries:
-                        name = entry.rsplit("/", 1)[-1]
-                        token = (source, name)
-                        if (entry.startswith(directory.rstrip("/") + "/Analytics-")
-                            and re.fullmatch(r"Analytics-\d{4}-\d{2}-\d{2}-\d{6}.*\.ips\.ca\.synced", name)
-                            and "session" not in name.lower()
-                            and not name.startswith("Analytics-Census-")
-                            and token not in seen):
+                        # Selection and deduplication belong to Swift/C#. This
+                        # bridge only describes files exposed by the library.
+                        token = (source, entry)
+                        if token not in seen:
                             seen.add(token)
                             files.append({"path": entry, "source": source})
+                        if len(files) > 10000:
+                            raise ValueError("Diagnostic listing exceeds limit")
                 print(json.dumps({"files": files}))
             elif arguments.action == "pull-batch":
                 with open(arguments.manifest, encoding="utf-8") as stream:
@@ -82,7 +82,10 @@ async def run(arguments):
                     target_dir = os.path.join(arguments.output, str(index))
                     os.makedirs(target_dir, exist_ok=True)
                     try:
-                        await asyncio.wait_for(reports.pull(target_dir, entry=path, progress_bar=False), timeout=180)
+                        await asyncio.wait_for(
+                            reports.pull(target_dir, entry=path, progress_bar=False),
+                            timeout=180,
+                        )
                         target = os.path.join(target_dir, path.rsplit("/", 1)[-1])
                         if not os.path.isfile(target):
                             raise FileNotFoundError("Report was not downloaded")
@@ -94,7 +97,7 @@ async def run(arguments):
         await tunnel.aclose()
 
 
-def main(argv):
+def main(argv: list[str]) -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("action", choices=("verify", "scan", "pull-batch"))
     parser.add_argument("--udid", required=True)

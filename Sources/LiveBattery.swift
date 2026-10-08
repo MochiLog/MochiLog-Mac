@@ -23,6 +23,64 @@ struct RawBatteryField: Codable, Equatable {
   }
 }
 
+/// Conservative display allowlist. Unknown paths and invalid representations stay in details.
+struct BatterySummaryRow: Identifiable {
+  let key: String
+  let value: String?
+  var kind = "number"
+  var unit = ""
+  var id: String { key }
+  func display(text: (String) -> String) -> String {
+    guard let value else { return text("live_missing") }
+    return kind == "boolean" ? text(value == "true" ? "live_true" : "live_false") : value + unit
+  }
+}
+
+enum BatteryPresentation {
+  static let primaryKeys = ["CycleCount", "DesignCapacity", "NominalChargeCapacity", "AppleRawMaxCapacity", "FullChargeCapacity", "CurrentCapacity"]
+  static let extraKeys = ["IsCharging", "FullyCharged", "ExternalConnected", "ExternalChargeCapable",
+    "AppleRawExternalConnected", "BatteryInstalled", "AtCriticalLevel", "Voltage", "Amperage", "InstantAmperage", "Serial"]
+  static func extra(_ field: RawBatteryField) -> BatterySummaryRow? {
+    guard field.path.count == 1, let key = field.path.first, extraKeys.contains(key) else { return nil }
+    if ["Voltage", "Amperage", "InstantAmperage"].contains(key) {
+      guard field.kind == "number", let value = Int64(field.value),
+        (key == "Voltage" ? 0...100000 : -2000000...2000000).contains(value) else { return nil }
+      return BatterySummaryRow(key: key, value: field.value, unit: key == "Voltage" ? " mV" : " mA")
+    }
+    if key == "Serial" {
+      guard field.kind == "string", !field.value.isEmpty else { return nil }
+      return BatterySummaryRow(key: key, value: field.value, kind: "string")
+    }
+    guard field.kind == "boolean", ["true", "false"].contains(field.value) else { return nil }
+    return BatterySummaryRow(key: key, value: field.value, kind: "boolean")
+  }
+  static func summary(values: [String: Int], charging: Bool?, fields: [RawBatteryField]) -> [BatterySummaryRow] {
+    var rows = primaryKeys.map { key in
+      BatterySummaryRow(key: key, value: values[key].map { $0.formatted() },
+        unit: key == "CycleCount" ? "" : key == "CurrentCapacity" ? "%" : " mAh")
+    }
+    for key in extraKeys {
+      if key == "IsCharging", let charging {
+        rows.append(BatterySummaryRow(key: key, value: charging ? "true" : "false", kind: "boolean"))
+      } else if let field = fields.first(where: { $0.path == [key] }), let row = extra(field) { rows.append(row) }
+    }
+    return rows
+  }
+  static func details(values: [String: Int], charging: Bool?, fields: [RawBatteryField]) -> [RawBatteryField] {
+    fields.filter { field in
+      if let row = extra(field) {
+        // A contradictory raw charging flag must remain inspectable.
+        return row.key == "IsCharging" && charging != nil && row.value != (charging! ? "true" : "false")
+      }
+      guard let key = field.path.last, primaryKeys.contains(key), field.kind == "number",
+        let value = Int(field.value), values[key] == value else { return true }
+      let isRoot = field.path == [key]
+      let isCapacity = field.path == ["BatteryData", key] && !["CycleCount", "CurrentCapacity"].contains(key)
+      return !isRoot && !isCapacity
+    }
+  }
+}
+
 /// Session-only diagnostic cache. Never encoded into CompanionState or log storage.
 struct LiveBatterySnapshot: Codable, Equatable {
   let version: Int
@@ -38,6 +96,7 @@ struct LiveBatterySnapshot: Codable, Equatable {
   }
 
   static func decode(_ data: Data) throws -> LiveBatterySnapshot {
+    if data.starts(with: Data("<?xml".utf8)) { return try fromRegistry(data) }
     guard data.count <= 1048576,
       let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
       object["version"] as? Int == 1,
@@ -70,6 +129,70 @@ struct LiveBatterySnapshot: Codable, Equatable {
     }
     return LiveBatterySnapshot(version: 1, values: values, revision: revision,
       acquiredAt: acquired, charging: charging, detailsJSON: details, detailsRevision: detailsRevision)
+  }
+
+  /// Native interpretation of the helper's lossless plist. Legacy JSON remains supported.
+  static func fromRegistry(_ data: Data) throws -> LiveBatterySnapshot {
+    guard data.count <= 1048576,
+      let registry = try PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any],
+      !registry.isEmpty else { throw RawBatteryField.Failure.invalid }
+    var fields: [RawBatteryField] = []
+    func visit(_ value: Any, path: [String]) throws {
+      guard path.count <= 32, fields.count < 10000 else { throw RawBatteryField.Failure.invalid }
+      if let dictionary = value as? [String: Any], !dictionary.isEmpty {
+        for key in dictionary.keys.sorted() {
+          guard key.count <= 512 else { throw RawBatteryField.Failure.invalid }
+          try visit(dictionary[key]!, path: path + [key])
+        }
+        return
+      }
+      if let array = value as? [Any], !array.isEmpty {
+        for (index, entry) in array.enumerated() { try visit(entry, path: path + ["[\(index)]"]) }
+        return
+      }
+      let kind: String
+      let text: String
+      switch value {
+      case let number as NSNumber:
+        let boolean = CFGetTypeID(number) == CFBooleanGetTypeID()
+        kind = boolean ? "boolean" : "number"
+        text = boolean ? (number.boolValue ? "true" : "false") : number.stringValue
+      case let string as String: kind = "string"; text = string
+      case let blob as Data: kind = "data"; text = blob.base64EncodedString()
+      case let date as Date: kind = "date"; text = ISO8601DateFormatter().string(from: date)
+      case is [String: Any]: kind = "dictionary"; text = "{}"
+      case is [Any]: kind = "array"; text = "[]"
+      default: throw RawBatteryField.Failure.invalid
+      }
+      guard text.count <= 131072 else { throw RawBatteryField.Failure.invalid }
+      fields.append(RawBatteryField(path: path, kind: kind, value: text))
+    }
+    try visit(registry, path: [])
+    let battery = registry["BatteryData"] as? [String: Any] ?? [:]
+    let limits = ["CycleCount": 0...100000, "DesignCapacity": 1...200000,
+      "FullChargeCapacity": 1...200000, "NominalChargeCapacity": 1...200000,
+      "AppleRawMaxCapacity": 1...200000, "CurrentCapacity": 0...100]
+    var values: [String: Int] = [:]
+    for (key, range) in limits {
+      let raw = ["CycleCount", "CurrentCapacity"].contains(key) ? registry[key] : (battery[key] ?? registry[key])
+      if let number = raw as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
+        number.doubleValue.isFinite, number.doubleValue == Double(number.intValue), range.contains(number.intValue) {
+        values[key] = number.intValue
+      }
+    }
+    let charging = (registry["IsCharging"] as? NSNumber).flatMap {
+      CFGetTypeID($0) == CFBooleanGetTypeID() ? $0.boolValue : nil
+    }
+    var core: [String: Any] = values
+    if let charging { core["IsCharging"] = charging }
+    let coreData = try JSONSerialization.data(withJSONObject: core, options: [.sortedKeys, .withoutEscapingSlashes])
+    let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+    let details = try encoder.encode(fields)
+    guard details.count <= 262144 else { throw RawBatteryField.Failure.invalid }
+    let hash: (Data) -> String = { SHA256.hash(data: $0).map { String(format: "%02x", $0) }.joined() }
+    return LiveBatterySnapshot(version: 1, values: values, revision: hash(coreData),
+      acquiredAt: ISO8601DateFormatter().string(from: Date()), charging: charging,
+      detailsJSON: String(decoding: details, as: UTF8.self), detailsRevision: hash(details))
   }
 }
 

@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Amperage</key>
+	<integer>-127</integer>
+	<key>BatteryData</key>
+	<dict>
+		<key>CurrentCapacity</key>
+		<integer>1000</integer>
+		<key>DesignCapacity</key>
+		<integer>3000</integer>
+		<key>FullChargeCapacity</key>
+		<integer>3100</integer>
+		<key>Huge</key>
+		<integer>18446744073709551615</integer>
+		<key>NominalChargeCapacity</key>
+		<true/>
+	</dict>
+	<key>Binary</key>
+	<data>
+	AQI=
+	</data>
+	<key>CurrentCapacity</key>
+	<integer>67</integer>
+	<key>CycleCount</key>
+	<integer>245</integer>
+	<key>Date</key>
+	<date>2026-10-08T00:00:00Z</date>
+	<key>DesignCapacity</key>
+	<integer>4000</integer>
+	<key>EmptyArray</key>
+	<array/>
+	<key>EmptyDictionary</key>
+	<dict/>
+	<key>ExternalConnected</key>
+	<true/>
+	<key>IOReportLegend</key>
+	<array>
+		<dict>
+			<key>IOReportChannels</key>
+			<array>
+				<array>
+					<integer>18446744073709551615</integer>
+					<integer>123</integer>
+					<string>BatteryMaxTemp</string>
+				</array>
+			</array>
+		</dict>
+	</array>
+	<key>IsCharging</key>
+	<true/>
+	<key>Serial</key>
+	<string>Synthetic battery</string>
+	<key>UnknownCode</key>
+	<integer>7</integer>
+	<key>Voltage</key>
+	<integer>4010</integer>
+</dict>
+</plist>
