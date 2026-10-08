@@ -21,6 +21,9 @@ private struct PullRequest: Decodable {
   let liveBatteryDetailsVersion: String?
   let liveBatteryDetailsRevision: String?
   let liveBatteryRefresh: String?
+  let cloudSharingVersion: String?
+  let cloudSharingScope: String?
+  let cloudSharingOnly: String?
   let offerVersion: String?
   let offerMAC: String?
   let offerToken: String?
@@ -46,6 +49,8 @@ private struct ReplayState: Codable {
 private struct PreparedResponse {
   let data: Data
   let deviceID: UUID
+  var requestID: UUID? = nil
+  var file: String = "control"
 }
 
 struct PairingInvitation {
@@ -114,6 +119,7 @@ final class TransferServer: @unchecked Sendable {
   private var activeLANConnections: [ObjectIdentifier: NWConnection] = [:]
   private var announcementRevision = 0
   private var pairingSession: PairingSession?
+  private let cloudSharing = CloudLogSharing()
   let liveBattery = LiveBatteryCache()
   var onLiveBatteryRequested: ((UUID, Bool) -> Void)?
   var onStatus: ((String) -> Void)?
@@ -354,11 +360,16 @@ final class TransferServer: @unchecked Sendable {
           pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { getpeername(client, $0, &peerLength) == 0 }
         }
         let peerAddress = hasPeer ? String(cString: inet_ntoa(peer.sin_addr)) : nil
+        let preparedAt = ProcessInfo.processInfo.systemUptime
         let response = queue.sync { makeResponse(to: body, peerAddress: peerAddress) }
         guard let response else { return }
         onTransferActivity?(response.deviceID, true)
         defer { onTransferActivity?(response.deviceID, false) }
+        let sendingAt = ProcessInfo.processInfo.systemUptime
         var offset = 0
+        defer {
+          SupportDiagnostics.record("Transfer trace: tailnet write request=\(response.requestID?.uuidString ?? "control"), recipient=\(response.deviceID.uuidString), sent=\(offset)/\(response.data.count), prepareQueueMs=\(Int((sendingAt - preparedAt) * 1000)), writeMs=\(Int((ProcessInfo.processInfo.systemUptime - sendingAt) * 1000)); TCP write only, awaiting app ACK")
+        }
         while offset < response.data.count {
           let written = response.data.withUnsafeBytes { bytes in
             Darwin.send(client, bytes.baseAddress!.advanced(by: offset),
@@ -462,12 +473,17 @@ final class TransferServer: @unchecked Sendable {
       guard case .hostPort(let host, _) = connection.endpoint else { return nil }
       return String(describing: host)
     }()
+    let preparedAt = ProcessInfo.processInfo.systemUptime
     guard let response = makeResponse(to: requestData, peerAddress: peerAddress) else {
       connection.cancel()
       return
     }
     onTransferActivity?(response.deviceID, true)
-    connection.send(content: response.data, completion: .contentProcessed { [weak self] _ in
+    let sendingAt = ProcessInfo.processInfo.systemUptime
+    connection.send(content: response.data, completion: .contentProcessed { [weak self] error in
+      if response.requestID != nil {
+        SupportDiagnostics.record("Transfer trace: LAN write request=\(response.requestID!.uuidString), recipient=\(response.deviceID.uuidString), bytes=\(response.data.count), prepareMs=\(Int((sendingAt - preparedAt) * 1000)), writeMs=\(Int((ProcessInfo.processInfo.systemUptime - sendingAt) * 1000)), result=\(error == nil ? "written" : "failed"); awaiting app ACK")
+      }
       self?.onTransferActivity?(response.deviceID, false)
       connection.cancel()
     })
@@ -639,6 +655,12 @@ final class TransferServer: @unchecked Sendable {
     let backgroundNotice = request.presence == "background" && request.ack == ""
       && received == expectedBackground
     guard backgroundNotice || received == expected else { return nil }
+    let started = ProcessInfo.processInfo.systemUptime
+    defer {
+      if request.liveBatteryVersion == nil {
+        SupportDiagnostics.record("Transfer trace: prepared request=\(request.nonce.uuidString), recipient=\(device.physicalDeviceID.uuidString), elapsedMs=\(Int((ProcessInfo.processInfo.systemUptime - started) * 1000)), cloudPolicy=\(request.cloudSharingOnly != nil)")
+      }
+    }
     if secure { onSecureClient?(device.physicalDeviceID) }
     else { onLegacyClient?(device.physicalDeviceID) }
     let now = Date()
@@ -694,6 +716,19 @@ final class TransferServer: @unchecked Sendable {
         onStatus?(MacTransferL10n.format("mt_m_17", error.localizedDescription))
       }
     }
+    if request.liveBatteryVersion == nil {
+      cloudSharing.update(device.physicalDeviceID,
+        scope: secure && request.cloudSharingVersion == "1" ? request.cloudSharingScope : nil, now: now)
+    }
+    if request.cloudSharingOnly != nil {
+      guard secure, request.cloudSharingOnly == "1", request.cloudSharingVersion == "1",
+        request.ack == "", request.offerToken == nil else { return nil }
+      let pending = cloudSharing.next(recipient: device.physicalDeviceID, devices: state.devices, now: now) != nil
+      let control = try? JSONSerialization.data(withJSONObject: ["type": "cloud-sharing-policy",
+        "cloudSharingVersion": "1", "pending": pending ? "true" : "false"])
+      guard let control else { return nil }
+      return try? encryptedLogResponse(control, name: "", request: request, device: device)
+    }
     if request.liveBatteryVersion != nil {
       // Optional fields require whole-request v3 authentication. No log ACK,
       // daily-pause changes, diagnostics persistence, or file queue access here.
@@ -724,7 +759,7 @@ final class TransferServer: @unchecked Sendable {
         try Collector.saveState(state)
         SupportDiagnostics.record("\(device.name): automatic collection resumed; trigger=authenticated mobile request at \(SupportDiagnostics.localTime(now))")
         onPairingCompleted?()
-        let control = try JSONSerialization.data(withJSONObject: ["type": "daily-resume-ack"])
+        let control = try JSONSerialization.data(withJSONObject: ["type": "daily-resume-ack", "cloudSharingVersion": "1"])
         let context = Data("v2|response|\(request.hostID.uuidString)|\(request.physicalDeviceID.uuidString)|\(request.nonce.uuidString)".utf8)
         let sealed = try AES.GCM.seal(Data([0, 0]) + control,
           using: SymmetricKey(data: device.secret), authenticating: context)
@@ -754,7 +789,7 @@ final class TransferServer: @unchecked Sendable {
         SupportDiagnostics.record("\(device.name): automatic collection stopped; trigger=confirmed daily receipt; resume=\(SupportDiagnostics.localTime(Date(timeIntervalSince1970: untilSeconds)))")
         onPairingCompleted?()
         let control = try JSONSerialization.data(withJSONObject: [
-          "type": "daily-pause-ack", "until": untilText
+          "type": "daily-pause-ack", "until": untilText, "cloudSharingVersion": "1"
         ])
         let context = Data("v2|response|\(request.hostID.uuidString)|\(request.physicalDeviceID.uuidString)|\(request.nonce.uuidString)".utf8)
         let sealed = try AES.GCM.seal(Data([0, 0]) + control,
@@ -769,7 +804,12 @@ final class TransferServer: @unchecked Sendable {
       }
     }
     do {
-      if let ack = request.ack,
+      if let ack = request.ack, ack.hasPrefix("Shared::") {
+        if let file = cloudSharing.resolve(ack, recipient: device.physicalDeviceID, devices: state.devices, now: now) {
+          try cloudSharing.acknowledge(ack, file: file, recipient: device.physicalDeviceID)
+          SupportDiagnostics.record("Cloud sharing: ACK request=\(request.nonce.uuidString), recipient=\(device.physicalDeviceID.uuidString), file=\(CloudSharedLogToken.debugLabel(ack)); source queue protected")
+        }
+      } else if let ack = request.ack,
         let acknowledged = try Collector.queueFile(for: ack, device: device) {
         if FileManager.default.fileExists(atPath: acknowledged.path) {
           try Collector.markDelivered(ack, for: device)
@@ -794,34 +834,45 @@ final class TransferServer: @unchecked Sendable {
         supplied == Data(HMAC<SHA256>.authenticationCode(
           for: Data("file-decision|v1|\(request.hostID.uuidString)|\(request.physicalDeviceID.uuidString)|\(request.nonce.uuidString)|\(token)|\(digest)|\(decision)".utf8),
           using: SymmetricKey(data: device.secret))),
-        let offered = try Collector.queueFile(for: token, device: device),
+        let offered = token.hasPrefix("Shared::")
+          ? cloudSharing.resolve(token, recipient: device.physicalDeviceID, devices: state.devices, now: now)
+          : try Collector.queueFile(for: token, device: device),
         FileManager.default.fileExists(atPath: offered.path) {
+        let attrs = try FileManager.default.attributesOfItem(atPath: offered.path)
+        guard ((attrs[.size] as? NSNumber)?.int64Value ?? Int64.max) <= 64 * 1024 * 1024 else { return nil }
         let bytes = try Data(contentsOf: offered, options: .mappedIfSafe)
         let actual = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
         let forced = FileManager.default.fileExists(atPath: offered.path + ".force-resend")
         if actual == digest && decision == "have" && !forced {
-          try Collector.markDelivered(token, for: device)
-          try BatteryLogStorage.archiveAcknowledged(offered, device: device)
-          SupportDiagnostics.record("\(device.name): preflight decision=have, action=skip \(token); SHA-256 \(digest.prefix(12))")
+          if token.hasPrefix("Shared::") {
+            try cloudSharing.acknowledge(token, file: offered, recipient: device.physicalDeviceID)
+          } else {
+            try Collector.markDelivered(token, for: device)
+            try BatteryLogStorage.archiveAcknowledged(offered, device: device)
+          }
+          SupportDiagnostics.record("\(device.name): preflight decision=have, action=skip \(CloudSharedLogToken.debugLabel(token)); SHA-256 \(digest.prefix(12))")
         } else if actual == digest && decision == "send" {
-          SupportDiagnostics.record("\(device.name): preflight decision=send, action=transfer \(token); SHA-256 \(digest.prefix(12)); bytes=\(bytes.count)")
+          SupportDiagnostics.record("\(device.name): preflight decision=send, action=transfer \(CloudSharedLogToken.debugLabel(token)); SHA-256 \(digest.prefix(12)); bytes=\(bytes.count)")
           return try encryptedLogResponse(bytes, name: token, request: request, device: device)
         } else {
           let reason = actual != digest ? "digest changed" : "manual resend overrides skip"
-          SupportDiagnostics.record("\(device.name): preflight decision=\(decision) not applied for \(token); \(reason); offering current file")
+          SupportDiagnostics.record("\(device.name): preflight decision=\(decision) not applied for \(CloudSharedLogToken.debugLabel(token)); \(reason); offering current file")
         }
       } else if offerEnabled, let token = request.offerToken,
         request.offerDigest != nil, request.offerDecision != nil {
-        SupportDiagnostics.record("\(device.name): preflight decision rejected for \(token); authentication, token, or queue file invalid")
+        SupportDiagnostics.record("\(device.name): preflight decision rejected for \(CloudSharedLogToken.debugLabel(token)); authentication, token, or queue file invalid")
       }
-      let next = try Collector.pending(for: device).first
-      let name = try next.map { try Collector.queueToken(for: $0, device: device) } ?? ""
+      let own = try Collector.pending(for: device).first
+      let shared = own == nil && secure && request.cloudSharingVersion == "1" && offerEnabled
+        ? cloudSharing.next(recipient: device.physicalDeviceID, devices: state.devices, now: now) : nil
+      let next = own ?? shared?.file
+      let name = try shared?.token ?? own.map { try Collector.queueToken(for: $0, device: device) } ?? ""
       let content = try next.map { try Data(contentsOf: $0, options: .mappedIfSafe) } ?? Data()
       if offerEnabled, let next {
         guard content.count <= 64 * 1024 * 1024 else { return nil }
         let digest = SHA256.hash(data: content).map { String(format: "%02x", $0) }.joined()
         let forced = FileManager.default.fileExists(atPath: next.path + ".force-resend")
-        SupportDiagnostics.record("\(device.name): preflight offer \(name); SHA-256 \(digest.prefix(12)); bytes=\(content.count); forced=\(forced)")
+        SupportDiagnostics.record("\(device.name): preflight offer \(CloudSharedLogToken.debugLabel(name)); SHA-256 \(digest.prefix(12)); bytes=\(content.count); forced=\(forced)")
         let control = try JSONSerialization.data(withJSONObject: [
           "type": "file-offer", "token": name, "sha256": digest,
           "force": forced ? "true" : "false"
@@ -837,7 +888,7 @@ final class TransferServer: @unchecked Sendable {
       plain.append(nameData)
       plain.append(content)
       if name.isEmpty {
-        plain.append(SupportDiagnostics.macReport(for: device))
+        plain.append(Self.cloudCapability(SupportDiagnostics.macReport(for: device)))
       }
       let responseContext = Data("v2|response|\(request.hostID.uuidString)|\(request.physicalDeviceID.uuidString)|\(request.nonce.uuidString)".utf8)
       let sealed = try AES.GCM.seal(plain, using: SymmetricKey(data: device.secret),
@@ -845,27 +896,36 @@ final class TransferServer: @unchecked Sendable {
       guard let combined = sealed.combined else { throw CollectorError.failed(MacTransferL10n.text("mt_c_08")) }
       var length = UInt32(combined.count).bigEndian
       let prefix = withUnsafeBytes(of: &length) { Data($0) }
-      return PreparedResponse(data: prefix + combined, deviceID: device.physicalDeviceID)
+      return PreparedResponse(data: prefix + combined, deviceID: device.physicalDeviceID, requestID: request.nonce, file: CloudSharedLogToken.debugLabel(name))
     } catch {
       onStatus?(MacTransferL10n.format("mt_m_18", error.localizedDescription))
       return nil
     }
   }
 
+  private static func cloudCapability(_ content: Data) -> Data {
+    guard var json = (try? JSONSerialization.jsonObject(with: content)) as? [String: Any] else { return content }
+    json["cloudSharingVersion"] = "1"
+    return (try? JSONSerialization.data(withJSONObject: json)) ?? content
+  }
+
   private func encryptedLogResponse(_ content: Data, name: String, request: PullRequest,
     device: PairedDevice) throws -> PreparedResponse {
+    if !name.isEmpty {
+      SupportDiagnostics.record("Transfer trace: body request=\(request.nonce.uuidString), recipient=\(device.physicalDeviceID.uuidString), file=\(CloudSharedLogToken.debugLabel(name)), bytes=\(content.count)")
+    }
     let nameData = Data(name.utf8)
     guard nameData.count <= 1024 else { throw CollectorError.failed("Invalid log token") }
     var plain = Data([UInt8(nameData.count >> 8), UInt8(nameData.count & 0xff)])
     plain.append(nameData)
-    plain.append(content)
+    plain.append(name.isEmpty ? Self.cloudCapability(content) : content)
     let context = Data("v2|response|\(request.hostID.uuidString)|\(request.physicalDeviceID.uuidString)|\(request.nonce.uuidString)".utf8)
     let sealed = try AES.GCM.seal(plain, using: SymmetricKey(data: device.secret),
       authenticating: context)
     guard let combined = sealed.combined else { throw CollectorError.failed("Unable to seal log") }
     var length = UInt32(combined.count).bigEndian
     return PreparedResponse(data: withUnsafeBytes(of: &length) { Data($0) } + combined,
-      deviceID: device.physicalDeviceID)
+      deviceID: device.physicalDeviceID, requestID: request.nonce, file: CloudSharedLogToken.debugLabel(name))
   }
 }
 

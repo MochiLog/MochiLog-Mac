@@ -21,3 +21,7 @@ It supports macOS 27 and iOS/iPadOS 27. Download a DMG from [GitHub Releases](ht
 See the [Japanese and English user guide](docs/USER_GUIDE.md) for detailed setup, everyday use, and troubleshooting. Build, signing, and protocol details are in the [developer notes](docs/DEVELOPMENT.md).
 
 Current battery values are also available in the computer dashboard and an optional mobile tab, disabled by default. These values are not saved as history. See the user guide for details.
+
+同じPCとペアリングした複数のiPhone・iPadでは、同じApple Accountで双方のiCloud同期が有効と確認できる場合に限り、他の端末のログも暗号化して受信できます。未確認・同期オフ・別アカウントなら共有しません。共有元のアプリをしばらく開いていない場合は再確認まで保留します。詳しくは[利用ガイド](docs/USER_GUIDE.md)を参照してください。
+
+Devices paired with the same computer can receive each other’s logs when both have confirmed iCloud sync enabled on the same Apple Account. Disabled sync, different accounts or unconfirmed permissions prevent sharing. If the source app has not been opened for a while, sharing waits for renewed confirmation. See the [user guide](docs/USER_GUIDE.md).

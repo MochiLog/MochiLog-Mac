@@ -82,3 +82,11 @@ Use the new MochiLog 4.0.0 beta with MochiLog Mac 0.2.14 or MochiLog Windows 0.1
 「APIの全項目」を展開すると、APIが返す製造情報・状態フラグ・バッテリー識別情報なども確認できます。元の項目名・値を表示し、単位は推測しません。これらもメモリ内だけで扱い、履歴・サポートログには保存しません。TailscaleとPC連携のモバイル通信許可を使って外出先からも受信できます。PCから新しい値を取得するには端末の診断サービスに接続できる必要があり、VPNの接続だけで取得を保証するものではありません。
 
 Expand **All API fields** to view manufacturing metadata, flags, battery identifiers and other returned fields. Original names and values are preserved without guessing units; fields remain in memory and are not saved to history or support logs. Existing Tailscale routes and the PC Link cellular permission also allow receiving outside the local network. Fresh acquisition additionally requires a reachable device diagnostics service; VPN connectivity alone does not guarantee acquisition.
+
+## 複数のiPhone・iPadでログを受け取る
+
+同じPCとペアリングした端末で、同じApple AccountのiCloud同期が双方オンと確認できる場合だけ、他の端末のログも受信できます。片方がオフ・別アカウント・未確認なら共有しません。共有元のアプリをしばらく開いていない場合は再確認まで保留します。元の端末の履歴として保存し、他の端末の受信確認で元端末への未転送ログを削除しません。
+
+### Receiving logs across devices
+
+Devices paired with the same computer can receive another device’s logs only when both have confirmed iCloud sync enabled on the same Apple Account. Sharing is withheld for disabled sync, different accounts or unconfirmed devices. If the source app has not been opened for a while, sharing waits for renewed confirmation. Records retain their original device identity; another recipient’s acknowledgement never deletes the source’s pending log.

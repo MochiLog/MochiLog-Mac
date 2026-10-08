@@ -193,6 +193,12 @@ enum Collector {
       withExtension: nil, subdirectory: "Collector") else {
       throw CollectorError.helperMissing
     }
+    let operation = arguments.prefix(2).filter { !$0.hasPrefix("--") }.joined(separator: " ")
+    let traceID = UUID().uuidString
+    let started = ProcessInfo.processInfo.systemUptime
+    var successful = false
+    SupportDiagnostics.record("Collector job started; job=\(traceID), operation=\(operation), timeoutSeconds=\(Int(timeout))")
+    defer { SupportDiagnostics.record("Collector job finished; job=\(traceID), operation=\(operation), elapsedMs=\(Int((ProcessInfo.processInfo.systemUptime - started) * 1000)), success=\(successful)") }
     let process = Process()
     process.executableURL = helper
     process.arguments = arguments
@@ -230,6 +236,7 @@ enum Collector {
       }
       throw CollectorError.exitCode(process.terminationStatus, detail ?? "")
     }
+    successful = true
     return text
   }
 

@@ -161,7 +161,7 @@ enum SupportDiagnostics {
     eventLock.lock()
     defer { eventLock.unlock() }
     migrateLegacyEvents()
-    let normalized = String(message.replacingOccurrences(of: "\n", with: " ").prefix(200))
+    let normalized = String(message.replacingOccurrences(of: "\n", with: " ").prefix(1024))
     var events = (try? JSONDecoder().decode([String].self,
       from: Data(contentsOf: eventsURL))) ?? []
     guard events.last?.hasSuffix(" | \(normalized)") != true else { return }

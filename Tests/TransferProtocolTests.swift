@@ -6,8 +6,8 @@ private enum TestFailure: Error {
   case failed(String)
 }
 
-private func check(_ condition: @autoclosure () -> Bool, _ message: String) throws {
-  if !condition() { throw TestFailure.failed(message) }
+private func check(_ condition: @autoclosure () throws -> Bool, _ message: String) throws {
+  if try !condition() { throw TestFailure.failed(message) }
 }
 
 private func discover(_ name: String) throws -> NWEndpoint {
@@ -38,7 +38,7 @@ private func request(_ endpoint: NWEndpoint, hostID: UUID, device: PairedDevice,
   expectNoResponse: Bool = false, delayedChunks: Bool = false,
   overridePayload: [String: String]? = nil, offerEnabled: Bool = false,
   offer: (token: String, digest: String, decision: String)? = nil,
-  sealed: Bool = false, issuedAt: Int64? = nil) throws -> Data {
+  sealed: Bool = false, issuedAt: Int64? = nil, extra: [String: String] = [:]) throws -> Data {
   let message = presence == "background"
     ? "v2|background|\(hostID.uuidString)|\(device.physicalDeviceID.uuidString)|\(nonce.uuidString)"
     : "\(version2 ? "v2|" : "")\(hostID.uuidString)|\(device.physicalDeviceID.uuidString)|\(nonce.uuidString)|\(ack)"
@@ -91,6 +91,7 @@ private func request(_ endpoint: NWEndpoint, hostID: UUID, device: PairedDevice,
         .map { String(format: "%02x", $0) }.joined()
     }
   }
+  for (key, value) in extra { payload[key] = value }
   var wirePayload: [String: Any] = overridePayload ?? payload
   if sealed {
     let timestamp = issuedAt ?? Int64(Date().timeIntervalSince1970)
@@ -978,6 +979,73 @@ struct TransferProtocolTests {
     try check(!BatteryLogStorage.hasRequiredDailyLogs(model: "iPhone18,3", rows: [],
       on: "2026-10-04", receipts: receipts),
       "Yesterday's acknowledged logs stopped today's collection")
+    print("Checking cloud-sharing consent, four recipients, protected source ACK and revocation")
+    let peers = (0..<4).map { i in PairedDevice(udid: "cloud-test-\(i)", name: "Cloud peer \(i)",
+      model: i == 1 ? "iPad16,6" : "iPhone18,3", physicalDeviceID: UUID(),
+      secret: Data(repeating: UInt8(30 + i), count: 32), confirmedAt: Date()) }
+    let cloudHost = UUID()
+    let cloudServer = TransferServer(state: CompanionState(hostID: cloudHost, devices: peers))
+    try cloudServer.start()
+    let cloudEndpoint = try discover(cloudHost.uuidString)
+    let scope = String(repeating: "a", count: 64)
+    let foreignName = "Analytics-2026-10-08-090000.ips.ca.synced"
+    let sourceFile = try Collector.directory(for: peers[1]).appendingPathComponent("Host/" + foreignName)
+    try FileManager.default.createDirectory(at: sourceFile.deletingLastPathComponent(), withIntermediateDirectories: true)
+    let foreignBytes = Data("cloud-origin-iPad-only".utf8)
+    try foreignBytes.write(to: sourceFile)
+    func cloudRequest(_ i: Int, scope: String?, policy: Bool = false, ack: String = "",
+      offer: (token: String, digest: String, decision: String)? = nil) throws -> (String, Data) {
+      let nonce = UUID()
+      var extra = ["cloudSharingVersion": "1", "cloudSharingScope": scope ?? ""]
+      if policy { extra["cloudSharingOnly"] = "1" }
+      return try opened(request(cloudEndpoint, hostID: cloudHost, device: peers[i], nonce: nonce,
+        ack: ack, offerEnabled: !policy, offer: offer, sealed: true, extra: extra),
+        secret: peers[i].secret, context: (cloudHost, peers[i].physicalDeviceID, nonce))
+    }
+    _ = try cloudRequest(0, scope: scope, policy: true)
+    let beforeSource = try cloudRequest(0, scope: scope)
+    try check(beforeSource.0.isEmpty &&
+      (try JSONSerialization.jsonObject(with: beforeSource.1) as? [String: String])?["type"] != "file-offer",
+      "Source without consent was shared")
+    _ = try cloudRequest(1, scope: scope, policy: true)
+    let foreignOffer = try cloudRequest(0, scope: scope)
+    let offeredJSON = try JSONSerialization.jsonObject(with: foreignOffer.1) as! [String: String]
+    let foreignToken = offeredJSON["token"]!, foreignDigest = offeredJSON["sha256"]!
+    try check(CloudSharedLogToken.parse(foreignToken)?.origin == peers[1].physicalDeviceID,
+      "Foreign offer lost the original device identity")
+    let body = try cloudRequest(0, scope: scope, offer: (foreignToken, foreignDigest, "send"))
+    try check(body.0 == foreignToken && body.1 == foreignBytes, "Foreign body was not delivered")
+    _ = try cloudRequest(0, scope: scope, ack: foreignToken)
+    try check(FileManager.default.fileExists(atPath: sourceFile.path) &&
+      !Collector.delivered(for: peers[1]).contains("Host::" + foreignName),
+      "Foreign ACK consumed the source queue")
+    _ = try cloudRequest(2, scope: scope, policy: true)
+    let thirdOffer = try cloudRequest(2, scope: scope)
+    try check((try JSONSerialization.jsonObject(with: thirdOffer.1) as? [String: String])?["token"] == foreignToken,
+      "One recipient ACK suppressed another recipient")
+    _ = try cloudRequest(2, scope: scope, offer: (foreignToken, foreignDigest, "have"))
+    try check(FileManager.default.fileExists(atPath: sourceFile.path), "Foreign preflight-have deleted source")
+    let fourth = try cloudRequest(3, scope: String(repeating: "b", count: 64))
+    try check((try JSONSerialization.jsonObject(with: fourth.1) as? [String: String])?["type"] != "file-offer",
+      "Different Apple Account received a source log")
+    _ = try cloudRequest(1, scope: nil, policy: true)
+    let revoked = try cloudRequest(3, scope: scope, offer: (foreignToken, foreignDigest, "send"))
+    try check(revoked.0.isEmpty && revoked.1 != foreignBytes, "Source OFF did not revoke an outstanding offer")
+    _ = try cloudRequest(3, scope: scope, ack: foreignToken)
+    try check(FileManager.default.fileExists(atPath: sourceFile.path), "Revoked ACK removed a source file")
+    let audit = SupportDiagnostics.logText(for: String(SupportDiagnostics.localTime(Date()).prefix(10)))
+    try check(audit.contains("Cloud sharing: source=") && audit.contains("recipient=") && audit.contains("decision="), "Sharing decisions cannot be traced")
+    try check(audit.contains("Transfer trace:") && audit.contains("elapsedMs="), "Transfer timing missing")
+    try check(!audit.contains(scope), "Cloud account scope leaked into support logs")
+    let leases = CloudLogSharing(), clock = Date()
+    leases.update(peers[0].physicalDeviceID, scope: scope, now: clock)
+    leases.update(peers[1].physicalDeviceID, scope: scope, now: clock)
+    let parsedToken = CloudSharedLogToken.parse(foreignToken)!
+    try check(leases.eligible(parsedToken, recipient: peers[0].physicalDeviceID, devices: peers, now: clock), "Fresh same-account grants failed")
+    try check(!leases.eligible(parsedToken, recipient: peers[0].physicalDeviceID, devices: peers, now: clock.addingTimeInterval(900)), "Expired consent survived")
+    try check(!leases.eligible(parsedToken, recipient: peers[0].physicalDeviceID, devices: [peers[0]], now: clock), "Unpaired source remained eligible")
+    try check(CloudSharedLogToken.parse("Shared::" + scope + "::" + peers[1].physicalDeviceID.uuidString + "::Host::../Analytics-a.ips.ca.synced") == nil,
+      "Shared token accepted path traversal")
     if let udid = ProcessInfo.processInfo.environment["MOCHILOG_DIRECT_DEVICE_ID"],
       let address = ProcessInfo.processInfo.environment["MOCHILOG_DIRECT_DEVICE_IP"] {
       let probe = PairedDevice(udid: udid, name: "Direct RSD probe", model: "iPad",

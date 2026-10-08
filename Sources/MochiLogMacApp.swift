@@ -229,15 +229,18 @@ final class CompanionModel: ObservableObject {
   }
 
   func refreshBattery(_ id: UUID, manual: Bool = false) async {
-    guard !isBusy, liveBatteryBusy.isEmpty,
+    guard !liveBatteryBusy.contains(id),
       let device = state.devices.first(where: { $0.physicalDeviceID == id }),
       manual || Date().timeIntervalSince(lastBatteryAttempt[id] ?? .distantPast) >=
         (liveBatteryFailures.contains(id) ? 60 : 15) else { return }
     lastBatteryAttempt[id] = Date()
     liveBatteryBusy.insert(id)
-    // Share the existing collector exclusion so trust/collection cannot race.
-    isBusy = true
-    defer { isBusy = false; liveBatteryBusy.remove(id); lastBatteryAttempt[id] = Date() }
+    let started = ProcessInfo.processInfo.systemUptime
+    SupportDiagnostics.record("Battery snapshot started; device=\(id.uuidString), trigger=\(manual ? "manual" : "automatic"), logCollectionBusy=\(isBusy)")
+    defer {
+      liveBatteryBusy.remove(id); lastBatteryAttempt[id] = Date()
+      SupportDiagnostics.record("Battery snapshot finished; device=\(id.uuidString), elapsedMs=\(Int((ProcessInfo.processInfo.systemUptime - started) * 1000)), failed=\(liveBatteryFailures.contains(id))")
+    }
     do {
       let peerAddress = server?.liveBatteryPeerAddress(for: id)
       let snapshot = try await Task.detached { try Collector.currentBattery(device, peerAddress: peerAddress) }.value
@@ -439,6 +442,7 @@ final class CompanionModel: ObservableObject {
     defer { isBusy = false }
     var savedAny = false
     for device in devices {
+      let started = ProcessInfo.processInfo.systemUptime
       do {
         if manual || automaticFailures[device.physicalDeviceID] == nil {
           SupportDiagnostics.record("\(device.name): collection started; trigger=\(manual ? "manual request" : trigger)")
@@ -465,7 +469,7 @@ final class CompanionModel: ObservableObject {
           staleAnalyticsDeviceIDs.remove(device.physicalDeviceID)
         }
         savedAny = savedAny || report.saved > 0
-        SupportDiagnostics.record("\(device.name): collection finished; saved=\(report.saved), excluded=\(report.skipped), deferred=\(report.deferred), failed=\(report.failed)")
+        SupportDiagnostics.record("\(device.name): collection finished; saved=\(report.saved), excluded=\(report.skipped), deferred=\(report.deferred), failed=\(report.failed), elapsedMs=\(Int((ProcessInfo.processInfo.systemUptime - started) * 1000))")
         if selectedUDID == device.udid { osPairingState = .verified }
         status = report.failed == 0
           ? MacTransferL10n.format("mt_m_08", device.name, report.saved, report.skipped)
