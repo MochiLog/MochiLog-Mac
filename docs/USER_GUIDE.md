@@ -11,12 +11,12 @@ MochiLog Mac は、iPhone・iPad の解析ログを Mac に一時保管し、端
 1. [GitHub Releases の最新ベータ版 DMG](https://github.com/MochiLog/MochiLog-Mac/releases)を開き、`MochiLog Mac.app` を「アプリケーション」にコピーして起動します。macOS 27 以降が必要です。Xcode、Python、Homebrew の準備は不要です。
 2. iPhone・iPad と Mac の Wi-Fi と Bluetooth をオンにします。端末のロックを解除し、できれば同じ Wi-Fi に接続してください。
 3. Mac アプリの「端末」で設定する端末を選びます。OS のペアリングがまだなら、画面の案内に従って初回だけ USB ケーブルで接続し、端末に表示される「このコンピュータを信頼」を許可します。すでに無線ペアリング済みなら、この操作は不要です。無線での初回設定が表示される環境では、画面の6桁コードでも設定できます。
-4. Mac アプリで無線接続の確認後、「MochiLog ペアリングを作成」を押します。端末の MochiLog で「設定 → 高度な設定 → Mac 連携」を開き、QR コードを読み取って Mac に表示された確認コードを入力します。QR は短時間で失効します。
+4. Mac アプリで無線接続の確認後、「MochiLog ペアリングを作成」を押します。端末の MochiLog で「設定 → 自動ログ収集 → パソコン連携」を開き、QR コードを読み取って Mac に表示された確認コードを入力します。QR は短時間で失効します。
 5. Mac アプリを起動したままにします。Mac がログを収集し、iPhone・iPad で MochiLog を開くと受信と記録が始まります。必要なら双方の「今すぐ」の操作で再試行できます。
 
 ### 日々の使い方
 
-新しい解析ログを Mac が収集できるのは、端末のロックが解除されていて無線の診断接続が使えるときだけです。収集済みのログは Mac に残るので、その場でスマホ版を開く必要はありません。ログが届かないときは、まず端末で MochiLog を開いて「Mac 連携」の接続状態を確認してください。必要な当日分が揃うと不要な自動再走査を休止します。手動収集・受信は引き続き利用できます。
+新しい解析ログを Mac が収集できるのは、端末のロックが解除されていて無線の診断接続が使えるときだけです。収集済みのログは Mac に残るので、その場でスマホ版を開く必要はありません。ログが届かないときは、まず端末で MochiLog を開いて「パソコン連携」の接続状態を確認してください。必要な当日分が揃うと不要な自動再走査を休止します。手動収集・受信は引き続き利用できます。
 
 初期設定では Mac アプリのウィンドウを×で閉じてもメニューバーに残り、収集と転送を続けます。メニューバーのアイコンからウィンドウを再表示できます。完全に終了したいときはメニューバーの「終了」を選びます。「設定 → ウィンドウを閉じたとき」で、×を押すとアプリを終了する動作にも変更できます。
 
@@ -28,8 +28,8 @@ Tailscale は任意です。同じ Wi-Fi の外からは、双方で Tailscale �
 
 - **ログが生成されない:** 端末の「設定 → プライバシーとセキュリティ → 解析と改善」で解析の共有を確認します。OS アップデート後も確認してください。設定直後は次のログ生成まで時間がかかります。
 - **端末が見つからない:** 端末のロック、Wi-Fi、Bluetooth、Mac のスリープ状態を確認し、「端末」で再検索します。OS の信頼設定が切れた場合は、Mac アプリの案内に従って設定し直してください。
-- **収集済みだが記録が増えない:** 該当端末で MochiLog を開き、「Mac 連携」で接続と処理結果を確認します。すでに読み込んだログは重複防止のため再登録されません。
-- **接続が繰り返し失敗する:** Mac と端末の「Mac 連携」にある日付別デバッグログを確認してください。サポート画面では発生日を指定して関連ログを添付できます。生の解析ログやペアリング鍵は自動添付されません。
+- **収集済みだが記録が増えない:** 該当端末で MochiLog を開き、「パソコン連携」で接続と処理結果を確認します。すでに読み込んだログは重複防止のため再登録されません。
+- **接続が繰り返し失敗する:** Mac と端末の「パソコン連携」にある日付別デバッグログを確認してください。サポート画面では発生日を指定して関連ログを添付できます。生の解析ログやペアリング鍵は自動添付されません。
 
 この機能はベータ版です。問題の解決には時間がかかり、個別に返信できない場合があります。[プライバシーポリシー](https://mochilog.ryuya-dev.net/privacy)と[利用規約](https://mochilog.ryuya-dev.net/terms)も参照してください。
 
@@ -44,7 +44,7 @@ MochiLog Mac collects Apple analytics files from an iPhone or iPad, temporarily 
 1. Open the latest beta DMG from [GitHub Releases](https://github.com/MochiLog/MochiLog-Mac/releases), copy `MochiLog Mac.app` to Applications, and launch it. macOS 27 or later is required. You do not need Xcode, Python, or Homebrew.
 2. Turn on Wi-Fi and Bluetooth on the computer and device. Unlock the device and, preferably, connect both to the same Wi-Fi network.
 3. Select the device on the Mac app's **Devices** page. If OS pairing is new, connect a USB data cable once and approve **Trust This Computer** on the device. Skip this if wireless OS pairing already works. Where wireless first-time setup is offered, you can use its six-digit code instead.
-4. Once the Mac confirms wireless access, create a MochiLog pairing. On the device, open **MochiLog → Settings → Advanced Settings → Mac Transfer**, scan the QR code, and enter the confirmation code shown on the Mac. The QR expires shortly.
+4. Once the Mac confirms wireless access, create a MochiLog pairing. On the device, open **MochiLog → Settings → Automatic Log Collection → PC Link**, scan the QR code, and enter the confirmation code shown on the Mac. The QR expires shortly.
 5. Leave MochiLog Mac running. It collects files when the unlocked device is reachable. Open the mobile app to receive and record them. Use **Collect Now** or **Receive Now** to retry manually.
 
 ### Everyday use and help
@@ -61,7 +61,7 @@ This is a beta. Fixes may take time and individual replies may not always be pos
 
 ## 現在のバッテリー値（ベータ）
 
-ペアリングしたiPhone・iPadの充放電回数、設計容量、最大容量などを、PCの概要画面で端末ごとに確認できます。スマホでも使う場合は **設定 → 高度な設定 → 現在のバッテリー** をオンにしてください。初期状態はオフです。既存のPCペアリングを使うため、この機能のための再ペアリングは不要です。
+ペアリングしたiPhone・iPadの充放電回数、設計容量、最大容量などを、PCの「現在のバッテリー」画面で端末ごとに確認できます。スマホでも使う場合は **設定 → 高度な設定 → 現在のバッテリー** をオンにしてください。初期状態はオフです。既存のPCペアリングを使うため、この機能のための再ペアリングは不要です。
 
 アプリを開いている間は定期的に取得し、変化した値だけを暗号化して送ります。最終取得日時を表示し、取得できない項目は空欄として扱います。接続できない場合は最後の値を過去の値として表示します。**今すぐ受信／送信**で手動更新もできます。スマホからのPC更新要求は、PCの取得完了後に次の受信で反映されます。
 
@@ -71,7 +71,7 @@ This is a beta. Fixes may take time and individual replies may not always be pos
 
 ## Current battery values (beta)
 
-View cycle count, design capacity and other current capacity fields for each paired iPhone or iPad on the computer dashboard. On mobile, enable **Settings → Advanced Settings → Live Battery** to show the new tab. It is **off by default**. It uses your existing computer pairing; no new pairing is required.
+View cycle count, design capacity and other current capacity fields for each paired iPhone or iPad in the computer’s Live Battery tab. On mobile, enable **Settings → Advanced Settings → Live Battery** to show the new tab. It is **off by default**. It uses your existing computer pairing; no new pairing is required.
 
 Values refresh periodically while the app is open. Only changed values are sent, using encrypted transfer. The display includes the last acquisition time; unavailable fields remain empty, and a failed refresh leaves the previous values marked as outdated. Use **Receive Now / Send Now** for a manual update. A mobile request to refresh the computer appears on a subsequent receive after acquisition completes.
 
@@ -90,3 +90,17 @@ Expand **All API fields** to view manufacturing metadata, flags, battery identif
 ### Receiving logs across devices
 
 Devices paired with the same computer can receive another device’s logs only when both have confirmed iCloud sync enabled on the same Apple Account. Sharing is withheld for disabled sync, different accounts or unconfirmed devices. If the source app has not been opened for a while, sharing waits for renewed confirmation. Records retain their original device identity; another recipient’s acknowledgement never deletes the source’s pending log.
+
+## 自動ログ収集と更新確認 / Automatic collection and updates
+
+スマホの「設定 → 自動ログ収集」では、パソコン連携と端末内取得（実験機能）を別々に選べます。端末内取得は初期状態でオフです。対応するVPN・リフレクター経路と、その端末自身のOS信頼設定が必要です。明示的に選ぶと認証済みPCから自分のOSペアリング情報だけを引き継げます。初回の完全無線化、バックグラウンド、Developer Modeオフでの取得は保証しません。共通の取り込み処理で重複を防ぎます。
+
+同じApple Accountで双方のiCloud同期がオンと確認できた端末は、現在のバッテリー値も共有できます。同期オフ・別アカウント・未確認では他の端末の値を共有しません。
+
+PCの自動更新確認は初期状態でオフです。初回の確認画面または設定で有効にできます。手動の更新確認はいつでも使えます。
+
+On mobile, **Settings → Automatic Log Collection** has separate controls for PC Link and experimental on-device collection. On-device collection is off by default and needs a compatible VPN/reflector route plus its own OS trust. Explicitly choosing reuse transfers only that device’s OS pairing over the authenticated PC connection. Fully wireless initial setup, background collection and Developer Mode-off operation are not guaranteed. Both routes use the same import and duplicate prevention.
+
+Current battery values can also be shared when both devices have confirmed iCloud sync enabled on the same Apple Account. Disabled sync, different accounts and unconfirmed devices do not share other devices’ values.
+
+Automatic update checks on the computer are off by default. Choose in the initial prompt or settings; manual checks remain available.
