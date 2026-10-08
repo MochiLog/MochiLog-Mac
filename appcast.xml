@@ -4,23 +4,33 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>MochiLog Mac</title>
         <item>
-            <title>0.2.18</title>
-            <pubDate>Thu, 08 Oct 2026 10:17:31 +0000</pubDate>
-            <sparkle:version>21</sparkle:version>
-            <sparkle:shortVersionString>0.2.18</sparkle:shortVersionString>
+            <title>0.2.19</title>
+            <pubDate>Thu, 08 Oct 2026 13:45:56 +0000</pubDate>
+            <sparkle:version>22</sparkle:version>
+            <sparkle:shortVersionString>0.2.19</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>27.0</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[日本語
+            <description sparkle:format="markdown"><![CDATA[# MochiLog Mac 0.2.19 Beta
 
-現在のバッテリー情報を専用タブへ移しました。概要の先頭はペアリング済み端末の一覧になり、接続状態と転送状況を確認しやすくしました。現在値の表・詳細・今すぐ取得／送信は「現在のバッテリー」で利用できます。PC画面からの定期取得はそのタブを表示している間だけ行い、スマホからの更新要求は引き続き受け付けます。
+## 日本語
 
-English
+今回の更新：同じPCとペアリングしたiPhone・iPadで、双方のiCloud同期がオン・同じApple Accountと確認できた場合だけ、ほかの端末のログも暗号化して受信します。3台・4台でも受信先ごとに条件を確認し、同期オフ・別アカウント・未確認なら共有しません。共有元のアプリをしばらく開いていない場合は確認まで保留します。元端末の個体IDとWatchの区別を保持し、同じログの重複転送・重複記録を回避します。別の端末が受信しても元端末向けの未転送ログは保護します。旧版とは自分の端末のログを従来どおり扱い、既存ペアリングを引き継ぎます。
 
-Live Battery now has its own tab. Overview starts with the paired-device list so connection and transfer status remain easy to scan. Current values, optional details and Receive/Send Now are available in Live Battery. Desktop viewing refreshes run only while that tab is visible; mobile refresh requests remain supported.
+Mac・Windowsとも日次ログ収集と現在のバッテリー情報を独立して並列動作させます。収集ツール、接続、事前照会、応答準備・送信、受領確認・解析までの経過時間をデバッグログへ追加しました。共有を許可・保留した理由と元端末・受信先も追跡でき、秘密鍵・アカウント照合値・現在のバッテリー値自体は記録しません。Windowsは低速回線で転送が進んでいれば合計25秒を超えても継続し、通信停止にはタイムアウトします。
+
+共有には新しいスマホ4.0.0 (1039)、MochiLog Mac 0.2.19 Beta / Windows 0.1.16 Alphaが必要です。PC同士は同期しません。PCが削除済みのログは復元できません。許可の通知が通信不能で届かない場合、PCが保持する直前の許可は最大15分で期限切れになります。実際のCloudKit・モバイル回線・OSの条件で差があるため、ベータ版としてご確認ください。
+
+## English
+
+This update adds encrypted sharing of logs between iPhone and iPad paired with the same computer, only when both have iCloud sync enabled and the same Apple Account is confirmed. Conditions are checked per recipient with three or four devices too. Sync off, different accounts or unconfirmed settings prevent sharing. If the source app has not been opened recently, sharing waits for confirmation. Source and Watch identities are preserved, and duplicate transfers and records are avoided. Another recipient’s ACK protects the source’s pending queue. Existing pairings and own-device transfers remain compatible with earlier versions.
+
+Mac and Windows now run daily-log collection and current battery acquisition independently and in parallel. Debug logs trace collection jobs, connection, preflight decisions, response preparation/write, application acknowledgement and parsing times. Sharing reasons, source and recipient are recorded without secret keys, account-matching scopes or battery values themselves. Windows allows progressing slow transfers to exceed 25 seconds overall, while timing out stalled communication.
+
+Sharing requires mobile 4.0.0 (1039), MochiLog Mac 0.2.19 Beta / Windows 0.1.16 Alpha. Computers do not synchronize with each other, and deleted raw logs cannot be recovered. If a device cannot send revocation, the computer’s previous consent expires within 15 minutes. Actual CloudKit, cellular and OS conditions vary; this remains a beta feature.
 ]]></description>
-            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.18/MochiLog-Mac-Beta.dmg" length="55846587" type="application/octet-stream" sparkle:edSignature="HLQtceIAqwXglpifOzsPrbJ4CchSLGutipgsp/RJroHzP+mwiGVaD5ClPhsYn5PZOQC0L9pGMZMMP8LgNMVbAQ=="></enclosure>
+            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.19/MochiLog-Mac-Beta.dmg" length="55915510" type="application/octet-stream" sparkle:edSignature="q7VGrkvci643ETEgf73Fl42VDKsKJsr3FYO9UAqyQpcgSTFa5Uuw99HtHruY3v9y69lcUR+4yzMhB2hQJhW8Bg=="></enclosure>
         </item>
     </channel>
 </rss><!-- sparkle-signatures:
-edSignature: FSnTv85b7SuHQsZ0Vmq/JIgmABel4GVnRy0EnqkuLo2S9XKsM3k6bzv3qHKdntY0JcM/1K1Oy92RZJlw7m9dCA==
-length: 1931
+edSignature: 1tyzuaxFOg4TJYGsMaRLkt7a15VWLmHrQ5jonrCpsVfFv1AUGXy1XtGTlSkF826PfJAoWJ4BcwVhULxaxK98Dg==
+length: 4443
 -->
