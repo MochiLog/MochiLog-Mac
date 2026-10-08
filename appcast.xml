@@ -4,27 +4,23 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>MochiLog Mac</title>
         <item>
-            <title>0.2.17</title>
-            <pubDate>Thu, 08 Oct 2026 04:51:52 +0000</pubDate>
-            <sparkle:version>20</sparkle:version>
-            <sparkle:shortVersionString>0.2.17</sparkle:shortVersionString>
+            <title>0.2.18</title>
+            <pubDate>Thu, 08 Oct 2026 10:17:31 +0000</pubDate>
+            <sparkle:version>21</sparkle:version>
+            <sparkle:shortVersionString>0.2.18</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>27.0</sparkle:minimumSystemVersion>
             <description sparkle:format="markdown"><![CDATA[日本語
 
-現在のバッテリーの通常表を、公開定義で意味と単位を確認できた正確なパスの項目に限定しました。公称容量・生の最大容量・満充電容量、表示残量の単位が未確定の値、BatteryData内の容量値などは「詳細情報を表示」へ移しました。元の値は失わず、単位を推測しません。設計容量は確認できたルート項目がない場合に未取得と表示します。
-
-Pythonはpymobiledevice3の接続とAPI呼び出しに絞り、検証・分類・ハッシュ・取得日時とログ候補選別はSwift／C#で行います。ソースと役割をリポジトリで読めます。既存のペアリング・暗号化・旧版の転送形式を維持します。現在値はメモリ内だけで扱い、履歴・iCloud・サポートログには保存しません。
+現在のバッテリー情報を専用タブへ移しました。概要の先頭はペアリング済み端末の一覧になり、接続状態と転送状況を確認しやすくしました。現在値の表・詳細・今すぐ取得／送信は「現在のバッテリー」で利用できます。PC画面からの定期取得はそのタブを表示している間だけ行い、スマホからの更新要求は引き続き受け付けます。
 
 English
 
-The normal Live Battery table now uses only exact paths with publicly documented meanings and units. Nominal, raw maximum and full-charge capacity, ambiguous charge-level units, and nested BatteryData capacities are retained under Show detailed information without guessing units. Design capacity is unavailable when the verified root field is absent.
-
-Python remains a maintained pymobiledevice3 connection/API adapter; validation, classification, hashes, timestamps and log selection run in Swift/C#. Readable sources and architecture notes are in the repositories. Existing encrypted pairings and older wire formats are preserved. Values stay in memory, never in history, iCloud or support logs.
+Live Battery now has its own tab. Overview starts with the paired-device list so connection and transfer status remain easy to scan. Current values, optional details and Receive/Send Now are available in Live Battery. Desktop viewing refreshes run only while that tab is visible; mobile refresh requests remain supported.
 ]]></description>
-            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.17/MochiLog-Mac-Beta.dmg" length="55888539" type="application/octet-stream" sparkle:edSignature="EZURIgYBv31YI1ZMZXx0I7NxYvd31Jfa0lYFqZMFlA9RdaGSWKWM4zrlin+krj0MD2VvWYiLX/1WCcsd8mwLBg=="></enclosure>
+            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.18/MochiLog-Mac-Beta.dmg" length="55846587" type="application/octet-stream" sparkle:edSignature="HLQtceIAqwXglpifOzsPrbJ4CchSLGutipgsp/RJroHzP+mwiGVaD5ClPhsYn5PZOQC0L9pGMZMMP8LgNMVbAQ=="></enclosure>
         </item>
     </channel>
 </rss><!-- sparkle-signatures:
-edSignature: V0z0QoPEPTEn9r/fQxwPQB27nfNNSqE8SwRg7BuZg3c41JvIjYmtp0ae1+4J2wbkhTyYFHmZNd7/P8Jt4qwRCQ==
-length: 2722
+edSignature: FSnTv85b7SuHQsZ0Vmq/JIgmABel4GVnRy0EnqkuLo2S9XKsM3k6bzv3qHKdntY0JcM/1K1Oy92RZJlw7m9dCA==
+length: 1931
 -->
