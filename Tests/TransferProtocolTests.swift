@@ -766,11 +766,12 @@ struct TransferProtocolTests {
       native.fields.contains { $0.path == ["EmptyArray"] && $0.kind == "array" }, "Native plist lost typed leaves")
     let table = BatteryPresentation.summary(values: native.values, charging: native.charging, fields: native.fields)
     let optional = BatteryPresentation.details(values: native.values, charging: native.charging, fields: native.fields)
-    try check(table.contains { $0.key == "Voltage" && $0.value == "4010" && $0.unit == " mV" } &&
+    try check(table.contains { $0.key == "DesignCapacity" && $0.value == 4000.formatted() } &&
+      table.contains { $0.key == "Voltage" && $0.value == "4010" && $0.unit == " mV" } &&
       table.contains { $0.key == "ExternalConnected" && $0.kind == "boolean" } &&
-      !table.contains { $0.key == "UnknownCode" || $0.key == "Huge" }, "Summary guessed an unknown field")
+      !table.contains { ["UnknownCode", "Huge", "NominalChargeCapacity", "AppleRawMaxCapacity", "FullChargeCapacity", "CurrentCapacity"].contains($0.key) }, "Summary guessed an unknown field")
     try check(optional.contains { $0.path == ["BatteryData", "CurrentCapacity"] } &&
-      optional.contains { $0.path == ["DesignCapacity"] && $0.value == "4000" } &&
+      optional.contains { $0.path == ["BatteryData", "DesignCapacity"] && $0.value == "3000" } &&
       optional.contains { $0.path.first == "IOReportLegend" } &&
       !optional.contains { $0.path == ["Voltage"] }, "Details lost ambiguous fields or repeated verified rows")
     let contradictory = RawBatteryField(path: ["IsCharging"], kind: "boolean", value: "false")

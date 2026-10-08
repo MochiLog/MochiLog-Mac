@@ -37,7 +37,14 @@ struct BatterySummaryRow: Identifiable {
 }
 
 enum BatteryPresentation {
-  static let primaryKeys = ["CycleCount", "DesignCapacity", "NominalChargeCapacity", "AppleRawMaxCapacity", "FullChargeCapacity", "CurrentCapacity"]
+  // Wire compatibility preserves legacy core fields; display uses verified exact paths only.
+  static let primaryKeys = ["CycleCount", "DesignCapacity"]
+  static func primary(_ field: RawBatteryField) -> BatterySummaryRow? {
+    guard field.path.count == 1, let key = field.path.first, primaryKeys.contains(key),
+      field.kind == "number", let value = Int(field.value),
+      (key == "CycleCount" ? 0...100000 : 1...200000).contains(value) else { return nil }
+    return BatterySummaryRow(key: key, value: value.formatted(), unit: key == "CycleCount" ? "" : " mAh")
+  }
   static let extraKeys = ["IsCharging", "FullyCharged", "ExternalConnected", "ExternalChargeCapable",
     "AppleRawExternalConnected", "BatteryInstalled", "AtCriticalLevel", "Voltage", "Amperage", "InstantAmperage", "Serial"]
   static func extra(_ field: RawBatteryField) -> BatterySummaryRow? {
@@ -56,8 +63,10 @@ enum BatteryPresentation {
   }
   static func summary(values: [String: Int], charging: Bool?, fields: [RawBatteryField]) -> [BatterySummaryRow] {
     var rows = primaryKeys.map { key in
-      BatterySummaryRow(key: key, value: values[key].map { $0.formatted() },
-        unit: key == "CycleCount" ? "" : key == "CurrentCapacity" ? "%" : " mAh")
+      if let field = fields.first(where: { $0.path == [key] }), let row = primary(field) { return row }
+      // Old helpers attest a root CycleCount, but their capacity fields have no provenance.
+      return BatterySummaryRow(key: key, value: fields.isEmpty && key == "CycleCount" ? values[key].map { $0.formatted() } : nil,
+        unit: key == "CycleCount" ? "" : " mAh")
     }
     for key in extraKeys {
       if key == "IsCharging", let charging {
@@ -72,11 +81,7 @@ enum BatteryPresentation {
         // A contradictory raw charging flag must remain inspectable.
         return row.key == "IsCharging" && charging != nil && row.value != (charging! ? "true" : "false")
       }
-      guard let key = field.path.last, primaryKeys.contains(key), field.kind == "number",
-        let value = Int(field.value), values[key] == value else { return true }
-      let isRoot = field.path == [key]
-      let isCapacity = field.path == ["BatteryData", key] && !["CycleCount", "CurrentCapacity"].contains(key)
-      return !isRoot && !isCapacity
+      return primary(field) == nil
     }
   }
 }
