@@ -182,6 +182,10 @@ private func opened(_ response: Data, secret: Data,
 @main
 struct TransferProtocolTests {
   static func main() throws {
+    try check(LocalDiagnosticsPairing.identifier(hostname: "MixedCase-Mac.local") == "A4374A9C-4036-30DE-AD77-D8C2176D6D2F",
+      "Existing Python UUIDv3 pairing identity must preserve hostname case")
+    try check(LocalDiagnosticsPairing.identifier(hostname: "MixedCase-Mac.local") != LocalDiagnosticsPairing.identifier(hostname: "mixedcase-mac.local"),
+      "Hostname normalization must not silently replace a trusted host identity")
     print("Checking device discovery fallback after native timeout")
     let fallback = try Collector.browse { args, _ in
       if args.first == "remote" { throw CollectorError.timeout }
