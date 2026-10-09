@@ -29,3 +29,7 @@ Devices paired with the same computer can receive each other’s logs when both 
 自動更新確認は初期状態でオフです。初回の選択画面または設定でオンにできます。同じApple AccountのiCloud同期を双方で有効にしている場合は、現在のバッテリー値も他の端末へ共有します。スマホの実験的な端末内取得はPC連携と別々に切り替えられ、初期状態でオフです。[使い方と条件](https://github.com/MochiLog/MochiLog/blob/experiment/mac-log-transfer/docs/automatic-log-collection.md)をご確認ください。
 
 Automatic update checks are off by default and can be enabled in the initial prompt or settings. Current battery values can also be shared between devices with confirmed iCloud sync on the same Apple Account. Experimental on-device collection in the mobile app is independently configurable and off by default. See the [guide and requirements](https://github.com/MochiLog/MochiLog/blob/experiment/mac-log-transfer/docs/automatic-log-collection.md).
+
+次のスマホ版ベータでは、[idevice_pairからのペアリングファイル直接インストール](https://github.com/MochiLog/MochiLog#次のベータで対応予定)にも対応予定です。公式ツールへのアプリ登録は[PR #84](https://github.com/jkcoxson/idevice_pair/pull/84)で提案中です。PC連携は引き続きiOS/iPadOS 27以降が対象で、端末内取得は17以降、端末内の初回ペアリングは27以降です。
+
+The next mobile beta plans to support direct pairing-file installation from idevice_pair. Official tool registration is proposed in [PR #84](https://github.com/jkcoxson/idevice_pair/pull/84). PC transfer still targets iOS/iPadOS 27+; on-device collection targets 17+, with device-only initial pairing requiring 27+. See the [mobile beta announcement](https://github.com/MochiLog/MochiLog#次のベータで対応予定).
