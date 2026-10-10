@@ -4,25 +4,31 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>MochiLog Mac</title>
         <item>
-            <title>0.2.21</title>
-            <pubDate>Thu, 08 Oct 2026 22:58:37 +0000</pubDate>
-            <sparkle:version>24</sparkle:version>
-            <sparkle:shortVersionString>0.2.21</sparkle:shortVersionString>
+            <title>0.2.22</title>
+            <pubDate>Sat, 10 Oct 2026 03:41:43 +0000</pubDate>
+            <sparkle:version>25</sparkle:version>
+            <sparkle:shortVersionString>0.2.22</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>27.0</sparkle:minimumSystemVersion>
             <description sparkle:format="markdown"><![CDATA[# 日本語
 
-- 端末内取得へ既存のOSペアリングを引き継ぐ際、ホスト名の大文字・小文字の変換により認証に失敗する問題を修正しました。既存の信頼情報を使用し、再ペアリングは不要です。
-- iPhoneとiPadの実機で、認証・バッテリー情報の取得・解析ログの読み取りを検証しています。
+- 当日分の短い・未完成の取得結果を、30分待たず5分間隔で取り直せるようにしました。対象外の判定は十分な間隔で3回確認する条件を保ち、取得途中のログを早く捨てないようにしています。
+- 収集の試行ID、候補一覧、取得要求、保存・保留と再試行予定を診断ログへ追加しました。Watch候補がいつ取得元に現れたか、取得と転送のどちらで待っているかを調べやすくしています。
+- 同じ接続エラーをCLI日時やプロセス番号の違いで別エラーとして数える問題を修正しました。
+- 診断接続の失敗段階と空の一覧を区別し、TCP書き込みとスマホ側の受領・処理を診断ログで明確に分けました。
+- 既存のペアリング・記録・受領済みログは維持します。スマホ版の入れ替えや再ペアリングは不要です。
 
 # English
 
-- Fixed authentication failures when reusing an existing OS pairing for on-device collection. The original hostname spelling is now preserved when deriving the trusted host identifier. Existing pairings remain intact.
-- Verified authentication, current battery data, and read-only analytics-file acquisition on physical iPhone and iPad devices.
+- Retry incomplete or unclassified current-day reports every five minutes instead of holding them for thirty minutes. Permanent exclusion still requires three identical non-empty observations spaced at least thirty minutes apart; quick retries cannot discard an unfinished report early.
+- Added collection attempt IDs, candidate listings, download requests, storage outcomes and retry times to diagnostics, distinguishing acquisition delays from transfer and mobile processing.
+- Group repeated connection failures by their actual reason instead of treating changing CLI timestamps and process IDs as different failures.
+- Report the failed diagnostic connection stage and reject empty root listings. TCP writes are explicitly separate from mobile receipt and processing.
+- Existing pairings, records and acknowledged reports remain intact. No mobile update or re-pairing is required.
 ]]></description>
-            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.21/MochiLog-Mac-Beta.dmg" length="57026642" type="application/octet-stream" sparkle:edSignature="Yn23r7daRjLKfs1vtyJDzW+ev1NiSFn321v22DTj4QvGj8xVfWtxGzbJ4lGtPpb6R0tD9h/gmtNVvzWS3W6JAQ=="></enclosure>
+            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.22/MochiLog-Mac-Beta.dmg" length="57101628" type="application/octet-stream" sparkle:edSignature="zxcBonbhvxJWV7U7Ylp3OM4Vlp1ULeIHG7v1IUwVWEYizxTxQu69DT97bVvEcrMQY8OU5HFhDLNCbHBPyuBYAg=="></enclosure>
         </item>
     </channel>
 </rss><!-- sparkle-signatures:
-edSignature: LiIfjuS4HBUL7Us2Xa6YkLB+CK2iJeCbJO6jqJN1+xlaItnOoAC06mBtnENDxZRiK9Bd1myXHuBT4i8mWRnzAw==
-length: 1877
+edSignature: 6r+6dsBHrZ/e4vzK6CgiveOhSr85ViSEAcHUL9hGo9LGvY0TXSPo/Y6FQVOMC51Jp8qMJF+7nAEu40DFwcUJBw==
+length: 2989
 -->
