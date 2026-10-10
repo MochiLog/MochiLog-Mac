@@ -156,7 +156,7 @@ final class CompanionModel: ObservableObject {
 
   private func recordCollectionFailure(for device: PairedDevice, trigger: String,
     error: Error, manual: Bool) {
-    let message = error.localizedDescription
+    let message = Collector.stableDiagnostic(error.localizedDescription)
     if manual {
       SupportDiagnostics.record("\(device.name): collection failed; trigger=manual request; error=\(message)")
       return
@@ -464,10 +464,9 @@ final class CompanionModel: ObservableObject {
     var savedAny = false
     for device in devices {
       let started = ProcessInfo.processInfo.systemUptime
+      let attempt = UUID().uuidString
+      SupportDiagnostics.record("\(device.name): collection started; attempt=\(attempt); trigger=\(manual ? "manual request" : trigger)")
       do {
-        if manual || automaticFailures[device.physicalDeviceID] == nil {
-          SupportDiagnostics.record("\(device.name): collection started; trigger=\(manual ? "manual request" : trigger)")
-        }
         collectionDone = 0
         collectionTotal = 0
         let report = try await Task.detached(priority: .utility) { [weak self] in
@@ -490,12 +489,13 @@ final class CompanionModel: ObservableObject {
           staleAnalyticsDeviceIDs.remove(device.physicalDeviceID)
         }
         savedAny = savedAny || report.saved > 0
-        SupportDiagnostics.record("\(device.name): collection finished; saved=\(report.saved), excluded=\(report.skipped), deferred=\(report.deferred), failed=\(report.failed), elapsedMs=\(Int((ProcessInfo.processInfo.systemUptime - started) * 1000))")
+        SupportDiagnostics.record("\(device.name): collection finished; attempt=\(attempt); saved=\(report.saved), excluded=\(report.skipped), deferred=\(report.deferred), failed=\(report.failed), elapsedMs=\(Int((ProcessInfo.processInfo.systemUptime - started) * 1000))")
         if selectedUDID == device.udid { osPairingState = .verified }
         status = report.failed == 0
           ? MacTransferL10n.format("mt_m_08", device.name, report.saved, report.skipped)
           : MacTransferL10n.format("mt_m_09", device.name, report.saved, report.skipped, report.failed, report.lastError ?? "")
       } catch {
+        SupportDiagnostics.record("\(device.name): collection attempt ended; attempt=\(attempt); result=failed; elapsedMs=\(Int((ProcessInfo.processInfo.systemUptime - started) * 1000))")
         recordCollectionFailure(for: device, trigger: trigger, error: error, manual: manual)
         SupportDiagnostics.saveCollection(nil, error: error, for: device)
         if selectedUDID == device.udid { osPairingState = .failed }

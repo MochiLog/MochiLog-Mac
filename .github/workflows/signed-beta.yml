@@ -26,7 +26,7 @@ jobs:
           fastlane --version
       - name: Verify native protocol and Python transport
         run: |
-          python3.13 -m unittest discover -s Tests -p test_battery_snapshot.py
+          python3.13 -m unittest discover -s Tests -p 'test_*.py'
           bash scripts/test-transfer-protocol.sh
       - name: Import Developer ID certificate
         env:

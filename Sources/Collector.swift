@@ -127,6 +127,7 @@ struct RemoteLog {
 struct UnclassifiedObservation: Codable {
   let fingerprint: String
   let confirmations: Int
+  var lastConfirmedAt: Date? = nil
 }
 
 enum Collector {
@@ -222,15 +223,17 @@ enum Collector {
     while process.isRunning && Date() < deadline { Thread.sleep(forTimeInterval: 0.1) }
     if process.isRunning { process.terminate(); throw CollectorError.timeout }
     let text = (try? String(contentsOf: outputURL, encoding: .utf8)) ?? ""
-    guard process.terminationStatus == 0 else {
-      let errorText = (try? String(contentsOf: errorURL, encoding: .utf8)) ?? text
+    let stderr = (try? String(contentsOf: errorURL, encoding: .utf8)) ?? ""
+    let toolError = toolFailureLine(stdout: text, stderr: stderr)
+    guard process.terminationStatus == 0 && toolError == nil else {
+      let errorText = stderr.isEmpty ? text : stderr
       let log = root.appendingPathComponent("last-collector-error.log")
       try? errorText.write(to: log, atomically: true, encoding: .utf8)
       try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: log.path)
       let meaningful = errorText.split(separator: "\n").last(where: {
         $0.contains("ERROR") || $0.contains("Error") || $0.contains("Traceback")
       })
-      let detail = meaningful.map { String($0.suffix(300)) }
+      let detail = (toolError ?? meaningful.map(String.init)).map { stableDiagnostic(String($0.suffix(300))) }
       if process.terminationReason == .uncaughtSignal {
         throw CollectorError.signal(process.terminationStatus, detail ?? "")
       }
@@ -483,17 +486,54 @@ enum Collector {
   }
 
   // Confirm the same complete, small, marker-free payload across separate
-  // 30-minute attempts before excluding a report with a plausible daily name.
+  // confirmations at least 30 minutes apart before excluding a plausible daily report.
   // Empty pulls provide no evidence and must never advance the count.
   static func observeUnclassified(_ url: URL,
-    previous: UnclassifiedObservation?) throws -> UnclassifiedObservation? {
+    previous: UnclassifiedObservation?, now: Date = Date()) throws -> UnclassifiedObservation? {
     let bytes = try Data(contentsOf: url, options: .mappedIfSafe)
     guard !bytes.isEmpty else { return nil }
     let fingerprint = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
-    let confirmations = previous?.fingerprint == fingerprint
-      ? min(3, (previous?.confirmations ?? 0) + 1) : 1
+    if let previous, previous.fingerprint == fingerprint {
+      // Early retries may recover a report while it is being generated. They
+      // must not turn three pulls in ten minutes into permanent exclusion.
+      guard let confirmedAt = previous.lastConfirmedAt else {
+        return UnclassifiedObservation(fingerprint: fingerprint,
+          confirmations: previous.confirmations, lastConfirmedAt: now)
+      }
+      if now.timeIntervalSince(confirmedAt) < 30 * 60 { return previous }
+      return UnclassifiedObservation(fingerprint: fingerprint,
+        confirmations: min(3, previous.confirmations + 1), lastConfirmedAt: now)
+    }
     return UnclassifiedObservation(fingerprint: fingerprint,
-      confirmations: confirmations)
+      confirmations: 1, lastConfirmedAt: now)
+  }
+
+  static func unclassifiedRetryAt(name: String, now: Date = Date()) -> Date {
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.timeZone = TimeZone(identifier: "Asia/Tokyo")
+    formatter.dateFormat = "yyyy-MM-dd"
+    let currentDay = name.hasPrefix("Analytics-" + formatter.string(from: now) + "-")
+    return now.addingTimeInterval(currentDay ? 5 * 60 : 30 * 60)
+  }
+
+  static func toolFailureLine(stdout: String, stderr: String) -> String? {
+    let clean: (String) -> [String] = { value in
+      value.replacingOccurrences(of: #"\x1B\[[0-9;]*m"#, with: "",
+        options: .regularExpression).components(separatedBy: "\n")
+        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+    }
+    return clean(stderr).last { $0.range(of: #"\b(?:ERROR|FATAL)\b"#,
+      options: [.regularExpression, .caseInsensitive]) != nil } ??
+      clean(stdout).last { $0.range(of: #"^(?:ERROR|FATAL)\b"#,
+        options: [.regularExpression, .caseInsensitive]) != nil }
+  }
+
+  static func stableDiagnostic(_ message: String) -> String {
+    // Keep the actual reason, omit the CLI logger's timestamp, hostname and PID.
+    message.replacingOccurrences(of:
+      #"\b\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)? \S+ \S+\[\d+\] (?:ERROR|FATAL) "#,
+      with: "", options: .regularExpression)
   }
 
   // A large Analytics file can be returned incompletely by the diagnostics
@@ -594,6 +634,7 @@ enum Collector {
           }
         } catch {
           // One unavailable paired accessory must not block the host's logs.
+          SupportDiagnostics.record("\(device.name): accessory listing unavailable; source=\(source); error=\(stableDiagnostic(error.localizedDescription))")
           continue
         }
       }
@@ -629,6 +670,8 @@ enum Collector {
         FileManager.default.fileExists(atPath: $0.path)
       }
     }
+    let retryHeld = remoteFiles.filter { (rechecks[$0.token] ?? .distantPast) > now }.count
+    SupportDiagnostics.record("\(device.name): diagnostic listing ready; hostCandidates=\(remoteFiles.filter { $0.source == nil }.count); proxyCandidates=\(remoteFiles.filter { $0.source != nil }.count); downloadDue=\(newFiles.count); retryHeld=\(retryHeld)")
     progress?(0, newFiles.count)
     var directStaging: URL?
     defer { if let directStaging { try? FileManager.default.removeItem(at: directStaging) } }
@@ -650,6 +693,7 @@ enum Collector {
     var lastError: String?
     for (index, remote) in newFiles.enumerated() {
       let name = remote.name
+      SupportDiagnostics.record("\(device.name): battery candidate download requested; file=\(name); source=\(remote.source ?? "host")")
       do {
         let staging = destination.appendingPathComponent(".staging-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
@@ -683,6 +727,7 @@ enum Collector {
             try saveObservations(observations, for: device)
           }
           saved += 1
+          SupportDiagnostics.record("\(device.name): battery report stored; file=\(name); kind=\(kind.rawValue); source=\(remote.source ?? "host")")
         } else if try shouldRecheckUnclassified(downloaded) || !remote.path.contains("/Retired/") ||
           isLikelyDailyReport(remote) {
           let size = (try? downloaded.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
@@ -700,7 +745,7 @@ enum Collector {
           } else {
             if let observation { observations[remote.token] = observation }
             try saveObservations(observations, for: device)
-            let retryAt = Date().addingTimeInterval(30 * 60)
+            let retryAt = unclassifiedRetryAt(name: name)
             rechecks[remote.token] = retryAt
             try saveRechecks(rechecks, for: device)
             deferred += 1

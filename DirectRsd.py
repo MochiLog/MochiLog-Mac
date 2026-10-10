@@ -31,8 +31,10 @@ async def run(arguments: argparse.Namespace) -> None:
     # device's authenticated RemotePairing endpoint is reachable by IP.
     userspace_tunnel._create_no_root_tunnel_provider = direct_provider
     tunnel = userspace_tunnel.UserspaceRsdTunnel(serial=arguments.udid, autopair=False)
+    phase = "RemotePairing tunnel"
     try:
         rsd = await asyncio.wait_for(tunnel.aopen(), timeout=45)
+        phase = "diagnostic service"
         async with CrashReportsManager(rsd) as reports:
             if arguments.action == "verify":
                 entries = await asyncio.wait_for(reports.ls("/", depth=1), timeout=30)
@@ -40,7 +42,10 @@ async def run(arguments: argparse.Namespace) -> None:
                     raise RuntimeError("Diagnostic reports are not available")
                 print(json.dumps({"verified": True}))
             elif arguments.action == "scan":
+                phase = "diagnostic root listing"
                 root = await asyncio.wait_for(reports.ls("/", depth=1), timeout=30)
+                if not root:
+                    raise RuntimeError("Diagnostic root listing is empty")
                 directories = [("/Retired", None), ("/", None)]
                 for entry in root:
                     if re.fullmatch(r"/ProxiedDevice-[a-fA-F0-9]+", entry):
@@ -48,6 +53,7 @@ async def run(arguments: argparse.Namespace) -> None:
                 files = []
                 seen = set()
                 for directory, source in directories:
+                    phase = "host listing" if source is None else "accessory listing"
                     try:
                         entries = root if directory == "/" else await asyncio.wait_for(
                             reports.ls(directory, depth=1), timeout=60
@@ -67,6 +73,7 @@ async def run(arguments: argparse.Namespace) -> None:
                             raise ValueError("Diagnostic listing exceeds limit")
                 print(json.dumps({"files": files}))
             elif arguments.action == "pull-batch":
+                phase = "diagnostic batch download"
                 with open(arguments.manifest, encoding="utf-8") as stream:
                     items = json.load(stream)
                 if not isinstance(items, list) or len(items) > 1000:
@@ -93,6 +100,8 @@ async def run(arguments: argparse.Namespace) -> None:
                     except Exception as error:
                         results.append({"index": index, "ok": False, "error": str(error)[:200]})
                 print(json.dumps({"results": results}))
+    except Exception as error:
+        raise RuntimeError(f"{phase} failed ({type(error).__name__}): {error}") from error
     finally:
         await tunnel.aclose()
 

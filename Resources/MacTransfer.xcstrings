@@ -4247,49 +4247,49 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The device returned an empty diagnostic file list. Unlock it and retry."
+            "value": "The diagnostic file list could not be confirmed. Check that the device is unlocked, connected to Wi-Fi, and sharing analytics."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "端末の診断ファイル一覧が空でした。ロックを解除して再試行してください。"
+            "value": "診断ファイル一覧を確認できませんでした。端末のロック解除、Wi-Fi接続、解析の共有設定を確認してください。"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Das Gerät hat eine leere Diagnosedateiliste zurückgegeben. Entsperre es und versuche es erneut."
+            "value": "Die Diagnosedateiliste konnte nicht bestätigt werden. Prüfe, ob das Gerät entsperrt, mit WLAN verbunden und das Teilen von Analysedaten aktiviert ist."
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "El dispositivo devolvió una lista de diagnósticos vacía. Desbloquéalo y vuelve a intentarlo."
+            "value": "No se pudo confirmar la lista de diagnósticos. Comprueba que el dispositivo esté desbloqueado, conectado a Wi-Fi y comparta análisis."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "L’appareil a renvoyé une liste de diagnostics vide. Déverrouillez-le et réessayez."
+            "value": "La liste des diagnostics n’a pas pu être confirmée. Vérifiez que l’appareil est déverrouillé, connecté au Wi-Fi et que le partage des analyses est activé."
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "기기의 진단 파일 목록이 비어 있습니다. 잠금을 해제한 뒤 다시 시도하세요."
+            "value": "진단 파일 목록을 확인할 수 없습니다. 기기의 잠금 해제, Wi-Fi 연결 및 분석 공유 설정을 확인하세요."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "设备返回了空的诊断文件列表。请解锁后重试。"
+            "value": "无法确认诊断文件列表。请检查设备是否已解锁、已连接 Wi-Fi，并已开启共享分析。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "裝置傳回空白的診斷檔案清單。請解鎖後重試。"
+            "value": "無法確認診斷檔案清單。請檢查裝置是否已解鎖、已連接 Wi-Fi，並已開啟分享分析。"
           }
         }
       }

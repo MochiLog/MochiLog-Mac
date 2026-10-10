@@ -371,7 +371,7 @@ final class TransferServer: @unchecked Sendable {
         let sendingAt = ProcessInfo.processInfo.systemUptime
         var offset = 0
         defer {
-          SupportDiagnostics.record("Transfer trace: tailnet write request=\(response.requestID?.uuidString ?? "control"), recipient=\(response.deviceID.uuidString), sent=\(offset)/\(response.data.count), prepareQueueMs=\(Int((sendingAt - preparedAt) * 1000)), writeMs=\(Int((ProcessInfo.processInfo.systemUptime - sendingAt) * 1000)); TCP write only, awaiting app ACK")
+          SupportDiagnostics.record("Transfer trace: tailnet write request=\(response.requestID?.uuidString ?? "control"), recipient=\(response.deviceID.uuidString), sent=\(offset)/\(response.data.count), prepareQueueMs=\(Int((sendingAt - preparedAt) * 1000)), writeMs=\(Int((ProcessInfo.processInfo.systemUptime - sendingAt) * 1000)); TCP write only; application processing not confirmed")
         }
         while offset < response.data.count {
           let written = response.data.withUnsafeBytes { bytes in
@@ -485,7 +485,7 @@ final class TransferServer: @unchecked Sendable {
     let sendingAt = ProcessInfo.processInfo.systemUptime
     connection.send(content: response.data, completion: .contentProcessed { [weak self] error in
       if response.requestID != nil {
-        SupportDiagnostics.record("Transfer trace: LAN write request=\(response.requestID!.uuidString), recipient=\(response.deviceID.uuidString), bytes=\(response.data.count), prepareMs=\(Int((sendingAt - preparedAt) * 1000)), writeMs=\(Int((ProcessInfo.processInfo.systemUptime - sendingAt) * 1000)), result=\(error == nil ? "written" : "failed"); awaiting app ACK")
+        SupportDiagnostics.record("Transfer trace: LAN write request=\(response.requestID!.uuidString), recipient=\(response.deviceID.uuidString), bytes=\(response.data.count), prepareMs=\(Int((sendingAt - preparedAt) * 1000)), writeMs=\(Int((ProcessInfo.processInfo.systemUptime - sendingAt) * 1000)), result=\(error == nil ? "written" : "failed"); TCP write only; application processing not confirmed")
       }
       self?.onTransferActivity?(response.deviceID, false)
       connection.cancel()

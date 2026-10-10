@@ -267,11 +267,46 @@ struct TransferProtocolTests {
     let shouldRecheckSmall = try Collector.shouldRecheckUnclassified(uncertain)
     try check(!shouldRecheckSmall,
       "A small unrelated diagnostic should be excluded")
-    let firstObservation = try Collector.observeUnclassified(uncertain, previous: nil)
+    let observationClock = Date(timeIntervalSince1970: 1_791_590_400) // 2026-10-10 09:00 JST
+    let firstObservation = try Collector.observeUnclassified(uncertain, previous: nil,
+      now: observationClock)
+    let earlyObservation = try Collector.observeUnclassified(uncertain,
+      previous: firstObservation, now: observationClock.addingTimeInterval(5 * 60))
+    try check(earlyObservation?.confirmations == 1,
+      "Five-minute retries must not accelerate permanent exclusion")
     let secondObservation = try Collector.observeUnclassified(uncertain,
-      previous: firstObservation)
+      previous: earlyObservation, now: observationClock.addingTimeInterval(30 * 60))
     let thirdObservation = try Collector.observeUnclassified(uncertain,
-      previous: secondObservation)
+      previous: secondObservation, now: observationClock.addingTimeInterval(60 * 60))
+    let oldObservation = try JSONDecoder().decode(UnclassifiedObservation.self,
+      from: Data(#"{"fingerprint":"old","confirmations":2}"#.utf8))
+    let migratedObservation = try Collector.observeUnclassified(uncertain,
+      previous: UnclassifiedObservation(fingerprint: firstObservation!.fingerprint,
+        confirmations: oldObservation.confirmations), now: observationClock)
+    try check(migratedObservation?.confirmations == 2 && migratedObservation?.lastConfirmedAt != nil,
+      "Old state must not immediately become a third exclusion confirmation")
+    let restoredObservation = try JSONDecoder().decode(UnclassifiedObservation.self,
+      from: JSONEncoder().encode(secondObservation!))
+    try check(restoredObservation.lastConfirmedAt == secondObservation?.lastConfirmedAt,
+      "Restart lost the spaced confirmation time")
+    try check(Collector.unclassifiedRetryAt(name: "Analytics-2026-10-10-090006.ips.ca.synced",
+      now: observationClock).timeIntervalSince(observationClock) == 300 &&
+      Collector.unclassifiedRetryAt(name: "Analytics-2026-10-09-090006.ips.ca.synced",
+      now: observationClock).timeIntervalSince(observationClock) == 1800,
+      "Current-day and historical retry schedules were mixed")
+    let beforeMidnight = observationClock.addingTimeInterval(-9 * 3600 - 60)
+    try check(Collector.unclassifiedRetryAt(name: "Analytics-2026-10-09-090006.ips.ca.synced",
+      now: beforeMidnight).timeIntervalSince(beforeMidnight) == 300,
+      "Retry policy did not use the Japanese log day")
+    try check(Collector.toolFailureLine(stdout: #"{"results":[{"ok":false,"error":"FILE_OPEN failed"}]}"#,
+      stderr: "") == nil && Collector.toolFailureLine(stdout: "", stderr: "ERROR Device is not connected") != nil,
+      "A zero-exit CLI error was ignored or a file-level JSON result became a whole-command failure")
+    let diagnosticA = "Collector exited 0: 2026-10-10 09:03:18 host pymobiledevice3.__main__[9212] ERROR Device is not connected"
+    let diagnosticB = "Collector exited 0: 2026-10-10 09:08:18 host pymobiledevice3.__main__[22064] ERROR Device is not connected"
+    try check(Collector.stableDiagnostic(diagnosticA) == Collector.stableDiagnostic(diagnosticB) &&
+      Collector.stableDiagnostic(diagnosticA).contains("Device is not connected") &&
+      Collector.stableDiagnostic("TimeoutError") != Collector.stableDiagnostic("InvalidHostID"),
+      "Collector diagnostics lost their reason or volatile prefixes prevent grouping")
     try check(firstObservation?.confirmations == 1 &&
       secondObservation?.confirmations == 2 && thirdObservation?.confirmations == 3,
       "Stable non-battery downloads should stop after three separate checks")
