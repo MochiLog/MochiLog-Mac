@@ -4,31 +4,37 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>MochiLog Mac</title>
         <item>
-            <title>0.2.22</title>
-            <pubDate>Sat, 10 Oct 2026 03:41:43 +0000</pubDate>
-            <sparkle:version>25</sparkle:version>
-            <sparkle:shortVersionString>0.2.22</sparkle:shortVersionString>
+            <title>0.2.23</title>
+            <pubDate>Sat, 10 Oct 2026 14:17:51 +0000</pubDate>
+            <sparkle:version>26</sparkle:version>
+            <sparkle:shortVersionString>0.2.23</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>27.0</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[# 日本語
+            <description sparkle:format="markdown"><![CDATA[# MochiLog Mac 0.2.23 Beta
 
-- 当日分の短い・未完成の取得結果を、30分待たず5分間隔で取り直せるようにしました。対象外の判定は十分な間隔で3回確認する条件を保ち、取得途中のログを早く捨てないようにしています。
-- 収集の試行ID、候補一覧、取得要求、保存・保留と再試行予定を診断ログへ追加しました。Watch候補がいつ取得元に現れたか、取得と転送のどちらで待っているかを調べやすくしています。
-- 同じ接続エラーをCLI日時やプロセス番号の違いで別エラーとして数える問題を修正しました。
-- 診断接続の失敗段階と空の一覧を区別し、TCP書き込みとスマホ側の受領・処理を診断ログで明確に分けました。
-- 既存のペアリング・記録・受領済みログは維持します。スマホ版の入れ替えや再ペアリングは不要です。
+## 日本語
 
-# English
+診断ログを日付・機能別のファイルに分割しました。背景実行、端末内取得、PC転送、現在のバッテリー、同期、ペアリングを区別し、未知のメッセージも一般ログとして保持します。
 
-- Retry incomplete or unclassified current-day reports every five minutes instead of holding them for thirty minutes. Permanent exclusion still requires three identical non-empty observations spaced at least thirty minutes apart; quick retries cannot discard an unfinished report early.
-- Added collection attempt IDs, candidate listings, download requests, storage outcomes and retry times to diagnostics, distinguishing acquisition delays from transfer and mobile processing.
-- Group repeated connection failures by their actual reason instead of treating changing CLI timestamps and process IDs as different failures.
-- Report the failed diagnostic connection stage and reject empty root listings. TCP writes are explicitly separate from mobile receipt and processing.
-- Existing pairings, records and acknowledged reports remain intact. No mobile update or re-pairing is required.
+各ファイルの先頭に形式バージョン2、アプリとビルド番号、作成日時とタイムゾーンを記録します。旧ログは旧形式のまま扱い、行ごとにメタデータを繰り返しません。従来のスマホとの暗号化された診断ログ交換・日付別表示・サポート添付には互換用の集約ファイルを使用し、受信済みのバイト位置を維持します。保存期間変更と削除は機能別ファイルにも適用します。
+
+既存の収集・転送・暗号化・現在のバッテリー情報の機能は継続します。
+
+PCのログと受信済みスマホのログを、日付と機能別に絞って閲覧・コピーできます。「すべて」は元の内容をそのまま表示し、旧形式・将来の未対応形式も隠しません。分類名は8言語に対応します。
+
+## English
+
+Diagnostics are now stored in separate daily files for background activity, on-device collection, PC transfers, current battery information, cloud sync, pairing, and general events.
+
+Each file has a format-version-2 header with app/build, creation time and time zone. Metadata is not repeated on each line. Historical logs retain their legacy format. An append-only compatibility stream preserves existing encrypted diagnostic exchange, day-based viewing, support attachments, and previously received byte offsets. Retention and deletion also remove the feature files.
+
+Existing collection, transfer, encryption, and current battery functionality remain available.
+
+The viewer can filter and copy local PC and received phone logs by date and feature. All preserves the original text; legacy and unsupported future formats remain visible. Category labels support all eight languages.
 ]]></description>
-            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.22/MochiLog-Mac-Beta.dmg" length="57101628" type="application/octet-stream" sparkle:edSignature="zxcBonbhvxJWV7U7Ylp3OM4Vlp1ULeIHG7v1IUwVWEYizxTxQu69DT97bVvEcrMQY8OU5HFhDLNCbHBPyuBYAg=="></enclosure>
+            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.23/MochiLog-Mac-Beta.dmg" length="57138969" type="application/octet-stream" sparkle:edSignature="okYPf0klTPAauwCLY3XX0L2R2xqjd7N47b9ND9DvLRUGgun7jwHre4yrgJusCVA2h1OihISORG/hg065g6awBA=="></enclosure>
         </item>
     </channel>
 </rss><!-- sparkle-signatures:
-edSignature: 6r+6dsBHrZ/e4vzK6CgiveOhSr85ViSEAcHUL9hGo9LGvY0TXSPo/Y6FQVOMC51Jp8qMJF+7nAEu40DFwcUJBw==
-length: 2989
+edSignature: iUaPhFzHbqRDmEnUDHmwaGllbtUtyc0+dz1r8nOSJ1IMaajzfVm8F7B06HGDKDGdrKznRKZ6Gv9o7qUW5CXaCQ==
+length: 3199
 -->
