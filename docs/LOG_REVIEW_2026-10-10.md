@@ -26,3 +26,13 @@
 
 時間を注入したネイティブ試験で当日/過去/JST日付境界、5分間隔で早期除外しないこと、30/60分確認、古い状態と新しい状態の読み込み、空・変更された本文、CLIエラーの同一化を検証。暗号化転送・受信前照会・複数端末・受領確認・保管の既存試験も実施する。
 Pythonアダプタは空ルート拒否、トンネルタイムアウトの段階、代理領域エラー時の本体ログ保持をモック試験する。実際の新規ログ生成時刻やロック中の収集成功をモック試験で確認したという扱いにはしない。
+
+
+## 配布・実機更新の結果
+
+- Mac 0.2.22（25）：[CI 38021151704](https://github.com/MochiLog/MochiLog-Mac/actions/runs/38021151704)でネイティブ転送試験・Python試験・署名・公証が成功。[βリリース](https://github.com/MochiLog/MochiLog-Mac/releases/tag/v0.2.22)を公開し、署名済みappcastをそのまま反映した。
+- DMG SHA-256: `bdd9885df8e0203ee43f624b30371a702f80f297f8f2744e12e81ec54ec101c7`。appのcodesign、staple、Gatekeeper、公証と、SparkleのDMG・XML両署名を公開鍵で検証した。
+- 12:48にMac実機を更新・起動。既存ペアリングと保管を引き継ぎ、12:49にiPhoneの当日分完了による停止と翌日09:00再開予定を確認。iPadの試行は失敗したが、開始・終了・失敗・16,678msが同じ試行IDに記録された。iPadの収集成功は未確認。
+- Windows 0.1.20：[CI 38021147735](https://github.com/MochiLog/MochiLog-Windows/actions/runs/38021147735)でPython・ネイティブ試験とWinUIインストーラーの作成に成功。[αリリース](https://github.com/MochiLog/MochiLog-Windows/releases/tag/v0.1.20)を公開、実機を更新し、0.1.20の起動・応答を確認した。
+- Windows installer SHA-256: `34781b16a47a86d9b7755e4e7194f5e72e0c676f5bad3b4b7cea5737dcf95cee`。転送先でもハッシュを照合してからインストールした。
+- スマホ側の当日原本は取得できず、本更新はPCの確認済み不具合に限定。新しいスマホビルドを作ったという扱いにはしない。新規シミュレーターは作成していない。
