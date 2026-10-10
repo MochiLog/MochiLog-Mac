@@ -1048,6 +1048,14 @@ struct TransferProtocolTests {
       (try JSONSerialization.jsonObject(with: beforeSource.1) as? [String: String])?["type"] != "file-offer",
       "Source without consent was shared")
     _ = try cloudRequest(1, scope: scope, policy: true)
+    let identityPolicy = try cloudRequest(0, scope: scope, policy: true)
+    let identityControl = try JSONDecoder().decode([String: String].self, from: identityPolicy.1)
+    let sourceModels = try JSONDecoder().decode([String: String].self,
+      from: Data(identityControl["sourceModels"]!.utf8))
+    try check(sourceModels[peers[1].physicalDeviceID.uuidString] == peers[1].model,
+      "Previously delivered logs cannot discover their authenticated originating model")
+    try check(sourceModels[peers[2].physicalDeviceID.uuidString] == nil,
+      "Unconsented source model leaked in identity policy")
     let legacyRecipient = try cloudRequest(0, scope: scope, sourceIdentity: false)
     try check((try JSONSerialization.jsonObject(with: legacyRecipient.1) as? [String: String])?["type"] != "file-offer",
       "Old recipient received foreign logs without source identity support")

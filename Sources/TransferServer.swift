@@ -733,8 +733,18 @@ final class TransferServer: @unchecked Sendable {
       guard secure, request.cloudSharingOnly == "1", request.cloudSharingVersion == "1",
         request.ack == "", request.offerToken == nil else { return nil }
       let pending = cloudSharing.next(recipient: device.physicalDeviceID, devices: state.devices, now: now) != nil
-      let control = try? JSONSerialization.data(withJSONObject: ["type": "cloud-sharing-policy",
-        "cloudSharingVersion": "1", "pending": pending ? "true" : "false"])
+      var policy = ["type": "cloud-sharing-policy", "cloudSharingVersion": "1",
+        "pending": pending ? "true" : "false"]
+      if request.logSourceIdentityVersion == "1", let scope = cloudSharing.scope(device.physicalDeviceID, now: now) {
+        let models = Dictionary(uniqueKeysWithValues: state.devices.filter {
+          cloudSharing.scope($0.physicalDeviceID, now: now) == scope
+        }.prefix(64).map { ($0.physicalDeviceID.uuidString, $0.model) })
+        if let data = try? JSONSerialization.data(withJSONObject: models), let json = String(data: data, encoding: .utf8) {
+          policy["sourceModels"] = json
+          SupportDiagnostics.record("Import identity policy: recipient=\(device.physicalDeviceID.uuidString), authenticatedModels=\(models.count)")
+        }
+      }
+      let control = try? JSONSerialization.data(withJSONObject: policy)
       guard let control else { return nil }
       return try? encryptedLogResponse(control, name: "", request: request, device: device)
     }
