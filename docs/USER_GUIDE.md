@@ -29,7 +29,7 @@ Tailscale は任意です。同じ Wi-Fi の外からは、双方で Tailscale �
 - **ログが生成されない:** 端末の「設定 → プライバシーとセキュリティ → 解析と改善」で解析の共有を確認します。OS アップデート後も確認してください。設定直後は次のログ生成まで時間がかかります。
 - **端末が見つからない:** 端末のロック、Wi-Fi、Bluetooth、Mac のスリープ状態を確認し、「端末」で再検索します。OS の信頼設定が切れた場合は、Mac アプリの案内に従って設定し直してください。
 - **収集済みだが記録が増えない:** 該当端末で MochiLog を開き、「パソコン連携」で接続と処理結果を確認します。すでに読み込んだログは重複防止のため再登録されません。
-- **接続が繰り返し失敗する:** Mac と端末の「パソコン連携」にある日付別デバッグログを確認してください。サポート画面では発生日を指定して関連ログを添付できます。生の解析ログやペアリング鍵は自動添付されません。
+- **接続が繰り返し失敗する:** Mac のデバッグ画面と、端末の「設定 → デバッグ → 動作ログ」（4.0.0ベータ1051以降）で日付別のログを確認してください。サポート画面では発生日を指定して関連ログを添付できます。生の解析ログやペアリング鍵は自動添付されません。
 
 この機能はベータ版です。問題の解決には時間がかかり、個別に返信できない場合があります。[プライバシーポリシー](https://mochilog.ryuya-dev.net/privacy)と[利用規約](https://mochilog.ryuya-dev.net/terms)も参照してください。
 
@@ -55,7 +55,7 @@ By default, closing the Mac app's window keeps it running in the menu bar so col
 
 Tailscale is optional. If both devices use it and mobile transfer is enabled, you can receive files **already collected** by the Mac while away. Cellular plus Tailscale cannot collect new system analytics from the device.
 
-If logs do not appear, check **Settings → Privacy & Security → Analytics & Improvements** on the iPhone or iPad, especially after an OS update. Check that the device is unlocked, Wi-Fi and Bluetooth are on, and the Mac is awake. Open MochiLog on the device to complete receipt; duplicates are not recorded twice. For persistent failures, review the dated debug logs on both devices and use the support screen to attach logs for the incident date. Raw analytics files and pairing keys are not attached automatically.
+If logs do not appear, check **Settings → Privacy & Security → Analytics & Improvements** on the iPhone or iPad, especially after an OS update. Check that the device is unlocked, Wi-Fi and Bluetooth are on, and the Mac is awake. Open MochiLog on the device to complete receipt; duplicates are not recorded twice. For persistent failures, review the computer debug screen and **Settings → Debug → Activity logs** on mobile (4.0.0 beta 1051 or later) and use the support screen to attach logs for the incident date. Raw analytics files and pairing keys are not attached automatically.
 
 This is a beta. Fixes may take time and individual replies may not always be possible. See the [privacy policy](https://mochilog.ryuya-dev.net/privacy) and [terms](https://mochilog.ryuya-dev.net/terms).
 
