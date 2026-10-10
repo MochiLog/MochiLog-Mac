@@ -1,32 +1,83 @@
-<?xml version="1.0" standalone="yes"?><!-- sparkle-sign-warning:
+<?xml version="1.0" standalone="yes"?>
+<!-- sparkle-sign-warning:
 IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
---><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+-->
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
     <channel>
         <title>MochiLog Mac</title>
         <item>
-            <title>0.2.24</title>
-            <pubDate>Sat, 10 Oct 2026 17:16:51 +0000</pubDate>
-            <sparkle:version>27</sparkle:version>
-            <sparkle:shortVersionString>0.2.24</sparkle:shortVersionString>
+            <title>0.2.25</title>
+            <pubDate>Sat, 26 Sep 2026 02:20:52 +0900</pubDate>
+            <sparkle:version>28</sparkle:version>
+            <sparkle:shortVersionString>0.2.25</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>27.0</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[# MochiLog Mac 0.2.24 (27) beta
+            <description sparkle:format="markdown"><![CDATA[# MochiLog Mac 0.2.25 (28) beta
 
 ## 日本語
 
-端末通信ヘルパーを、pymobiledevice3を含むNuitkaのネイティブコンパイルへ切り替えました。必要なCPythonランタイムと依存ライブラリはアプリ内へ同梱するため、利用者によるPythonのインストールは不要です。読みやすい元のPythonソースはリポジトリに残しています。既存のペアリング、暗号化、再送防止、収集・転送の形式は維持しています。
+複数端末への共有で、取得元の機種情報がないログを受信したiPadとして登録してしまう問題に対応しました。暗号化された転送前の確認に、元の端末の個体IDに対応する機種を添えます。スマホ4.0.0 (1052)以降が対応していることを確認してから、他端末のログを共有します。旧版スマホへの自分の端末のログ転送は維持し、ペアリングのやり直しは不要です。
 
-ローカルとGitHub Actionsで共通のビルドスクリプトを使い、Python環境のない状態で同梱ヘルパーが起動できることを自動検証します。スマホ4.0.0ベータ1051以降の動作ログは「設定 → デバッグ → 動作ログ」にまとめました。
+転送済みの記録も、暗号化された共有確認で取得元の機種を確認できます。ログ本体を再送する必要はありません。
+
+機種を確定できないログはスマホ側で選択を求めます。確認できる既存の誤登録はスマホ側で記録ID・日付・実測値を保って訂正します。取得元・受信先・機種の確認結果を動作ログへ残します。バッテリーログの解析は引き続きスマホ側だけで行います。
 
 ## English
 
-The device collector now uses native compilation with Nuitka, including the maintained pymobiledevice3 library. Its required CPython runtime and dependencies remain bundled, so users do not need to install Python. Readable Python sources remain in the repository. Existing pairing, encryption, replay protection, and collection/transfer formats are unchanged.
+Encrypted preflight offers now include the model of the originating physical device. This prevents an Analytics log without hardware model metadata from being recorded as the receiving device during cross-device sharing. Foreign logs are shared only with mobile 4.0.0 (1052) or later clients that advertise support. Older clients retain own-device transfers and existing pairing.
 
-Local builds and GitHub Actions share the same build scripts and automatically verify the bundled collector without a user Python environment. In mobile 4.0.0 beta 1051 and later, daily activity logs are grouped under Settings → Debug → Activity logs.
+The encrypted consent policy also refreshes source models for already-delivered logs, so existing records can be corrected without retransferring their bodies.
+
+Unknown sources require device selection on mobile. Verified incorrect existing records are repaired without changing record IDs, dates, or measurements. Activity logs record the source, recipient, and model. Battery log parsing remains on mobile.
 ]]></description>
-            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.24/MochiLog-Mac-Beta.dmg" length="122594750" type="application/octet-stream" sparkle:edSignature="r+as+L7fT4p/8WRMXYU8QOIBx55F+uKjIYhgRy6Vmo5o+yL2XXmPyyLNeOepqTN8X28hKd13lM+ljywwdn6hCQ=="></enclosure>
+            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.25/MochiLog-Mac-Beta.dmg" length="117749509" type="application/octet-stream" sparkle:edSignature="ZS7/EGNk4SJXr9Z9cXEEi7aZbpmf8GVt75ss1w3pEenVeO/RFO9w4rLc9VE/bu0c6ao1kgMbc3KPjSj1PLlUBQ=="/>
+        </item>
+        <item>
+            <title>0.2.13</title>
+            <pubDate>Sat, 26 Sep 2026 02:20:52 +0900</pubDate>
+            <sparkle:version>16</sparkle:version>
+            <sparkle:shortVersionString>0.2.13</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>27.0</sparkle:minimumSystemVersion>
+            <description sparkle:format="markdown"><![CDATA[# MochiLog Mac 0.2.13 Beta
+
+## 日本語
+
+スマホアプリからの受信確認、重複判定、診断情報を含む転送要求全体を暗号化しました。要求の有効期限と再送防止情報を保存し、アプリ再起動後の再送や新方式から旧方式への戻りを防ぎます。未認証接続の数と待ち時間にも上限を設けました。
+
+旧版のiPhone・iPadアプリは、更新するまで既存のペアリングのまま利用できます。旧方式を検出するとTestFlightまたはApp Storeでの更新を案内します。ログの解析と記録は引き続きスマホ側で行います。
+
+## English
+
+The full transfer request, including acknowledgements, duplicate checks, and diagnostics, is now encrypted. Request expiry and persistent replay protection reject repeated requests after an app restart and prevent a connection upgraded to the new protocol from silently falling back. Unauthenticated connections are also bounded by count and time.
+
+Older iPhone and iPad builds can keep their existing pairing until updated. The Mac prompts for a TestFlight or App Store update when it detects the previous protocol. Parsing and record storage remain on the mobile app.
+]]></description>
+            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.13/MochiLog-Mac-Beta.dmg" length="55989419" type="application/octet-stream" sparkle:edSignature="1HUQMzhwqd1uwgTrbCU5owKgKoDtBmqQ0OGn/rbUfUEYv5GHY7gX4fenku1YAhoruY758r3htHGD0kRDLaypBA=="/>
+        </item>
+        <item>
+            <title>0.2.12</title>
+            <pubDate>Sat, 26 Sep 2026 02:20:52 +0900</pubDate>
+            <sparkle:version>15</sparkle:version>
+            <sparkle:shortVersionString>0.2.12</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>27.0</sparkle:minimumSystemVersion>
+            <description sparkle:format="markdown"><![CDATA[# MochiLog Mac 0.2.12 Beta
+
+## 日本語
+
+iPhone・iPadへ送信済みの電池ログをPC側から削除した後も、取得済みの日付を確認できるようにしました。必要なiPhone本体とApple Watchのログが揃った日は、自動収集を翌日まで休止します。「今すぐログを収集」は引き続き利用できます。
+
+電池ログではない短い解析ファイルを繰り返し取得する問題も修正しました。同じ内容を複数回確認してから対象外にするため、取得途中の電池ログを早まって除外しません。
+
+## English
+
+The Mac now remembers confirmed daily logs after their raw files are delivered and removed. Once the required iPhone and Apple Watch logs are available, automatic collection pauses until the next day. **Collect Logs Now** remains available.
+
+The collector also stops repeatedly downloading short analytics files that are not battery logs. It checks for unchanged content across multiple attempts before excluding a file, so an incomplete battery log remains eligible for retry.
+]]></description>
+            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.12/MochiLog-Mac-Beta.dmg" length="56246418" type="application/octet-stream" sparkle:edSignature="r5h4N3VlTnmsoPbXonpQ4g6c4zkIlr76tTV1cH81A0Zyhaq5k40fOMdOagHdzeY3sr211wD/t/5kzzthzgj7AQ=="/>
         </item>
     </channel>
-</rss><!-- sparkle-signatures:
-edSignature: hkQEZFtHEiKEpILsGhTTBLikewE1cv9q4ZWmEgPhI/q87e9irY1a0Yshm1NzLfLW/TYmW8l7JAnlhuPbTwHFDQ==
-length: 2573
+</rss>
+<!-- sparkle-signatures:
+edSignature: iEq9qOvPtYdQee80xcXz8RsiIOw1Pz5HAcP1/GKdqNjNlBtpfTWbuQ3c4FCHUR7mP343qUrC9lc7SvSU4B/xBw==
+length: 6668
 -->
