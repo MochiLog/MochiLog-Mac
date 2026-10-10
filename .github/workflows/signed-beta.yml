@@ -19,22 +19,19 @@ jobs:
       NUITKA_CACHE_DIR: ${{ github.workspace }}/Build/CompilerCache
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
       - uses: actions/cache@v4
         with:
           path: Build/CompilerCache
-          key: collector-${{ runner.os }}-${{ runner.arch }}-py313-${{ hashFiles('requirements-build.txt', '*.py', 'scripts/collector.nuitka-package.config.yml') }}
+          key: collector-${{ runner.os }}-${{ runner.arch }}-py313-homebrew-${{ hashFiles('requirements-build.txt', '*.py', 'scripts/collector.nuitka-package.config.yml') }}
           restore-keys: |
-            collector-${{ runner.os }}-${{ runner.arch }}-py313-
+            collector-${{ runner.os }}-${{ runner.arch }}-py313-homebrew-
       - name: Install build tools
         run: |
-          brew install xcodegen
+          brew install xcodegen python@3.13
           fastlane --version
       - name: Verify native protocol and Python transport
         run: |
-          python3.13 -m unittest discover -s Tests -p 'test_*.py'
+          "$(brew --prefix python@3.13)/bin/python3.13" -m unittest discover -s Tests -p 'test_*.py'
           bash scripts/test-transfer-protocol.sh
       - name: Import Developer ID certificate
         env:
@@ -66,7 +63,7 @@ jobs:
           printf '%s' "$MOCHILOG_NOTARY_KEY_BASE64" | base64 -D > "$RUNNER_TEMP/notary-key.p8"
           chmod 600 "$RUNNER_TEMP/notary-key.p8"
           export MOCHILOG_NOTARY_KEY_PATH="$RUNNER_TEMP/notary-key.p8"
-          export MOCHILOG_PYTHON_BIN=python3.13
+          export MOCHILOG_PYTHON_BIN="$(brew --prefix python@3.13)/bin/python3.13"
           export MOCHILOG_COMPILER_JOBS=2
           fastlane mac beta_dmg
           fastlane mac notarize_beta
