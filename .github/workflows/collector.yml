@@ -11,7 +11,7 @@ permissions:
   contents: read
 concurrency:
   group: mac-collector-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 jobs:
   collector:
     runs-on: macos-latest
@@ -40,6 +40,8 @@ jobs:
         if: always()
         with:
           name: Collector-compilation-report
-          path: Build/Nuitka/compilation-report.xml
+          path: |
+            Build/Nuitka/compilation-report.xml
+            Build/collector-build.log
           if-no-files-found: ignore
           retention-days: 14

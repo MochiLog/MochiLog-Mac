@@ -35,6 +35,8 @@ Windows（MochiLog-Windowsリポジトリ内）:
 
 Macの`Compiled collector verification`はmainへのpush／PRで実行する。`Signed beta DMG`は手動実行で既存の署名・アプリ／DMG公証・成果物ダウンロードを継続する。Windowsの`Build Windows alpha installer`はmainへのpush／PRと手動実行に対応し、コンパイル・プロトコル試験・ネイティブビルド・インストール／アンインストール試験を行う。CIはReleaseを作らず成果物を保存する。
 
+Macの配布用ビルドは、コンパイル後に`sign-collector.py`で各Mach-OライブラリとヘルパーをDeveloper ID・hardened runtime・timestamp付きで署名し、最後に外側のアプリを署名する。各ファイルの結果を記録し、どこで署名が失敗したか確認できる。
+
 両OSともビルドの最後に`test-compiled-collector.py`を実行する。フォルダーをソース／venvの外へコピーし、PATHからPythonを除き、PYTHONHOME／PYTHONPATHを存在しないパスへ設定する。CLIの遅延import、ライブラリバージョン、型を保持するplist、暗号化、TLS roots、プラットフォームproviderを検証する。Windowsは完成したインストーラーの配置先でも再検証する。`compilation-report.xml`はCIで14日保存する。
 
 実端末のUSB／Wi-Fi／Tailscale収集、OSのロック状態、初回信頼、署名／公証の成功は別の検証であり、オフライン試験だけでは成功を主張しない。

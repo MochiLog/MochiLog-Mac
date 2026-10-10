@@ -11,8 +11,4 @@ if [[ ! -x Build/NuitkaVenv/bin/python ]]; then
 fi
 Build/NuitkaVenv/bin/python -c 'import sys; assert sys.version_info[:2] == (3, 13) and "pyenv" not in sys.base_prefix, "Remove Build/NuitkaVenv and recreate it with a supported Python 3.13"'
 Build/NuitkaVenv/bin/python -m pip install --disable-pip-version-check -r requirements-build.txt
-compiler_options=(--jobs "$jobs")
-if [[ -n "${MOCHILOG_COLLECTOR_SIGN_IDENTITY:-}" ]]; then
-  compiler_options+=(--sign-identity "$MOCHILOG_COLLECTOR_SIGN_IDENTITY")
-fi
-Build/NuitkaVenv/bin/python scripts/compile-collector.py "${compiler_options[@]}"
+Build/NuitkaVenv/bin/python scripts/compile-collector.py --jobs "$jobs" 2>&1 | tee Build/collector-build.log

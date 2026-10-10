@@ -3,7 +3,6 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 identity="Developer ID Application: ryuya watanabe (FZ35ZF3CZV)"
-export MOCHILOG_COLLECTOR_SIGN_IDENTITY="$identity"
 bash scripts/build-collector.sh
 Build/Collector/mochilog-collector --help > Build/collector-smoke.txt
 xcodegen generate --spec project.yml
@@ -33,8 +32,8 @@ Build/NuitkaVenv/bin/python scripts/bundle-python-licenses.py \
   "$app/Contents/Resources/LICENSE-Python-Dependencies.txt"
 cp THIRD_PARTY.md "$app/Contents/Resources/THIRD_PARTY.md"
 
-codesign --force --options runtime --timestamp --sign "$identity" \
-  --entitlements MacCompanion.entitlements "$app/Contents/Resources/Collector/mochilog-collector"
+Build/NuitkaVenv/bin/python scripts/sign-collector.py "$app/Contents/Resources/Collector" \
+  --identity "$identity" --entitlements MacCompanion.entitlements
 codesign --force --deep --options runtime --timestamp --sign "$identity" \
   --entitlements MacCompanion.entitlements "$app"
 codesign --verify --deep --strict --verbose=2 "$app"

@@ -10,7 +10,6 @@ import sys
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--jobs', type=int, default=1)
-    parser.add_argument('--sign-identity')
     args = parser.parse_args()
     if args.jobs < 1 or sys.version_info < (3, 13):
         raise SystemExit('Python 3.13+ and at least one compiler job are required.')
@@ -33,8 +32,6 @@ def main():
     command.append('--include-distribution-metadata=pymobiledevice3')
     if sys.platform == 'win32':
         command += ['--msvc=latest', '--windows-console-mode=force']
-    elif sys.platform == 'darwin' and args.sign_identity:
-        command += ['--macos-sign-identity=' + args.sign_identity, '--macos-sign-notarization']
     command.append(str(root / 'CollectorEntry.py'))
     subprocess.run(command, cwd=root, check=True)
     distribution = output / 'CollectorEntry.dist'
