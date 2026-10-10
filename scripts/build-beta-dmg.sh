@@ -3,17 +3,8 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 identity="Developer ID Application: ryuya watanabe (FZ35ZF3CZV)"
-python_bin="${MOCHILOG_PYTHON_BIN:-python3}"
-"$python_bin" -c 'import sys; assert sys.version_info >= (3, 13), "Python 3.13 or later is required for wireless diagnostics"'
-mkdir -p Build
-"$python_bin" -m venv Build/venv
-Build/venv/bin/python -m pip install --disable-pip-version-check -r requirements-build.txt
-Build/venv/bin/pyinstaller --onefile --noconfirm --clean \
-  --name pymobiledevice3 --collect-all pymobiledevice3 \
-  --hidden-import DirectRsd --hidden-import BatterySnapshot \
-  --recursive-copy-metadata pymobiledevice3 \
-  --codesign-identity "$identity" --osx-entitlements-file MacCompanion.entitlements \
-  --distpath Build/Collector --workpath Build/PyInstaller CollectorEntry.py
+export MOCHILOG_COLLECTOR_SIGN_IDENTITY="$identity"
+bash scripts/build-collector.sh
 Build/Collector/pymobiledevice3 --help > Build/collector-smoke.txt
 xcodegen generate --spec project.yml
 app="Build/DerivedData/Build/Products/Release/MochiLog Mac.app"
@@ -25,19 +16,20 @@ if [[ -d "$app" ]]; then
 fi
 xcodebuild -project MochiLogMac.xcodeproj -scheme MochiLogMac \
   -configuration Release -destination 'platform=macOS' \
-  -derivedDataPath Build/DerivedData CODE_SIGNING_ALLOWED=NO build
+  -derivedDataPath Build/DerivedData CODE_SIGNING_ALLOWED=NO -jobs "${MOCHILOG_COMPILER_JOBS:-1}" build
 
 mkdir -p "$app/Contents/Resources/Collector" Build/Stage
-cp Build/Collector/pymobiledevice3 "$app/Contents/Resources/Collector/pymobiledevice3"
+rm -rf "$app/Contents/Resources/Collector"
+ditto Build/Collector "$app/Contents/Resources/Collector"
 cp LICENSE "$app/Contents/Resources/LICENSE-MochiLog.txt"
 cp Resources/RuntimeLicenses/Python-3.13-LICENSE.txt \
   "$app/Contents/Resources/LICENSE-Python-Runtime.txt"
-license_file="$(find Build/venv/lib -path '*/pymobiledevice3-*.dist-info/licenses/LICENSE' -type f -print -quit)"
+license_file="$(find Build/NuitkaVenv/lib -path '*/pymobiledevice3-*.dist-info/licenses/LICENSE' -type f -print -quit)"
 test -n "$license_file"
 cp "$license_file" "$app/Contents/Resources/LICENSE-pymobiledevice3.txt"
 cp Build/DerivedData/SourcePackages/artifacts/sparkle/Sparkle/LICENSE \
   "$app/Contents/Resources/LICENSE-Sparkle.txt"
-Build/venv/bin/python scripts/bundle-python-licenses.py \
+Build/NuitkaVenv/bin/python scripts/bundle-python-licenses.py \
   "$app/Contents/Resources/LICENSE-Python-Dependencies.txt"
 cp THIRD_PARTY.md "$app/Contents/Resources/THIRD_PARTY.md"
 

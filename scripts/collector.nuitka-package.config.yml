@@ -1,0 +1,9 @@
+# ctypes opens Wintun relative to this package; it is code, not a data file.
+- module-name: 'pytun_pmd3'
+  dlls:
+    - from_filenames:
+        relative_path: 'wintun/bin/amd64'
+        prefixes:
+          - 'wintun'
+      dest_path: 'pytun_pmd3/wintun/bin/amd64'
+      when: 'win32 and arch_amd64'

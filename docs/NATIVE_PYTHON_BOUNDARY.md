@@ -32,3 +32,7 @@ Pythonのtransportテストは型の保持と上限を確認する。主要値�
 ## English
 
 Application logic stays in native Swift on Mac/mobile and C# on Windows. Python is an explicitly documented adapter for the maintained pymobiledevice3 device API. BatterySnapshot transports lossless plist data only; native code validates and flattens it, selects understood rows, generates independent revisions and timestamps, and keeps it in session memory. The encrypted mobile wire format is unchanged, and legacy helper JSON remains accepted. DirectRsd lists and downloads files; candidate selection remains native. No battery-log parser is introduced on the computer. Packaged apps include the runtime and dependency licenses; users do not configure Python.
+
+## 配布用コンパイル
+
+Nuitkaでpymobiledevice3ごとコンパイルし、CPythonを含むstandaloneランタイムをアプリへ同梱する。ローカル・CI・配布用ビルドは同じスクリプトを使う。[コンパイル手順と検証](COMPILED_COLLECTOR.md)を参照。ユーザー側Pythonへのフォールバックは使わない。

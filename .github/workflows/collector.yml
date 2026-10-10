@@ -1,0 +1,37 @@
+name: Compiled collector verification
+on:
+  push:
+    branches: [main]
+    paths: ['*.py', 'requirements-build.txt', 'scripts/**', '.github/workflows/collector.yml']
+  pull_request:
+    branches: [main]
+    paths: ['*.py', 'requirements-build.txt', 'scripts/**', '.github/workflows/collector.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mac-collector-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  collector:
+    runs-on: macos-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Verify transport adapters
+        run: python -m unittest discover -s Tests -p 'test_*.py'
+      - name: Compile and verify without a user Python environment
+        env:
+          MOCHILOG_PYTHON_BIN: python
+          MOCHILOG_COMPILER_JOBS: '2'
+        run: bash scripts/build-collector.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Collector-compilation-report
+          path: Build/Nuitka/compilation-report.xml
+          if-no-files-found: ignore
+          retention-days: 14

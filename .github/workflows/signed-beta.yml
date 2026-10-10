@@ -14,7 +14,7 @@ permissions:
 jobs:
   signed-beta:
     runs-on: xcode-27
-    timeout-minutes: 90
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -59,6 +59,7 @@ jobs:
           chmod 600 "$RUNNER_TEMP/notary-key.p8"
           export MOCHILOG_NOTARY_KEY_PATH="$RUNNER_TEMP/notary-key.p8"
           export MOCHILOG_PYTHON_BIN=python3.13
+          export MOCHILOG_COMPILER_JOBS=2
           fastlane mac beta_dmg
           fastlane mac notarize_beta
           xcrun stapler validate 'Build/DerivedData/Build/Products/Release/MochiLog Mac.app'
@@ -87,3 +88,10 @@ jobs:
             Build/UpdateFeed/appcast.xml
           if-no-files-found: error
           retention-days: 90
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Collector-compilation-report-${{ github.run_number }}
+          path: Build/Nuitka/compilation-report.xml
+          if-no-files-found: ignore
+          retention-days: 14

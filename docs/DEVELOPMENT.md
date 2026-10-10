@@ -75,3 +75,7 @@ Verification: Python whitelist/revision tests; secure transfer protocol tests co
 Actionsの`prepare_update_feed`を有効にすると、既存のSparkle署名キーで検証済み更新フィードも成果物に含めます。Release作成やフィード公開は行いません。配布物確認後、同じコミットのDMGをReleaseへ掲載し、検証済みXMLを変更せず公開してください。
 
 Full-field verification: six Python tests, core/full-detail compatibility, changed/unchanged detail responses, 64-bit precision and tamper rejection. Tailscale acquisition was verified from Mac to iPad; this is not evidence of cellular-radio operation until that physical switch is tested. Mac learns only authenticated Tailnet socket peers in memory and tries the existing native path before a remote fallback. The mobile cellular permission remains opt-in.
+
+## コンパイルされた端末通信ヘルパー
+
+ローカルとCIで同じNuitkaビルドを使います。前提条件、実行コマンド、ランタイム依存の切り分けは[COMPILED_COLLECTOR.md](COMPILED_COLLECTOR.md)を参照してください。
