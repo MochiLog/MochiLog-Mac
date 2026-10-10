@@ -63,7 +63,7 @@ enum SupportDiagnostics {
     snapshotLock.unlock()
     eventLock.lock()
     defer { eventLock.unlock() }
-    for day in storedDays() { try? FileManager.default.removeItem(at: archiveURL(for: day)) }
+    for day in storedDays() { DiagnosticLogArchive.removeDay(day, root: archiveDirectory) }
     try? FileManager.default.removeItem(at: eventsURL)
     UserDefaults.standard.set(true, forKey: migratedKey)
   }
@@ -101,31 +101,17 @@ enum SupportDiagnostics {
   }
 
   @discardableResult
-  private static func appendArchivedEvent(_ event: String) -> Bool {
-    let day = String(event.prefix(10))
-    guard validDay(day) else { return false }
-    do {
-      try FileManager.default.createDirectory(at: archiveDirectory,
-        withIntermediateDirectories: true)
-      let url = archiveURL(for: day)
-      if !FileManager.default.fileExists(atPath: url.path) {
-        FileManager.default.createFile(atPath: url.path, contents: nil)
-      }
-      try FileManager.default.setAttributes([.posixPermissions: 0o600],
-        ofItemAtPath: url.path)
-      let handle = try FileHandle(forWritingTo: url)
-      defer { try? handle.close() }
-      try handle.seekToEnd()
-      try handle.write(contentsOf: Data((event + "\n").utf8))
-      return true
-    } catch { return false }
+  private static func appendArchivedEvent(_ event: String, legacy: Bool = false) -> Bool {
+    DiagnosticLogArchive.append(event, root: archiveDirectory,
+      appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown",
+      build: Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "unknown", legacy: legacy)
   }
 
   private static func migrateLegacyEvents() {
     guard !UserDefaults.standard.bool(forKey: migratedKey) else { return }
     let events = (try? JSONDecoder().decode([String].self,
       from: Data(contentsOf: eventsURL))) ?? []
-    guard events.allSatisfy({ appendArchivedEvent($0) }) else { return }
+    guard events.allSatisfy({ appendArchivedEvent($0, legacy: true) }) else { return }
     UserDefaults.standard.set(true, forKey: migratedKey)
     pruneArchive()
   }
@@ -134,7 +120,7 @@ enum SupportDiagnostics {
     let cutoff = dayString(Calendar.current.date(byAdding: .day,
       value: 1 - retentionDays, to: Date()) ?? Date())
     for day in storedDays() where day < cutoff {
-      try? FileManager.default.removeItem(at: archiveURL(for: day))
+      DiagnosticLogArchive.removeDay(day, root: archiveDirectory)
     }
   }
 
@@ -261,6 +247,7 @@ enum SupportDiagnostics {
       .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
     let phoneDirectory = phoneArchiveDirectory.appendingPathComponent(
       device.physicalDeviceID.uuidString, isDirectory: true)
+    object["diagnosticLogFormatVersion"] = DiagnosticLogArchive.formatVersion
     object["archiveManifest"] = snapshotManifest(for: device)
     if let manifest = phone?["archiveManifest"] as? [String: Int],
       let request = archiveRequest(manifest: manifest, directory: phoneDirectory) {

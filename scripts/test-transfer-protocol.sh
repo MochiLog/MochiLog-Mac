@@ -3,10 +3,12 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 test_root="$(mktemp -d "${TMPDIR:-/tmp}/mochilog-transfer-test.XXXXXX")"
 trap 'rm -rf "$test_root"' EXIT
+swiftc -parse-as-library Sources/DiagnosticLogArchive.swift Tests/DiagnosticLogArchiveTests.swift -o "$test_root/archive-tests"
+"$test_root/archive-tests"
 swiftc -DTRANSFER_TESTING -o "$test_root/transfer-protocol-tests" \
   Sources/LocalDiagnosticsPairing.swift Sources/CloudSharedLogToken.swift Sources/CloudLogSharing.swift Sources/Collector.swift Sources/LiveBattery.swift Sources/BatteryLogStorage.swift Sources/PairingKeyStore.swift Sources/MacTransferL10n.swift \
   Sources/CrashDiagnostics.swift \
-  Sources/SupportDiagnostics.swift Sources/TransferServer.swift \
+  Sources/DiagnosticLogArchive.swift Sources/SupportDiagnostics.swift Sources/TransferServer.swift \
   Tests/TransferProtocolTests.swift
 MOCHILOG_TRANSFER_TEST_ROOT="$test_root/data" \
   "$test_root/transfer-protocol-tests"
