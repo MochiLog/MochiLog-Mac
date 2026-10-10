@@ -4,37 +4,29 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>MochiLog Mac</title>
         <item>
-            <title>0.2.23</title>
-            <pubDate>Sat, 10 Oct 2026 14:17:51 +0000</pubDate>
-            <sparkle:version>26</sparkle:version>
-            <sparkle:shortVersionString>0.2.23</sparkle:shortVersionString>
+            <title>0.2.24</title>
+            <pubDate>Sat, 10 Oct 2026 17:16:51 +0000</pubDate>
+            <sparkle:version>27</sparkle:version>
+            <sparkle:shortVersionString>0.2.24</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>27.0</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[# MochiLog Mac 0.2.23 Beta
+            <description sparkle:format="markdown"><![CDATA[# MochiLog Mac 0.2.24 (27) beta
 
 ## 日本語
 
-診断ログを日付・機能別のファイルに分割しました。背景実行、端末内取得、PC転送、現在のバッテリー、同期、ペアリングを区別し、未知のメッセージも一般ログとして保持します。
+端末通信ヘルパーを、pymobiledevice3を含むNuitkaのネイティブコンパイルへ切り替えました。必要なCPythonランタイムと依存ライブラリはアプリ内へ同梱するため、利用者によるPythonのインストールは不要です。読みやすい元のPythonソースはリポジトリに残しています。既存のペアリング、暗号化、再送防止、収集・転送の形式は維持しています。
 
-各ファイルの先頭に形式バージョン2、アプリとビルド番号、作成日時とタイムゾーンを記録します。旧ログは旧形式のまま扱い、行ごとにメタデータを繰り返しません。従来のスマホとの暗号化された診断ログ交換・日付別表示・サポート添付には互換用の集約ファイルを使用し、受信済みのバイト位置を維持します。保存期間変更と削除は機能別ファイルにも適用します。
-
-既存の収集・転送・暗号化・現在のバッテリー情報の機能は継続します。
-
-PCのログと受信済みスマホのログを、日付と機能別に絞って閲覧・コピーできます。「すべて」は元の内容をそのまま表示し、旧形式・将来の未対応形式も隠しません。分類名は8言語に対応します。
+ローカルとGitHub Actionsで共通のビルドスクリプトを使い、Python環境のない状態で同梱ヘルパーが起動できることを自動検証します。スマホ4.0.0ベータ1051以降の動作ログは「設定 → デバッグ → 動作ログ」にまとめました。
 
 ## English
 
-Diagnostics are now stored in separate daily files for background activity, on-device collection, PC transfers, current battery information, cloud sync, pairing, and general events.
+The device collector now uses native compilation with Nuitka, including the maintained pymobiledevice3 library. Its required CPython runtime and dependencies remain bundled, so users do not need to install Python. Readable Python sources remain in the repository. Existing pairing, encryption, replay protection, and collection/transfer formats are unchanged.
 
-Each file has a format-version-2 header with app/build, creation time and time zone. Metadata is not repeated on each line. Historical logs retain their legacy format. An append-only compatibility stream preserves existing encrypted diagnostic exchange, day-based viewing, support attachments, and previously received byte offsets. Retention and deletion also remove the feature files.
-
-Existing collection, transfer, encryption, and current battery functionality remain available.
-
-The viewer can filter and copy local PC and received phone logs by date and feature. All preserves the original text; legacy and unsupported future formats remain visible. Category labels support all eight languages.
+Local builds and GitHub Actions share the same build scripts and automatically verify the bundled collector without a user Python environment. In mobile 4.0.0 beta 1051 and later, daily activity logs are grouped under Settings → Debug → Activity logs.
 ]]></description>
-            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.23/MochiLog-Mac-Beta.dmg" length="57138969" type="application/octet-stream" sparkle:edSignature="okYPf0klTPAauwCLY3XX0L2R2xqjd7N47b9ND9DvLRUGgun7jwHre4yrgJusCVA2h1OihISORG/hg065g6awBA=="></enclosure>
+            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.24/MochiLog-Mac-Beta.dmg" length="122594750" type="application/octet-stream" sparkle:edSignature="r+as+L7fT4p/8WRMXYU8QOIBx55F+uKjIYhgRy6Vmo5o+yL2XXmPyyLNeOepqTN8X28hKd13lM+ljywwdn6hCQ=="></enclosure>
         </item>
     </channel>
 </rss><!-- sparkle-signatures:
-edSignature: iUaPhFzHbqRDmEnUDHmwaGllbtUtyc0+dz1r8nOSJ1IMaajzfVm8F7B06HGDKDGdrKznRKZ6Gv9o7qUW5CXaCQ==
-length: 3199
+edSignature: hkQEZFtHEiKEpILsGhTTBLikewE1cv9q4ZWmEgPhI/q87e9irY1a0Yshm1NzLfLW/TYmW8l7JAnlhuPbTwHFDQ==
+length: 2573
 -->

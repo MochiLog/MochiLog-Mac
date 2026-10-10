@@ -37,6 +37,9 @@ Build/NuitkaVenv/bin/python scripts/sign-collector.py "$app/Contents/Resources/C
 codesign --force --deep --options runtime --timestamp --sign "$identity" \
   --entitlements MacCompanion.entitlements "$app"
 codesign --verify --deep --strict --verbose=2 "$app"
+# Verify the completed hardened helper, not just its unsigned build.
+Build/NuitkaVenv/bin/python scripts/test-compiled-collector.py \
+  "$app/Contents/Resources/Collector/mochilog-collector"
 
 bash scripts/repack-dmg.sh
 shasum -a 256 Build/MochiLog-Mac-Beta.dmg
