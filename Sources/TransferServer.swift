@@ -25,6 +25,7 @@ private struct PullRequest: Decodable {
   let liveBatteryRefresh: String?
   let localDiagnosticsPairing: String?
   let cloudSharingVersion: String?
+  let logSourceIdentityVersion: String?
   let cloudSharingScope: String?
   let cloudSharingOnly: String?
   let offerVersion: String?
@@ -862,7 +863,7 @@ final class TransferServer: @unchecked Sendable {
           for: Data("file-decision|v1|\(request.hostID.uuidString)|\(request.physicalDeviceID.uuidString)|\(request.nonce.uuidString)|\(token)|\(digest)|\(decision)".utf8),
           using: SymmetricKey(data: device.secret))),
         let offered = token.hasPrefix("Shared::")
-          ? cloudSharing.resolve(token, recipient: device.physicalDeviceID, devices: state.devices, now: now)
+          ? (secure && request.logSourceIdentityVersion == "1" ? cloudSharing.resolve(token, recipient: device.physicalDeviceID, devices: state.devices, now: now) : nil)
           : try Collector.queueFile(for: token, device: device),
         FileManager.default.fileExists(atPath: offered.path) {
         let attrs = try FileManager.default.attributesOfItem(atPath: offered.path)
@@ -890,7 +891,8 @@ final class TransferServer: @unchecked Sendable {
         SupportDiagnostics.record("\(device.name): preflight decision rejected for \(CloudSharedLogToken.debugLabel(token)); authentication, token, or queue file invalid")
       }
       let own = try Collector.pending(for: device).first
-      let shared = own == nil && secure && request.cloudSharingVersion == "1" && offerEnabled
+      let shared = own == nil && secure && request.cloudSharingVersion == "1" &&
+        request.logSourceIdentityVersion == "1" && offerEnabled
         ? cloudSharing.next(recipient: device.physicalDeviceID, devices: state.devices, now: now) : nil
       let next = own ?? shared?.file
       let name = try shared?.token ?? own.map { try Collector.queueToken(for: $0, device: device) } ?? ""
@@ -900,9 +902,12 @@ final class TransferServer: @unchecked Sendable {
         let digest = SHA256.hash(data: content).map { String(format: "%02x", $0) }.joined()
         let forced = FileManager.default.fileExists(atPath: next.path + ".force-resend")
         SupportDiagnostics.record("\(device.name): preflight offer \(CloudSharedLogToken.debugLabel(name)); SHA-256 \(digest.prefix(12)); bytes=\(content.count); forced=\(forced)")
+        let sourceID = CloudSharedLogToken.parse(name)?.origin ?? device.physicalDeviceID
+        let sourceModel = state.devices.first { $0.physicalDeviceID == sourceID }?.model ?? ""
+        SupportDiagnostics.record("Import identity offer: source=\(sourceID.uuidString), recipient=\(device.physicalDeviceID.uuidString), model=\(sourceModel)")
         let control = try JSONSerialization.data(withJSONObject: [
           "type": "file-offer", "token": name, "sha256": digest,
-          "force": forced ? "true" : "false"
+          "sourceModel": sourceModel, "force": forced ? "true" : "false"
         ])
         return try encryptedLogResponse(control, name: "", request: request, device: device)
       }

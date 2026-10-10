@@ -1033,9 +1033,10 @@ struct TransferProtocolTests {
     let foreignBytes = Data("cloud-origin-iPad-only".utf8)
     try foreignBytes.write(to: sourceFile)
     func cloudRequest(_ i: Int, scope: String?, policy: Bool = false, ack: String = "",
-      offer: (token: String, digest: String, decision: String)? = nil) throws -> (String, Data) {
+      offer: (token: String, digest: String, decision: String)? = nil, sourceIdentity: Bool = true) throws -> (String, Data) {
       let nonce = UUID()
       var extra = ["cloudSharingVersion": "1", "cloudSharingScope": scope ?? ""]
+      if sourceIdentity { extra["logSourceIdentityVersion"] = "1" }
       if policy { extra["cloudSharingOnly"] = "1" }
       return try opened(request(cloudEndpoint, hostID: cloudHost, device: peers[i], nonce: nonce,
         ack: ack, offerEnabled: !policy, offer: offer, sealed: true, extra: extra),
@@ -1047,8 +1048,12 @@ struct TransferProtocolTests {
       (try JSONSerialization.jsonObject(with: beforeSource.1) as? [String: String])?["type"] != "file-offer",
       "Source without consent was shared")
     _ = try cloudRequest(1, scope: scope, policy: true)
+    let legacyRecipient = try cloudRequest(0, scope: scope, sourceIdentity: false)
+    try check((try JSONSerialization.jsonObject(with: legacyRecipient.1) as? [String: String])?["type"] != "file-offer",
+      "Old recipient received foreign logs without source identity support")
     let foreignOffer = try cloudRequest(0, scope: scope)
     let offeredJSON = try JSONSerialization.jsonObject(with: foreignOffer.1) as! [String: String]
+    try check(offeredJSON["sourceModel"] == peers[1].model, "Shared offer used the recipient model")
     let foreignToken = offeredJSON["token"]!, foreignDigest = offeredJSON["sha256"]!
     try check(CloudSharedLogToken.parse(foreignToken)?.origin == peers[1].physicalDeviceID,
       "Foreign offer lost the original device identity")
