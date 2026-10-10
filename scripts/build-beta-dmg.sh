@@ -5,7 +5,7 @@ cd "$(dirname "$0")/.."
 identity="Developer ID Application: ryuya watanabe (FZ35ZF3CZV)"
 export MOCHILOG_COLLECTOR_SIGN_IDENTITY="$identity"
 bash scripts/build-collector.sh
-Build/Collector/pymobiledevice3 --help > Build/collector-smoke.txt
+Build/Collector/mochilog-collector --help > Build/collector-smoke.txt
 xcodegen generate --spec project.yml
 app="Build/DerivedData/Build/Products/Release/MochiLog Mac.app"
 # A previously notarized app cannot be modified in place on macOS. Keep it in
@@ -34,7 +34,7 @@ Build/NuitkaVenv/bin/python scripts/bundle-python-licenses.py \
 cp THIRD_PARTY.md "$app/Contents/Resources/THIRD_PARTY.md"
 
 codesign --force --options runtime --timestamp --sign "$identity" \
-  --entitlements MacCompanion.entitlements "$app/Contents/Resources/Collector/pymobiledevice3"
+  --entitlements MacCompanion.entitlements "$app/Contents/Resources/Collector/mochilog-collector"
 codesign --force --deep --options runtime --timestamp --sign "$identity" \
   --entitlements MacCompanion.entitlements "$app"
 codesign --verify --deep --strict --verbose=2 "$app"

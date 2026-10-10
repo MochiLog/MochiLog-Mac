@@ -29,7 +29,7 @@ Windows（MochiLog-Windowsリポジトリ内）:
 ./scripts/test-installer.ps1
 ```
 
-共有の`compile-collector.py`を両OSのラッパーから呼び出す。出力は`Build/Collector`。依存の固定は`requirements-build.txt`、DLL設定は`scripts/collector.nuitka-package.config.yml`。単体ヘルパーと配布用ビルドで同じスクリプトを使う。並列数はローカル初期値1、CIは2。各OSのバイナリは各OS上で生成する。
+共有の`compile-collector.py`を両OSのラッパーから呼び出す。出力は`Build/Collector`。Macの実行ファイル名は`mochilog-collector`、Windowsは`pymobiledevice3.exe`。Macではライブラリのリソースディレクトリ`pymobiledevice3/`と実行ファイル名が衝突しないようにする。依存の固定は`requirements-build.txt`、DLL設定は`scripts/collector.nuitka-package.config.yml`。単体ヘルパーと配布用ビルドで同じスクリプトを使う。並列数はローカル初期値1、CIは2。各OSのバイナリは各OS上で生成する。
 
 ## CI
 

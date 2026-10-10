@@ -17,7 +17,7 @@ def main():
     root = Path(__file__).resolve().parents[1]
     output = root / 'Build' / 'Nuitka'
     output.mkdir(parents=True, exist_ok=True)
-    executable = 'pymobiledevice3.exe' if sys.platform == 'win32' else 'pymobiledevice3'
+    executable = 'pymobiledevice3.exe' if sys.platform == 'win32' else 'mochilog-collector'
     command = [sys.executable, '-m', 'nuitka', '--mode=standalone',
                '--output-dir=' + str(output), '--output-filename=' + executable,
                '--jobs=' + str(args.jobs), '--low-memory', '--assume-yes-for-downloads',
@@ -40,7 +40,7 @@ def main():
     distribution = output / 'CollectorEntry.dist'
     if not (distribution / executable).is_file():
         raise SystemExit('Compiled standalone collector was not produced.')
-    # Keep paths identical for native callers. Replace the entire folder to avoid
+    # Replace the entire native helper folder to avoid
     # accidentally retaining files from an older compiler/dependency version.
     destination = root / 'Build' / 'Collector'
     if destination.exists():

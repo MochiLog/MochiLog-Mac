@@ -15,11 +15,19 @@ jobs:
   signed-beta:
     runs-on: xcode-27
     timeout-minutes: 120
+    env:
+      NUITKA_CACHE_DIR: ${{ github.workspace }}/Build/CompilerCache
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
+      - uses: actions/cache@v4
+        with:
+          path: Build/CompilerCache
+          key: collector-${{ runner.os }}-${{ runner.arch }}-py313-${{ hashFiles('requirements-build.txt', '*.py', 'scripts/collector.nuitka-package.config.yml') }}
+          restore-keys: |
+            collector-${{ runner.os }}-${{ runner.arch }}-py313-
       - name: Install build tools
         run: |
           brew install xcodegen

@@ -16,11 +16,19 @@ jobs:
   collector:
     runs-on: macos-latest
     timeout-minutes: 120
+    env:
+      NUITKA_CACHE_DIR: ${{ github.workspace }}/Build/CompilerCache
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
+      - uses: actions/cache@v4
+        with:
+          path: Build/CompilerCache
+          key: collector-${{ runner.os }}-${{ runner.arch }}-py313-${{ hashFiles('requirements-build.txt', '*.py', 'scripts/collector.nuitka-package.config.yml') }}
+          restore-keys: |
+            collector-${{ runner.os }}-${{ runner.arch }}-py313-
       - name: Verify transport adapters
         run: python -m unittest discover -s Tests -p 'test_*.py'
       - name: Compile and verify without a user Python environment

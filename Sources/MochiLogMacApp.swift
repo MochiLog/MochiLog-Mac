@@ -526,7 +526,7 @@ final class CompanionModel: ObservableObject {
 
   func startSystemPairing() {
     guard !isPairingSystem else { return }
-    guard let helper = Bundle.main.url(forResource: "pymobiledevice3", withExtension: nil,
+    guard let helper = Bundle.main.url(forResource: "mochilog-collector", withExtension: nil,
       subdirectory: "Collector") else {
       status = MacTransferL10n.text("mt_m_10")
       return

@@ -190,7 +190,7 @@ enum Collector {
     #else
     let testHelper: URL? = nil
     #endif
-    guard let helper = testHelper ?? Bundle.main.url(forResource: "pymobiledevice3",
+    guard let helper = testHelper ?? Bundle.main.url(forResource: "mochilog-collector",
       withExtension: nil, subdirectory: "Collector") else {
       throw CollectorError.helperMissing
     }

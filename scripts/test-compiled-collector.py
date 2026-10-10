@@ -42,4 +42,12 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except subprocess.CalledProcessError as error:
+        # Offline fixture output contains no device or pairing information.
+        for output in (error.stdout, error.stderr):
+            if output:
+                print(output.decode(errors="replace") if isinstance(output, bytes) else output,
+                      file=sys.stderr)
+        raise

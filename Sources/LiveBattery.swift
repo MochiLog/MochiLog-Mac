@@ -239,7 +239,7 @@ final class LiveBatteryCache: @unchecked Sendable {
 extension Collector {
   /// Private pipes only: current values never touch run()'s output/error files.
   static func currentBattery(_ device: PairedDevice, peerAddress: String? = nil) throws -> LiveBatterySnapshot {
-    guard let tool = Bundle.main.url(forResource: "pymobiledevice3", withExtension: nil,
+    guard let tool = Bundle.main.url(forResource: "mochilog-collector", withExtension: nil,
       subdirectory: "Collector") else { throw CollectorError.helperMissing }
     let process = Process()
     process.executableURL = tool
