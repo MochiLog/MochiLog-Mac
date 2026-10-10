@@ -5,3 +5,5 @@ The mobile October 10 defect used the receiving model when a foreign Analytics f
 The Mac transfer protocol suite passed with four peers, model metadata, old-client capability gating, cloud scope revocation, encrypted transfer/ACK and replay protections.
 
 Only native Swift metadata changed. An incremental Release build reused the compiled collector and dependency licenses from verified 0.2.24: git diff against its source commit confirmed no collector entry, requirements or compilation script changes. The standard local/CI script remains a complete Nuitka compilation. The completed signed helper passed the no-user-Python smoke test again.
+
+The secure consent policy includes source models even when no log body remains pending. Tests verify the already-delivered source is present and an unconsented peer is absent; the scope lease rules are unchanged.
