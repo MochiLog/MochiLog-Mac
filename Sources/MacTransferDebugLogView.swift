@@ -8,6 +8,8 @@ struct MacTransferDebugLogView: View {
   @State private var revision = 0
   @State private var selectedDay: String?
   @State private var selectedPhoneDay: String?
+  @State private var selectedCategory: String?
+  @State private var selectedPhoneCategory: String?
   @State private var showingDeleteConfirmation = false
 
   private var macLog: String {
@@ -41,10 +43,6 @@ struct MacTransferDebugLogView: View {
       Text(MacTransferL10n.text("mt_043"))
         .foregroundStyle(.secondary)
       HStack {
-        Picker(MacTransferL10n.text("mt_log_date"), selection: $selectedDay) {
-          ForEach(days, id: \.self) { day in Text(day).tag(Optional(day)) }
-        }
-        .frame(maxWidth: 230)
         Picker(MacTransferL10n.text("mt_log_retention"), selection: Binding(
           get: { SupportDiagnostics.retentionDays },
           set: { SupportDiagnostics.retentionDays = $0; revision += 1;
@@ -61,13 +59,21 @@ struct MacTransferDebugLogView: View {
         }
       }
       HStack(alignment: .top, spacing: 16) {
-        logPanel(MacTransferL10n.text("mt_044"), text: macLog)
+        VStack(alignment: .leading, spacing: 8) {
+        Picker(MacTransferL10n.text("mt_log_date"), selection: $selectedDay) {
+          ForEach(days, id: \.self) { day in Text(day).tag(Optional(day)) }
+        }
+        .frame(maxWidth: 230)
+          categoryPicker(text: macLog, selection: $selectedCategory)
+          logPanel(MacTransferL10n.text("mt_044"), text: DiagnosticLogViewer.text(macLog, category: selectedCategory))
+        }
         VStack(alignment: .leading, spacing: 8) {
           Picker(MacTransferL10n.text("mt_log_date"), selection: $selectedPhoneDay) {
             ForEach(phoneDays, id: \.self) { day in Text(day).tag(Optional(day)) }
           }
           .frame(maxWidth: 230)
-          logPanel(MacTransferL10n.text("mt_045"), text: phoneLog)
+          categoryPicker(text: phoneLog, selection: $selectedPhoneCategory)
+          logPanel(MacTransferL10n.text("mt_045"), text: DiagnosticLogViewer.text(phoneLog, category: selectedPhoneCategory))
         }
       }
       HStack {
@@ -82,6 +88,9 @@ struct MacTransferDebugLogView: View {
     }
     .padding(24)
     .frame(minWidth: 760, minHeight: 440)
+    .onChange(of: selectedDay) { _ in selectedCategory = nil }
+    .onChange(of: selectedPhoneDay) { _ in selectedPhoneCategory = nil }
+    .onChange(of: device?.physicalDeviceID) { _ in selectedPhoneCategory = nil }
     .onAppear {
       selectedDay = days.first
       selectedPhoneDay = phoneDays.first
@@ -94,6 +103,17 @@ struct MacTransferDebugLogView: View {
         selectedDay = nil
       }
     }
+  }
+
+  private func categoryPicker(text: String, selection: Binding<String?>) -> some View {
+    Picker(MacTransferL10n.text("mt_log_category"), selection: selection) {
+      Text(MacTransferL10n.text("mt_log_all")).tag(Optional<String>.none)
+      ForEach(DiagnosticLogViewer.categories(in: text), id: \.self) { category in
+        Text(MacTransferL10n.text("mt_log_" + category.replacingOccurrences(of: "-", with: "_")))
+          .tag(Optional(category))
+      }
+    }
+    .frame(maxWidth: 280)
   }
 
   private func logPanel(_ title: String, text: String) -> some View {

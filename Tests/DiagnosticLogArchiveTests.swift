@@ -30,6 +30,16 @@ import Foundation
   precondition(!DiagnosticLogArchive.append("../attack", root: root, appVersion: version, build: build))
   precondition(DiagnosticLogArchive.append("2026-10-09T11:00:00+09:00 | old migrated", root: root, appVersion: version, build: build, legacy: true))
   precondition(FileManager.default.fileExists(atPath: root.appendingPathComponent("2026-10-09/general-v1-legacy.log").path))
+  let combined = String(data: after, encoding: .utf8)!
+  precondition(Set(DiagnosticLogViewer.categories(in: combined)) == Set(["general", "background", "local-collection", "pc-transfer", "live-battery"]))
+  let background = DiagnosticLogViewer.text(combined, category: "background")
+  precondition(background.contains("OS wake") && !background.contains("Connection: ready"))
+  precondition(background.contains("\"formatVersion\":2"))
+  precondition(DiagnosticLogViewer.text(combined, category: nil) == combined)
+  let future = "# {\"type\":\"mochilog-diagnostic-log\",\"formatVersion\":99}\nFuture payload: arbitrary data"
+  precondition(DiagnosticLogViewer.text(future, category: "general").contains("arbitrary data"))
+  precondition(DiagnosticLogViewer.categories(in: future) == ["general"])
+  precondition(DiagnosticLogViewer.text(old, category: "general").contains("\"formatVersion\":1"))
   DiagnosticLogArchive.removeDay("../outside", root: root)
   precondition(FileManager.default.fileExists(atPath: folder.path))
   DiagnosticLogArchive.removeDay(day, root: root)
