@@ -6,6 +6,32 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>MochiLog Mac</title>
         <item>
+            <title>0.2.27</title>
+            <pubDate>Sat, 26 Sep 2026 02:20:52 +0900</pubDate>
+            <sparkle:version>30</sparkle:version>
+            <sparkle:shortVersionString>0.2.27</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>27.0</sparkle:minimumSystemVersion>
+            <description sparkle:format="markdown"><![CDATA[# MochiLog Mac 0.2.27 beta
+
+## 日本語
+
+新しいバッテリーログを優先して取得するようにしました。古いファイルが権限エラーなどで読めないときは、ファイルごとに再試行を待つため、同じ失敗を収集のたびに繰り返しません。当日のファイルは短い間隔で再試行し、失敗したログを転送済み・対象外として扱うことはありません。
+
+当日のiPhone・iPad・Apple Watchのログが端末内に見つかった時点と、取得に失敗した理由・次回再試行時刻をデバッグログに記録します。ログの生成待ちと、取得・転送の遅延を調べやすくしました。
+
+既存のペアリング、暗号化、記録の重複防止、未転送ログの保護を維持しています。Windows版にも同じ収集修正を反映しています。
+
+## English
+
+Newer battery reports are collected first. When an older file cannot be read because of a permission or transport error, retries are scheduled per file instead of repeating the same failure on every collection. Reports for the current day use a shorter retry interval. A failed read is never marked as delivered or permanently excluded.
+
+Debug logs now record when today's iPhone, iPad and Apple Watch reports first appear in the device listing, along with per-file failure reasons and the next retry time. This helps distinguish report availability from collection or transfer delays.
+
+Existing pairing, encryption, duplicate prevention and protection of unsent reports are preserved. The same collection fixes are available in the Windows companion.
+]]></description>
+            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.27/MochiLog-Mac-Beta.dmg" length="115621142" type="application/octet-stream" sparkle:edSignature="TwkuUeb8W7XWF9kw/Zm2AM0QeavD6ybzJXqJW6gLKrpVVJtB+E9Nyzd8sNZNPL0NjSmxwYOFm2aztUXOScJzAw=="/>
+        </item>
+        <item>
             <title>0.2.26</title>
             <pubDate>Sat, 26 Sep 2026 02:20:52 +0900</pubDate>
             <sparkle:version>29</sparkle:version>
@@ -53,31 +79,9 @@ Unknown sources require device selection on mobile. Verified incorrect existing 
 ]]></description>
             <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.25/MochiLog-Mac-Beta.dmg" length="117749509" type="application/octet-stream" sparkle:edSignature="ZS7/EGNk4SJXr9Z9cXEEi7aZbpmf8GVt75ss1w3pEenVeO/RFO9w4rLc9VE/bu0c6ao1kgMbc3KPjSj1PLlUBQ=="/>
         </item>
-        <item>
-            <title>0.2.13</title>
-            <pubDate>Sat, 26 Sep 2026 02:20:52 +0900</pubDate>
-            <sparkle:version>16</sparkle:version>
-            <sparkle:shortVersionString>0.2.13</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>27.0</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[# MochiLog Mac 0.2.13 Beta
-
-## 日本語
-
-スマホアプリからの受信確認、重複判定、診断情報を含む転送要求全体を暗号化しました。要求の有効期限と再送防止情報を保存し、アプリ再起動後の再送や新方式から旧方式への戻りを防ぎます。未認証接続の数と待ち時間にも上限を設けました。
-
-旧版のiPhone・iPadアプリは、更新するまで既存のペアリングのまま利用できます。旧方式を検出するとTestFlightまたはApp Storeでの更新を案内します。ログの解析と記録は引き続きスマホ側で行います。
-
-## English
-
-The full transfer request, including acknowledgements, duplicate checks, and diagnostics, is now encrypted. Request expiry and persistent replay protection reject repeated requests after an app restart and prevent a connection upgraded to the new protocol from silently falling back. Unauthenticated connections are also bounded by count and time.
-
-Older iPhone and iPad builds can keep their existing pairing until updated. The Mac prompts for a TestFlight or App Store update when it detects the previous protocol. Parsing and record storage remain on the mobile app.
-]]></description>
-            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.13/MochiLog-Mac-Beta.dmg" length="55989419" type="application/octet-stream" sparkle:edSignature="1HUQMzhwqd1uwgTrbCU5owKgKoDtBmqQ0OGn/rbUfUEYv5GHY7gX4fenku1YAhoruY758r3htHGD0kRDLaypBA=="/>
-        </item>
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: UtisXWt+4zG36PpdfRiXsyHjkhFJJ1DU103I6Bvz0TIIRs/kOF1/tNmr099cFdo/YA3A+KxxD0xLwEyDiGlHAg==
-length: 6794
+edSignature: DOlTtVqr72G3XtSPbBmhpvEYtaOFiQ0u5U2e8oNpnxUfyiwJiTAyVGZSJPDsXauI2BtvbFcKfsb5GNGKMT1dAQ==
+length: 7212
 -->
