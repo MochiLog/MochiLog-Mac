@@ -517,6 +517,29 @@ enum Collector {
     return now.addingTimeInterval(currentDay ? 5 * 60 : 30 * 60)
   }
 
+  // Failed reads never become delivered/excluded. Use the same daily policy
+  // as incomplete reports so an old, inaccessible file cannot dominate every poll.
+  static func prioritizedCandidates(_ files: [RemoteLog]) -> [RemoteLog] {
+    files.sorted {
+      if $0.name != $1.name { return $0.name > $1.name }
+      return ($0.source ?? "") < ($1.source ?? "")
+    }
+  }
+
+  static func recordCandidateListing(_ files: [RemoteLog], deviceName: String) {
+    // File generation uses Japanese dates even when the PC uses another zone.
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.timeZone = TimeZone(identifier: "Asia/Tokyo")
+    formatter.dateFormat = "yyyy-MM-dd"
+    let prefix = "Analytics-" + formatter.string(from: Date()) + "-"
+    let current = files.filter { $0.name.hasPrefix(prefix) }
+    SupportDiagnostics.record("\(deviceName): current-day candidates observed; count=\(current.count)")
+    for file in current {
+      SupportDiagnostics.record("\(deviceName): current-day candidate observed; file=\(file.name); source=\(file.source ?? "host"); location=\(file.path.contains("/Retired/") ? "retired" : "current")")
+    }
+  }
+
   static func toolFailureLine(stdout: String, stderr: String) -> String? {
     let clean: (String) -> [String] = { value in
       value.replacingOccurrences(of: #"\x1B\[[0-9;]*m"#, with: "",
@@ -589,12 +612,14 @@ enum Collector {
   }
 
   static func collect(_ device: PairedDevice,
-    progress: ((Int, Int) -> Void)? = nil) throws -> CollectionReport {
+    runCommand: ([String], TimeInterval) throws -> String = {
+      try Collector.run($0, timeout: $1)
+    }, progress: ((Int, Int) -> Void)? = nil) throws -> CollectionReport {
     var remoteFiles: [RemoteLog] = []
     var connection: [String] = []
     if let address = device.manualAddress {
-      let text = try run(["direct-rsd", "scan", "--udid", device.udid,
-        "--host", address, "--port", "49152"], timeout: 120)
+      let text = try runCommand(["direct-rsd", "scan", "--udid", device.udid,
+        "--host", address, "--port", "49152"], 120)
       guard let data = text.data(using: .utf8),
         let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
         let files = object["files"] as? [[String: Any]] else {
@@ -605,14 +630,15 @@ enum Collector {
         return RemoteLog(path: path, source: item["source"] as? String)
       }
     } else {
-      let (rootListing, chosenConnection) = try remoteRootListing(udid: device.udid)
+      let (rootListing, chosenConnection) = try remoteRootListing(udid: device.udid,
+        runCommand: runCommand)
       connection = chosenConnection
       let proxiedSources = rootListing.split(separator: "\n").map(String.init).filter {
         $0.range(of: #"^/ProxiedDevice-[a-fA-F0-9]+$"#,
           options: .regularExpression) != nil
       }
-      let listing = try run(["crash", "ls"] + connection +
-        ["--remote-file", "/Retired", "--depth", "1"], timeout: 90)
+      let listing = try runCommand(["crash", "ls"] + connection +
+        ["--remote-file", "/Retired", "--depth", "1"], 90)
       remoteFiles = listing.split(separator: "\n").map {
         RemoteLog(path: String($0), source: nil)
       }
@@ -622,13 +648,13 @@ enum Collector {
       for sourcePath in proxiedSources {
         let source = String(sourcePath.dropFirst())
         do {
-          let listed = try run(["crash", "ls"] + connection +
-            ["--remote-file", "\(sourcePath)/Retired", "--depth", "1"], timeout: 90)
+          let listed = try runCommand(["crash", "ls"] + connection +
+            ["--remote-file", "\(sourcePath)/Retired", "--depth", "1"], 90)
           remoteFiles += listed.split(separator: "\n").map {
             RemoteLog(path: String($0), source: source)
           }
-          let current = try run(["crash", "ls"] + connection +
-            ["--remote-file", sourcePath, "--depth", "1"], timeout: 90)
+          let current = try runCommand(["crash", "ls"] + connection +
+            ["--remote-file", sourcePath, "--depth", "1"], 90)
           remoteFiles += current.split(separator: "\n").map {
             RemoteLog(path: String($0), source: source)
           }
@@ -640,6 +666,7 @@ enum Collector {
       }
     }
     remoteFiles = analyticsCandidates(remoteFiles)
+    recordCandidateListing(remoteFiles, deviceName: device.name)
     let timestamp = DateFormatter()
     timestamp.locale = Locale(identifier: "en_US_POSIX")
     timestamp.timeZone = .current
@@ -652,7 +679,7 @@ enum Collector {
     var rechecks = rechecks(for: device)
     var observations = observations(for: device)
     let now = Date()
-    let newFiles = remoteFiles.filter { remote in
+    let newFiles = prioritizedCandidates(remoteFiles.filter { remote in
       let name = remote.name
       guard name.range(of: #"^Analytics-[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{6}.*\.ips\.ca\.synced$"#,
         options: .regularExpression) != nil else { return false }
@@ -669,11 +696,12 @@ enum Collector {
       return ![host, watch].compactMap { $0 }.contains {
         FileManager.default.fileExists(atPath: $0.path)
       }
-    }
+    })
     let retryHeld = remoteFiles.filter { (rechecks[$0.token] ?? .distantPast) > now }.count
     SupportDiagnostics.record("\(device.name): diagnostic listing ready; hostCandidates=\(remoteFiles.filter { $0.source == nil }.count); proxyCandidates=\(remoteFiles.filter { $0.source != nil }.count); downloadDue=\(newFiles.count); retryHeld=\(retryHeld)")
     progress?(0, newFiles.count)
     var directStaging: URL?
+    var batchFailures: [Int: String] = [:]
     defer { if let directStaging { try? FileManager.default.removeItem(at: directStaging) } }
     if let address = device.manualAddress, !newFiles.isEmpty {
       let staging = destination.appendingPathComponent(".direct-\(UUID().uuidString)")
@@ -682,9 +710,20 @@ enum Collector {
       let manifest = staging.appendingPathComponent("manifest.json")
       let items = newFiles.map { ["path": $0.path] }
       try JSONSerialization.data(withJSONObject: items).write(to: manifest)
-      _ = try run(["direct-rsd", "pull-batch", "--udid", device.udid,
+      let result = try runCommand(["direct-rsd", "pull-batch", "--udid", device.udid,
         "--host", address, "--port", "49152", "--manifest", manifest.path,
-        "--output", staging.path], timeout: TimeInterval(min(1800, max(180, newFiles.count * 180))))
+        "--output", staging.path], TimeInterval(min(1800, max(180, newFiles.count * 180))))
+      guard let data = result.data(using: .utf8),
+        let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+        let results = object["results"] as? [[String: Any]] else {
+        throw CollectorError.failed("Invalid diagnostic batch result")
+      }
+      for index in newFiles.indices {
+        let row = results.first { $0["index"] as? Int == index }
+        if row?["ok"] as? Bool != true {
+          batchFailures[index] = row?["error"] as? String ?? "Missing diagnostic download result"
+        }
+      }
     }
     var saved = 0
     var skipped = 0
@@ -695,6 +734,7 @@ enum Collector {
       let name = remote.name
       SupportDiagnostics.record("\(device.name): battery candidate download requested; file=\(name); source=\(remote.source ?? "host")")
       do {
+        if let failure = batchFailures[index] { throw CollectorError.failed(failure) }
         let staging = destination.appendingPathComponent(".staging-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: staging) }
@@ -703,8 +743,8 @@ enum Collector {
         var pullError: Error?
         for attempt in 0..<(directStaging == nil ? 2 : 0) {
           do {
-            _ = try run(["crash", "pull", staging.path, "--remote-file", remote.path]
-              + connection, timeout: 180)
+            _ = try runCommand(["crash", "pull", staging.path, "--remote-file", remote.path]
+              + connection, 180)
             pullError = nil
             break
           } catch {
@@ -764,6 +804,10 @@ enum Collector {
       } catch {
         failed += 1
         lastError = error.localizedDescription
+        let retryAt = unclassifiedRetryAt(name: name)
+        rechecks[remote.token] = retryAt
+        try saveRechecks(rechecks, for: device)
+        SupportDiagnostics.record("\(device.name): battery candidate download failed; file=\(name); source=\(remote.source ?? "host"); retry=\(SupportDiagnostics.localTime(retryAt)); error=\(stableDiagnostic(error.localizedDescription))")
       }
       progress?(index + 1, newFiles.count)
     }

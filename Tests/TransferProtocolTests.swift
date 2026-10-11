@@ -323,6 +323,68 @@ struct TransferProtocolTests {
     let device = PairedDevice(udid: "test-iphone", name: "Test iPhone",
       model: "iPhone18,3", physicalDeviceID: UUID(),
       secret: Data((0..<32).map { UInt8($0) }))
+    print("Checking daily priority and persistent failed-file retry without exclusion")
+    let failureDevice = PairedDevice(udid: "failed-file-fixture", name: "Retry fixture",
+      model: "iPhone18,3", physicalDeviceID: UUID(), secret: device.secret)
+    let fileDay = DateFormatter()
+    fileDay.locale = Locale(identifier: "en_US_POSIX")
+    fileDay.timeZone = TimeZone(identifier: "Asia/Tokyo")
+    fileDay.dateFormat = "yyyy-MM-dd"
+    let todayName = "Analytics-\(fileDay.string(from: Date()))-090007.000.ips.ca.synced"
+    let pastName = "Analytics-\(fileDay.string(from: Date().addingTimeInterval(-86400)))-090006.ips.ca.synced"
+    let fixtureBody = Data(("{\"os_version\":\"iPhone OS 27.2\"}\n" + String(repeating:
+      "last_value_CycleCount last_value_NominalChargeCapacity last_value_AppleRawMaxCapacity\n", count: 120)).utf8)
+    var pullNames: [String] = []
+    var recover = false
+    let mockPull: ([String], TimeInterval) throws -> String = { args, _ in
+      if args.prefix(2) == ["crash", "ls"] {
+        return args.contains("/Retired") ? "/Retired/\(pastName)\n/Retired/\(todayName)" : "/Retired"
+      }
+      guard args.prefix(2) == ["crash", "pull"],
+        let pathFlag = args.firstIndex(of: "--remote-file") else {
+        throw TestFailure.failed("Unexpected failed-file fixture command")
+      }
+      let name = URL(fileURLWithPath: args[pathFlag + 1]).lastPathComponent
+      pullNames.append(name)
+      if name == pastName && !recover { throw CollectorError.failed("FILE_OPEN failed with status: 10") }
+      try fixtureBody.write(to: URL(fileURLWithPath: args[2]).appendingPathComponent(name))
+      return ""
+    }
+    let firstRetryReport = try Collector.collect(failureDevice, runCommand: mockPull)
+    try check(firstRetryReport.saved == 1 && firstRetryReport.failed == 1 && pullNames.first == todayName,
+      "An inaccessible older file delayed or prevented the current report")
+    let retryURL = Collector.root.appendingPathComponent("recheck-\(failureDevice.physicalDeviceID.uuidString).json")
+    var restoredRetries = try JSONDecoder().decode([String: Date].self, from: Data(contentsOf: retryURL))
+    let pastRetryToken = "Host::\(pastName)"
+    try check(restoredRetries[pastRetryToken]!.timeIntervalSinceNow > 29 * 60 &&
+      !Collector.delivered(for: failureDevice).contains(pastRetryToken),
+      "A denied file lost its retry time or was marked delivered")
+    let pullCount = pullNames.count
+    let heldRetryReport = try Collector.collect(failureDevice, runCommand: mockPull)
+    try check(heldRetryReport.failed == 0 && pullNames.count == pullCount,
+      "Persistent backoff did not protect the next collection")
+    restoredRetries[pastRetryToken] = .distantPast
+    try JSONEncoder().encode(restoredRetries).write(to: retryURL, options: .atomic)
+    recover = true
+    let recoveredReport = try Collector.collect(failureDevice, runCommand: mockPull)
+    restoredRetries = try JSONDecoder().decode([String: Date].self, from: Data(contentsOf: retryURL))
+    try check(recoveredReport.saved == 1 && recoveredReport.failed == 0 && restoredRetries[pastRetryToken] == nil,
+      "A readable file could not recover after the retry interval")
+    let directFixture = PairedDevice(udid: failureDevice.udid, name: failureDevice.name,
+      model: failureDevice.model, physicalDeviceID: UUID(), secret: device.secret, manualAddress: "127.0.0.1")
+    let batchReport = try Collector.collect(directFixture, runCommand: { args, _ in
+      if args.prefix(2) == ["direct-rsd", "scan"] {
+        return String(data: try JSONSerialization.data(withJSONObject: ["files": [
+          ["path": "/Retired/\(pastName)"], ["path": "/Retired/\(todayName)"]]]), encoding: .utf8)!
+      }
+      return #"{"results":[{"index":0,"ok":false,"error":"FILE_OPEN failed with status: 10"},{"index":1,"ok":false,"error":"FILE_OPEN failed with status: 10"}]}"#
+    })
+    let batchRetries = try JSONDecoder().decode([String: Date].self, from: Data(contentsOf:
+      Collector.root.appendingPathComponent("recheck-\(directFixture.physicalDeviceID.uuidString).json")))
+    try check(batchReport.failed == 2 && batchReport.lastError?.contains("status: 10") == true &&
+      batchRetries["Host::\(todayName)"]!.timeIntervalSinceNow < 301 &&
+      batchRetries[pastRetryToken]!.timeIntervalSinceNow > 29 * 60,
+      "Direct batch failure lost its actual cause or delayed today's file for thirty minutes")
     let hostID = UUID()
     let state = CompanionState(hostID: hostID, devices: [device])
     print("Checking plaintext-key migration to Keychain")
@@ -836,6 +898,12 @@ struct TransferProtocolTests {
     var fullFixture = fixture
     fullFixture["detailsJSON"] = details; fullFixture["detailsRevision"] = detailDigest
     let live = try LiveBatterySnapshot.decode(JSONSerialization.data(withJSONObject: fullFixture))
+    do {
+      _ = try LiveBatterySnapshot.decode(Data(#"{"error":"battery_unavailable"}"#.utf8))
+      throw TestFailure.failed("An unavailable diagnostic service was accepted as a snapshot")
+    } catch CollectorError.failed(let message) {
+      try check(message == "battery_unavailable", "Unavailable snapshot lost its stable reason")
+    }
     server.liveBattery.set(live, for: mobilePhysicalID)
     func liveRequest(_ revision: String = "", nonce: UUID = UUID(), sealed: Bool = true, detailsRevision: String? = nil) throws -> [String: Any] {
       var payload = ["version": "2", "hostID": hostID.uuidString,
