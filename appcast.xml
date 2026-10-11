@@ -6,6 +6,28 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>MochiLog Mac</title>
         <item>
+            <title>0.2.26</title>
+            <pubDate>Sat, 26 Sep 2026 02:20:52 +0900</pubDate>
+            <sparkle:version>29</sparkle:version>
+            <sparkle:shortVersionString>0.2.26</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>27.0</sparkle:minimumSystemVersion>
+            <description sparkle:format="markdown"><![CDATA[# MochiLog Mac 0.2.26 beta
+
+## 日本語
+
+サポートのデバッグログを開くと長時間待たされる問題を修正しました。保存済みログの読み込み・機能分類をバックグラウンドで行い、大きいログをページ単位で表示します。読み込み中も画面を閉じられ、日付や機能の切り替えに古い読み込み結果が混ざりません。「コピー」は選択した日付・機能の全文を取得します。ログの保存内容やサポート添付、ペアリング、収集・転送方式は変更ありません。
+
+ページ切り替えと読み込み表示は、アプリの8言語に対応しています。
+
+## English
+
+Fixed long waits when opening support debug logs. Saved logs and feature categories now load in the background, while large logs are displayed in bounded pages. The window remains responsive while loading, and stale results cannot overwrite a newer date or category selection. Copy retains the entire selected date/category, not just the visible page. Archive content, support attachments, pairing, and collection/transfer protocols are unchanged.
+
+Loading and pagination controls support all eight app languages.
+]]></description>
+            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.26/MochiLog-Mac-Beta.dmg" length="118760333" type="application/octet-stream" sparkle:edSignature="QW48gUh/WVYC2SKgDvWeYs+YvYqIqDARGLJqTLoh48XfVU9R7GBQ+nlpqQqD4OW8VdccCD275ifkNtS/k13lCA=="/>
+        </item>
+        <item>
             <title>0.2.25</title>
             <pubDate>Sat, 26 Sep 2026 02:20:52 +0900</pubDate>
             <sparkle:version>28</sparkle:version>
@@ -53,31 +75,9 @@ Older iPhone and iPad builds can keep their existing pairing until updated. The 
 ]]></description>
             <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.13/MochiLog-Mac-Beta.dmg" length="55989419" type="application/octet-stream" sparkle:edSignature="1HUQMzhwqd1uwgTrbCU5owKgKoDtBmqQ0OGn/rbUfUEYv5GHY7gX4fenku1YAhoruY758r3htHGD0kRDLaypBA=="/>
         </item>
-        <item>
-            <title>0.2.12</title>
-            <pubDate>Sat, 26 Sep 2026 02:20:52 +0900</pubDate>
-            <sparkle:version>15</sparkle:version>
-            <sparkle:shortVersionString>0.2.12</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>27.0</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[# MochiLog Mac 0.2.12 Beta
-
-## 日本語
-
-iPhone・iPadへ送信済みの電池ログをPC側から削除した後も、取得済みの日付を確認できるようにしました。必要なiPhone本体とApple Watchのログが揃った日は、自動収集を翌日まで休止します。「今すぐログを収集」は引き続き利用できます。
-
-電池ログではない短い解析ファイルを繰り返し取得する問題も修正しました。同じ内容を複数回確認してから対象外にするため、取得途中の電池ログを早まって除外しません。
-
-## English
-
-The Mac now remembers confirmed daily logs after their raw files are delivered and removed. Once the required iPhone and Apple Watch logs are available, automatic collection pauses until the next day. **Collect Logs Now** remains available.
-
-The collector also stops repeatedly downloading short analytics files that are not battery logs. It checks for unchanged content across multiple attempts before excluding a file, so an incomplete battery log remains eligible for retry.
-]]></description>
-            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.12/MochiLog-Mac-Beta.dmg" length="56246418" type="application/octet-stream" sparkle:edSignature="r5h4N3VlTnmsoPbXonpQ4g6c4zkIlr76tTV1cH81A0Zyhaq5k40fOMdOagHdzeY3sr211wD/t/5kzzthzgj7AQ=="/>
-        </item>
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: iEq9qOvPtYdQee80xcXz8RsiIOw1Pz5HAcP1/GKdqNjNlBtpfTWbuQ3c4FCHUR7mP343qUrC9lc7SvSU4B/xBw==
-length: 6668
+edSignature: UtisXWt+4zG36PpdfRiXsyHjkhFJJ1DU103I6Bvz0TIIRs/kOF1/tNmr099cFdo/YA3A+KxxD0xLwEyDiGlHAg==
+length: 6794
 -->
