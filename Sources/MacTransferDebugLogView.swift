@@ -8,51 +8,19 @@ struct MacTransferDebugLogView: View {
   @State private var revision = 0
   @State private var selectedDay: String?
   @State private var selectedPhoneDay: String?
-  @State private var selectedCategory: String?
-  @State private var selectedPhoneCategory: String?
+  @State private var days: [String] = []
+  @State private var phoneDays: [String] = []
+  @State private var retentionDays = SupportDiagnostics.retentionDays
   @State private var showingDeleteConfirmation = false
-
-  private var macLog: String {
-    _ = revision
-    return selectedDay.map { SupportDiagnostics.logText(for: $0) }
-      ?? SupportDiagnostics.macLogText()
-  }
-
-  private var days: [String] { _ = revision; return SupportDiagnostics.archiveDays() }
-  private var phoneDays: [String] {
-    _ = revision
-    return device.map { SupportDiagnostics.phoneArchiveDays(for: $0) } ?? []
-  }
-
-  private var phoneLog: String {
-    _ = revision
-    if let device, let selectedPhoneDay {
-      return SupportDiagnostics.phoneLogText(for: device, day: selectedPhoneDay)
-    }
-    guard let device, let url = SupportDiagnostics.phoneReport(for: device),
-      let data = try? Data(contentsOf: url),
-      let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-      let events = object["recentEvents"] as? [String] else { return "" }
-    return events.joined(separator: "\n")
-  }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
-      Text(MacTransferL10n.text("mt_042"))
-        .font(.title2.bold())
-      Text(MacTransferL10n.text("mt_043"))
-        .foregroundStyle(.secondary)
+      Text(MacTransferL10n.text("mt_042")).font(.title2.bold())
+      Text(MacTransferL10n.text("mt_043")).foregroundStyle(.secondary)
       HStack {
-        Picker(MacTransferL10n.text("mt_log_retention"), selection: Binding(
-          get: { SupportDiagnostics.retentionDays },
-          set: { SupportDiagnostics.retentionDays = $0; revision += 1;
-            selectedDay = days.first }
-        )) {
-          ForEach([7, 30, 90, 180, 365], id: \.self) { days in
-            Text("\(days)").tag(days)
-          }
-        }
-        .frame(maxWidth: 170)
+        Picker(MacTransferL10n.text("mt_log_retention"), selection: $retentionDays) {
+          ForEach([7, 30, 90, 180, 365], id: \.self) { Text("\($0)").tag($0) }
+        }.frame(maxWidth: 170)
         Spacer()
         Button(MacTransferL10n.text("mt_log_delete"), role: .destructive) {
           showingDeleteConfirmation = true
@@ -60,82 +28,153 @@ struct MacTransferDebugLogView: View {
       }
       HStack(alignment: .top, spacing: 16) {
         VStack(alignment: .leading, spacing: 8) {
-        Picker(MacTransferL10n.text("mt_log_date"), selection: $selectedDay) {
-          ForEach(days, id: \.self) { day in Text(day).tag(Optional(day)) }
-        }
-        .frame(maxWidth: 230)
-          categoryPicker(text: macLog, selection: $selectedCategory)
-          logPanel(MacTransferL10n.text("mt_044"), text: DiagnosticLogViewer.text(macLog, category: selectedCategory))
+          dayPicker(days, selection: $selectedDay)
+          DiagnosticLogPanel(title: MacTransferL10n.text("mt_044"),
+            day: selectedDay, device: nil, revision: revision)
         }
         VStack(alignment: .leading, spacing: 8) {
-          Picker(MacTransferL10n.text("mt_log_date"), selection: $selectedPhoneDay) {
-            ForEach(phoneDays, id: \.self) { day in Text(day).tag(Optional(day)) }
-          }
-          .frame(maxWidth: 230)
-          categoryPicker(text: phoneLog, selection: $selectedPhoneCategory)
-          logPanel(MacTransferL10n.text("mt_045"), text: DiagnosticLogViewer.text(phoneLog, category: selectedPhoneCategory))
+          dayPicker(phoneDays, selection: $selectedPhoneDay)
+          DiagnosticLogPanel(title: MacTransferL10n.text("mt_045"),
+            day: selectedPhoneDay, device: device, revision: revision, isPhone: true)
         }
       }
       HStack {
-        Button(MacTransferL10n.text("mt_015")) {
-          revision += 1
-          if selectedDay == nil { selectedDay = days.first }
-          if selectedPhoneDay == nil { selectedPhoneDay = phoneDays.first }
-        }
+        Button(MacTransferL10n.text("mt_015")) { revision += 1 }
         Spacer()
         Button(MacTransferL10n.text("mt_037")) { dismiss() }
       }
     }
     .padding(24)
     .frame(minWidth: 760, minHeight: 440)
-    .onChange(of: selectedDay) { _ in selectedCategory = nil }
-    .onChange(of: selectedPhoneDay) { _ in selectedPhoneCategory = nil }
-    .onChange(of: device?.physicalDeviceID) { _ in selectedPhoneCategory = nil }
-    .onAppear {
-      selectedDay = days.first
-      selectedPhoneDay = phoneDays.first
+    .task(id: revision) {
+      let device = device
+      let catalog = await Task.detached(priority: .userInitiated) {
+        (SupportDiagnostics.archiveDays(),
+          device.map { SupportDiagnostics.phoneArchiveDays(for: $0) } ?? [])
+      }.value
+      guard !Task.isCancelled else { return }
+      days = catalog.0
+      phoneDays = catalog.1
+      if selectedDay == nil || !days.contains(selectedDay!) { selectedDay = days.first }
+      if selectedPhoneDay == nil || !phoneDays.contains(selectedPhoneDay!) {
+        selectedPhoneDay = phoneDays.first
+      }
+    }
+    .onChange(of: retentionDays) { _, value in
+      Task {
+        await Task.detached { SupportDiagnostics.retentionDays = value }.value
+        revision += 1
+      }
     }
     .confirmationDialog(MacTransferL10n.text("mt_log_delete_confirm"),
       isPresented: $showingDeleteConfirmation) {
       Button(MacTransferL10n.text("mt_log_delete"), role: .destructive) {
-        SupportDiagnostics.deleteLogs()
-        revision += 1
-        selectedDay = nil
+        Task {
+          await Task.detached { SupportDiagnostics.deleteLogs() }.value
+          revision += 1
+        }
       }
     }
   }
 
-  private func categoryPicker(text: String, selection: Binding<String?>) -> some View {
-    Picker(MacTransferL10n.text("mt_log_category"), selection: selection) {
-      Text(MacTransferL10n.text("mt_log_all")).tag(Optional<String>.none)
-      ForEach(DiagnosticLogViewer.categories(in: text), id: \.self) { category in
-        Text(MacTransferL10n.text("mt_log_" + category.replacingOccurrences(of: "-", with: "_")))
-          .tag(Optional(category))
-      }
-    }
-    .frame(maxWidth: 280)
+  private func dayPicker(_ days: [String], selection: Binding<String?>) -> some View {
+    Picker(MacTransferL10n.text("mt_log_date"), selection: selection) {
+      if days.isEmpty { Text("—").tag(Optional<String>.none) }
+      ForEach(days, id: \.self) { Text($0).tag(Optional($0)) }
+    }.frame(maxWidth: 230)
+  }
+}
+
+/// The body uses only a loaded snapshot. Archive I/O and category parsing never
+/// run during layout, and a cancelled date selection cannot replace newer data.
+private struct DiagnosticLogPanel: View {
+  let title: String
+  let day: String?
+  let device: PairedDevice?
+  let revision: Int
+  var isPhone = false
+  @State private var category: String?
+  @State private var loadedCategories: [String] = []
+  @State private var fullText = ""
+  @State private var pages: [String] = []
+  @State private var page = 0
+  @State private var loading = true
+
+  private struct Request: Hashable {
+    let day: String?
+    let deviceID: UUID?
+    let revision: Int
+    let category: String?
   }
 
-  private func logPanel(_ title: String, text: String) -> some View {
+  var body: some View {
     VStack(alignment: .leading, spacing: 8) {
+      Picker(MacTransferL10n.text("mt_log_category"), selection: $category) {
+        Text(MacTransferL10n.text("mt_log_all")).tag(Optional<String>.none)
+        ForEach(loadedCategories, id: \.self) { value in
+          Text(MacTransferL10n.text("mt_log_" + value.replacingOccurrences(of: "-", with: "_")))
+            .tag(Optional(value))
+        }
+      }.frame(maxWidth: 280)
       HStack {
         Text(title).font(.headline)
         Spacer()
         Button(MacTransferL10n.text("mt_046")) {
           NSPasteboard.general.clearContents()
-          NSPasteboard.general.setString(text, forType: .string)
-        }.disabled(text.isEmpty)
+          // Copy the complete selected category, never just the displayed page.
+          NSPasteboard.general.setString(fullText, forType: .string)
+        }.disabled(loading || fullText.isEmpty)
       }
       ScrollView {
-        Text(text.isEmpty ? (MacTransferL10n.text("mt_047")) : text)
-          .font(.system(.caption, design: .monospaced))
-          .textSelection(.enabled)
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .padding(10)
+        if loading {
+          ProgressView(MacTransferL10n.text("mt_log_loading")).padding()
+        } else {
+          Text(pages.indices.contains(page) ? pages[page] : MacTransferL10n.text("mt_047"))
+            .font(.system(.caption, design: .monospaced))
+            .textSelection(.enabled)
+            .frame(maxWidth: .infinity, alignment: .leading).padding(10)
+        }
       }
+      .id(page)
       .frame(maxWidth: .infinity, maxHeight: .infinity)
       .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 8))
+      HStack {
+        Button(MacTransferL10n.text("mt_log_previous")) { page -= 1 }
+          .disabled(loading || page == 0)
+        Spacer()
+        Text(String(format: MacTransferL10n.text("mt_log_page"),
+          pages.isEmpty ? 0 : page + 1, pages.count)).font(.caption).foregroundStyle(.secondary)
+        Spacer()
+        Button(MacTransferL10n.text("mt_log_next")) { page += 1 }
+          .disabled(loading || page + 1 >= pages.count)
+      }
     }
     .frame(maxWidth: .infinity)
+    .onChange(of: day) { category = nil }
+    .task(id: Request(day: day, deviceID: device?.physicalDeviceID,
+      revision: revision, category: category)) {
+      loading = true
+      let day = day, device = device, isPhone = isPhone, category = category
+      let snapshot = await Task.detached(priority: .userInitiated) {
+        let raw: String
+        if isPhone {
+          if let device, let day { raw = SupportDiagnostics.phoneLogText(for: device, day: day) }
+          else if let device, let url = SupportDiagnostics.phoneReport(for: device),
+            let data = try? Data(contentsOf: url),
+            let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let events = object["recentEvents"] as? [String] { raw = events.joined(separator: "\n") }
+          else { raw = "" }
+        } else { raw = day.map { SupportDiagnostics.logText(for: $0) } ?? SupportDiagnostics.macLogText() }
+        let filtered = DiagnosticLogViewer.text(raw, category: category)
+        return (DiagnosticLogViewer.categories(in: raw), filtered,
+          DiagnosticLogViewer.pages(filtered))
+      }.value
+      guard !Task.isCancelled else { return }
+      loadedCategories = snapshot.0
+      fullText = snapshot.1
+      pages = snapshot.2
+      page = 0
+      loading = false
+    }
   }
 }

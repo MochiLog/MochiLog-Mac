@@ -21,6 +21,50 @@ enum DiagnosticLogViewer {
     return result.joined(separator: "\n")
   }
 
+  /// Bound both the row count and text layout cost, including very long lines.
+  /// Every character remains available across pages; the full copy/export stream
+  /// is unchanged. This function is called only by the background loader.
+  static func pages(_ text: String, maxLines: Int = 120, maxBytes: Int = 48 * 1024) -> [String] {
+    precondition(maxLines > 0 && maxBytes >= 4)
+    guard !text.isEmpty else { return [] }
+    var result: [String] = []
+    var current = ""
+    var lines = 0
+    var bytes = 0
+    func flushPage() {
+      if !current.isEmpty { result.append(current) }
+      current = ""; lines = 0; bytes = 0
+    }
+    // Work on UTF-8 boundaries rather than constructing one String per scalar.
+    // Newline bytes cannot occur inside a multibyte UTF-8 sequence.
+    let utf8 = Array(text.utf8)
+    var start = 0
+    var end = 0
+    while end < utf8.count {
+      let byte = utf8[end]
+      let width = byte < 0x80 ? 1 : byte < 0xE0 ? 2 : byte < 0xF0 ? 3 : 4
+      if end - start + width > maxBytes {
+        if end > start {
+          if bytes + end - start > maxBytes || lines >= maxLines { flushPage() }
+          let part = String(decoding: utf8[start..<end], as: UTF8.self)
+          current += part; bytes += end - start
+        }
+        start = end
+      }
+      end += width
+      if byte == 10 || end == utf8.count {
+        let size = end - start
+        if bytes + size > maxBytes || lines >= maxLines { flushPage() }
+        current += String(decoding: utf8[start..<end], as: UTF8.self)
+        bytes += size
+        if byte == 10 { lines += 1 }
+        start = end
+      }
+    }
+    flushPage()
+    return result
+  }
+
   private static func visit(_ text: String, consume: (String, String, String) -> Void) {
     var header = "# {\"type\":\"mochilog-diagnostic-log\",\"formatVersion\":1,\"appVersion\":\"unknown\",\"build\":\"unknown\"}"
     var fixedCategory: String?
