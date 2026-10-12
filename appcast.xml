@@ -6,6 +6,28 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>MochiLog Mac</title>
         <item>
+            <title>0.2.28</title>
+            <pubDate>Sat, 26 Sep 2026 02:20:52 +0900</pubDate>
+            <sparkle:version>31</sparkle:version>
+            <sparkle:shortVersionString>0.2.28</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>27.0</sparkle:minimumSystemVersion>
+            <description sparkle:format="markdown"><![CDATA[# MochiLog Mac 0.2.28 beta
+
+## 日本語
+
+- iPhone・iPadとの日付別デバッグログ交換で、送信中に増えたログを今回の受信範囲へ混ぜず、保存済み位置から正確に再開します。旧版との通信も引き続き利用できます。
+- デバッグログの受信進捗、保存先の日付、受信範囲の完了、重複した断片の拒否を記録し、サポート時に途中で止まった位置を追いやすくしました。
+- 診断ログの取得に使った経路を記録します。ツールがエラーを報告した場合の「終了コード0で停止」という紛らわしい表示を修正しました。
+
+## English
+
+- Daily diagnostic history now resumes from saved byte offsets within the advertised snapshot, even when the original log grows during an exchange. Older companion and mobile versions remain compatible.
+- Diagnostic events identify the day, stored progress, completion of the advertised range, and rejected duplicate chunks, making interrupted exchanges easier to investigate.
+- Collection diagnostics identify the selected device transport. An error reported by a successfully exited helper is now described as a reported error instead of an exit-code-zero failure.
+]]></description>
+            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.28/MochiLog-Mac-Beta.dmg" length="117988230" type="application/octet-stream" sparkle:edSignature="aRuchzZpG+ommmafZ1ToCH1OH1NC8NHLKsKksi0PvFrrw4mYqi3zv0ujd+GH7WmL9csDEypl1dCnDRn7eBl8Bg=="/>
+        </item>
+        <item>
             <title>0.2.27</title>
             <pubDate>Sat, 26 Sep 2026 02:20:52 +0900</pubDate>
             <sparkle:version>30</sparkle:version>
@@ -53,35 +75,9 @@ Loading and pagination controls support all eight app languages.
 ]]></description>
             <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.26/MochiLog-Mac-Beta.dmg" length="118760333" type="application/octet-stream" sparkle:edSignature="QW48gUh/WVYC2SKgDvWeYs+YvYqIqDARGLJqTLoh48XfVU9R7GBQ+nlpqQqD4OW8VdccCD275ifkNtS/k13lCA=="/>
         </item>
-        <item>
-            <title>0.2.25</title>
-            <pubDate>Sat, 26 Sep 2026 02:20:52 +0900</pubDate>
-            <sparkle:version>28</sparkle:version>
-            <sparkle:shortVersionString>0.2.25</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>27.0</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[# MochiLog Mac 0.2.25 (28) beta
-
-## 日本語
-
-複数端末への共有で、取得元の機種情報がないログを受信したiPadとして登録してしまう問題に対応しました。暗号化された転送前の確認に、元の端末の個体IDに対応する機種を添えます。スマホ4.0.0 (1052)以降が対応していることを確認してから、他端末のログを共有します。旧版スマホへの自分の端末のログ転送は維持し、ペアリングのやり直しは不要です。
-
-転送済みの記録も、暗号化された共有確認で取得元の機種を確認できます。ログ本体を再送する必要はありません。
-
-機種を確定できないログはスマホ側で選択を求めます。確認できる既存の誤登録はスマホ側で記録ID・日付・実測値を保って訂正します。取得元・受信先・機種の確認結果を動作ログへ残します。バッテリーログの解析は引き続きスマホ側だけで行います。
-
-## English
-
-Encrypted preflight offers now include the model of the originating physical device. This prevents an Analytics log without hardware model metadata from being recorded as the receiving device during cross-device sharing. Foreign logs are shared only with mobile 4.0.0 (1052) or later clients that advertise support. Older clients retain own-device transfers and existing pairing.
-
-The encrypted consent policy also refreshes source models for already-delivered logs, so existing records can be corrected without retransferring their bodies.
-
-Unknown sources require device selection on mobile. Verified incorrect existing records are repaired without changing record IDs, dates, or measurements. Activity logs record the source, recipient, and model. Battery log parsing remains on mobile.
-]]></description>
-            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.25/MochiLog-Mac-Beta.dmg" length="117749509" type="application/octet-stream" sparkle:edSignature="ZS7/EGNk4SJXr9Z9cXEEi7aZbpmf8GVt75ss1w3pEenVeO/RFO9w4rLc9VE/bu0c6ao1kgMbc3KPjSj1PLlUBQ=="/>
-        </item>
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: DOlTtVqr72G3XtSPbBmhpvEYtaOFiQ0u5U2e8oNpnxUfyiwJiTAyVGZSJPDsXauI2BtvbFcKfsb5GNGKMT1dAQ==
-length: 7212
+edSignature: EVgvs/x+6gyoBrFZoLLZnoKPhdeK/VTTRUgJxA8fogwOlLR9sFGBg1oOaOZ/Lu6FpmX7oj4MGRbw+1vzg74PCw==
+length: 6625
 -->
