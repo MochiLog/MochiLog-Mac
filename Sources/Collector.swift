@@ -237,6 +237,9 @@ enum Collector {
       if process.terminationReason == .uncaughtSignal {
         throw CollectorError.signal(process.terminationStatus, detail ?? "")
       }
+      if process.terminationStatus == 0, let detail {
+        throw CollectorError.failed(MacTransferL10n.format("mt_collector_reported_error", detail))
+      }
       throw CollectorError.exitCode(process.terminationStatus, detail ?? "")
     }
     successful = true
@@ -348,6 +351,7 @@ enum Collector {
     let root = ["--remote-file", "/", "--depth", "1"]
     if let listing = try? runCommand(["crash", "ls"] + native + root, 45),
       !listing.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+      SupportDiagnostics.record("Diagnostic route selected; device=\(udid), transport=native OS tunnel")
       return (listing, native)
     }
     let networkIDs = try? JSONDecoder().decode([String].self,
@@ -355,6 +359,7 @@ enum Collector {
     if networkIDs?.contains(udid) == true,
       let listing = try? runCommand(["crash", "ls"] + network + root, 45),
       !listing.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+      SupportDiagnostics.record("Diagnostic route selected; device=\(udid), transport=Wi-Fi lockdown")
       return (listing, network)
     }
     throw CollectorError.failed(MacTransferL10n.text("mt_empty_diagnostic_listing"))
@@ -618,6 +623,7 @@ enum Collector {
     var remoteFiles: [RemoteLog] = []
     var connection: [String] = []
     if let address = device.manualAddress {
+      SupportDiagnostics.record("Diagnostic route requested; device=\(device.udid), transport=manual RemotePairing, address=\(address)")
       let text = try runCommand(["direct-rsd", "scan", "--udid", device.udid,
         "--host", address, "--port", "49152"], 120)
       guard let data = text.data(using: .utf8),

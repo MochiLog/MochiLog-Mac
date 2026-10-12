@@ -722,11 +722,31 @@ struct TransferProtocolTests {
     try check(computerChunk?["day"] as? String == compactDay &&
       computerBytes?.count == 8_192,
       "Computer archive chunk was not returned")
+    // A live archive may grow while a stable manifest is being exchanged.
+    // Previous clients omit end and retain their original chunk behavior.
+    let boundedReport = try JSONSerialization.data(withJSONObject: [
+      "schema": 1, "archiveRequest": ["day": compactDay, "offset": 0, "end": 127]
+    ] as [String: Any])
+    try SupportDiagnostics.savePhoneReport(boundedReport, for: device)
+    let boundedReply = try JSONSerialization.jsonObject(with: SupportDiagnostics.macReport(for: device)) as! [String: Any]
+    let boundedChunk = boundedReply["archiveChunk"] as! [String: Any]
+    try check(Data(base64Encoded: boundedChunk["data"] as! String)?.count == 127,
+      "A growing archive exceeded the advertised snapshot end")
+    let invalidEnd = try JSONSerialization.data(withJSONObject: [
+      "schema": 1, "archiveRequest": ["day": compactDay, "offset": 127, "end": 127]
+    ] as [String: Any])
+    try SupportDiagnostics.savePhoneReport(invalidEnd, for: device)
+    let invalidReply = try JSONSerialization.jsonObject(with: SupportDiagnostics.macReport(for: device)) as! [String: Any]
+    try check(invalidReply["archiveChunk"] == nil,
+      "An invalid archive end was accepted")
     let duplicateNonce = UUID()
     _ = try request(endpoint, hostID: hostID, device: device,
       nonce: duplicateNonce, diagnostics: archiveReport)
     try check(SupportDiagnostics.phoneLogText(for: device, day: archiveDay) ==
       String(data: phoneLine, encoding: .utf8), "Retried archive chunk was duplicated")
+    try check(SupportDiagnostics.logText(for: archiveDay).contains("phone chunk stored") &&
+      SupportDiagnostics.logText(for: archiveDay).contains("phone chunk skipped"),
+      "Stored and rejected diagnostic chunks have no progress audit")
     for offset in 1...4 {
       guard let date = Calendar.current.date(byAdding: .day, value: -offset,
         to: Date()) else { continue }

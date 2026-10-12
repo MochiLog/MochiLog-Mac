@@ -180,7 +180,8 @@ enum SupportDiagnostics {
     }
     if let chunk = object["archiveChunk"] as? [String: Any] {
       receiveArchiveChunk(chunk, directory: phoneArchiveDirectory.appendingPathComponent(
-        device.physicalDeviceID.uuidString, isDirectory: true))
+        device.physicalDeviceID.uuidString, isDirectory: true),
+        manifest: object["archiveManifest"] as? [String: Int], deviceID: device.physicalDeviceID)
     }
     let destination = file("iphone", for: device)
     var saved = object
@@ -319,7 +320,7 @@ enum SupportDiagnostics {
         day >= cutoff, (0...64_000_000).contains(size) else { continue }
       let url = directory.appendingPathComponent("\(day).log")
       let current = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
-      if current < size { return ["day": compact, "offset": current] }
+      if current < size { return ["day": compact, "offset": current, "end": size] }
     }
     return nil
   }
@@ -330,16 +331,21 @@ enum SupportDiagnostics {
       let day = expandedDay(compact), let offset = request["offset"] as? Int,
       offset >= 0, offset <= 64_000_000 else { return nil }
     let url = directory.appendingPathComponent("\(day).log")
+    let count: Int
+    if let end = request["end"] as? Int {
+      guard end > offset, end <= 64_000_000 else { return nil }
+      count = min(limit, end - offset)
+    } else { count = limit }
     guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
     defer { try? handle.close() }
     guard (try? handle.seek(toOffset: UInt64(offset))) != nil,
-      let bytes = try? handle.read(upToCount: limit), !bytes.isEmpty else { return nil }
+      let bytes = try? handle.read(upToCount: count), !bytes.isEmpty else { return nil }
     return ["day": compact, "offset": offset,
       "data": bytes.base64EncodedString()]
   }
 
   private static func receiveArchiveChunk(_ chunk: [String: Any],
-    directory: URL) {
+    directory: URL, manifest: [String: Int]?, deviceID: UUID) {
     guard let compact = chunk["day"] as? String,
       let day = expandedDay(compact), let offset = chunk["offset"] as? Int,
       let encoded = chunk["data"] as? String,
@@ -356,17 +362,28 @@ enum SupportDiagnostics {
       let handle = try FileHandle(forUpdating: url)
       defer { try? handle.close() }
       let size = try handle.seekToEnd()
-      guard size == UInt64(offset) else { return }
+      guard size == UInt64(offset) else {
+        record("Debug archive sync: phone chunk skipped; device=\(deviceID.uuidString), day=\(day), offset=\(offset), stored=\(size); expected offset required")
+        return
+      }
       try handle.write(contentsOf: bytes)
       try FileManager.default.setAttributes([.posixPermissions: 0o600],
         ofItemAtPath: url.path)
+      let total = offset + bytes.count
+      let expected = manifest?[compact]
+      let caughtUp = expected.map { offset < $0 && total >= $0 } ?? false
+      if offset == 0 || offset / 65_536 != total / 65_536 || caughtUp {
+        record("Debug archive sync: phone chunk stored; device=\(deviceID.uuidString), day=\(day), offset=\(offset), bytes=\(bytes.count), total=\(total), snapshotEnd=\(expected.map { String($0) } ?? "unknown"), snapshotCaughtUp=\(caughtUp)")
+      }
       let cutoff = dayString(Calendar.current.date(byAdding: .day,
         value: 1 - retentionDays, to: Date()) ?? Date())
       for old in archiveDays(in: directory) where old < cutoff {
         try? FileManager.default.removeItem(at:
           directory.appendingPathComponent("\(old).log"))
       }
-    } catch { return }
+    } catch {
+      record("Debug archive sync: phone chunk write failed; device=\(deviceID.uuidString), day=\(day), offset=\(offset); error=\(error.localizedDescription)")
+    }
   }
 
   static func mailAttachments(for device: PairedDevice, incidentDate: Date) throws -> [URL] {
