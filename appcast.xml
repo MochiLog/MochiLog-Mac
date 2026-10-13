@@ -6,6 +6,30 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>MochiLog Mac</title>
         <item>
+            <title>0.2.29</title>
+            <pubDate>Sat, 26 Sep 2026 02:20:52 +0900</pubDate>
+            <sparkle:version>32</sparkle:version>
+            <sparkle:shortVersionString>0.2.29</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>27.0</sparkle:minimumSystemVersion>
+            <description sparkle:format="markdown"><![CDATA[# MochiLog Mac 0.2.29 Beta
+
+## 日本語
+
+- Macのネイティブ診断経路が使えないとき、スマホから暗号化して受け取ったLAN候補をOSの既存ペアリングで認証して試します。IP変更やVPNによる転送元と診断先の違いを区別します。
+- 取得失敗や再試行待ちがある場合に、復旧・完了と誤って表示しないよう修正しました。待機件数の表示は8言語に対応しています。
+- 新しい接続先通知にはMochiLog 4.0.0ベータ1057が必要です。古い版との通信と既存のペアリングは維持されます。
+- 端末はログ収集中にロック解除が必要です。ログが未生成の場合やOSが読み取りを拒否する場合まで解決したことを意味しません。
+
+## English
+
+- When the native Mac diagnostic route is unavailable, authenticated, encrypted LAN hints from the mobile app provide fallback endpoints, each verified with the existing OS pairing record.
+- Failed downloads, deferred classification and retry waiting no longer count as recovery or completed acquisition. Waiting counts are localized in all eight languages.
+- New endpoint hints require MochiLog 4.0.0 beta 1057. Existing pairings and communication with older versions are retained.
+- Mobile devices must be unlocked for log collection. This update does not bypass OS access restrictions or generate missing Analytics logs.
+]]></description>
+            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.29/MochiLog-Mac-Beta.dmg" length="117239562" type="application/octet-stream" sparkle:edSignature="3IgNUFeGid3NB7d756/oBRCnJzhHLFXg1vJKYS7ajdST528u8aPLF1Er8sNL2ePKiNyIYs81sLLLvZ2MEx//BA=="/>
+        </item>
+        <item>
             <title>0.2.28</title>
             <pubDate>Sat, 26 Sep 2026 02:20:52 +0900</pubDate>
             <sparkle:version>31</sparkle:version>
@@ -53,31 +77,9 @@ Existing pairing, encryption, duplicate prevention and protection of unsent repo
 ]]></description>
             <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.27/MochiLog-Mac-Beta.dmg" length="115621142" type="application/octet-stream" sparkle:edSignature="TwkuUeb8W7XWF9kw/Zm2AM0QeavD6ybzJXqJW6gLKrpVVJtB+E9Nyzd8sNZNPL0NjSmxwYOFm2aztUXOScJzAw=="/>
         </item>
-        <item>
-            <title>0.2.26</title>
-            <pubDate>Sat, 26 Sep 2026 02:20:52 +0900</pubDate>
-            <sparkle:version>29</sparkle:version>
-            <sparkle:shortVersionString>0.2.26</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>27.0</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[# MochiLog Mac 0.2.26 beta
-
-## 日本語
-
-サポートのデバッグログを開くと長時間待たされる問題を修正しました。保存済みログの読み込み・機能分類をバックグラウンドで行い、大きいログをページ単位で表示します。読み込み中も画面を閉じられ、日付や機能の切り替えに古い読み込み結果が混ざりません。「コピー」は選択した日付・機能の全文を取得します。ログの保存内容やサポート添付、ペアリング、収集・転送方式は変更ありません。
-
-ページ切り替えと読み込み表示は、アプリの8言語に対応しています。
-
-## English
-
-Fixed long waits when opening support debug logs. Saved logs and feature categories now load in the background, while large logs are displayed in bounded pages. The window remains responsive while loading, and stale results cannot overwrite a newer date or category selection. Copy retains the entire selected date/category, not just the visible page. Archive content, support attachments, pairing, and collection/transfer protocols are unchanged.
-
-Loading and pagination controls support all eight app languages.
-]]></description>
-            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.26/MochiLog-Mac-Beta.dmg" length="118760333" type="application/octet-stream" sparkle:edSignature="QW48gUh/WVYC2SKgDvWeYs+YvYqIqDARGLJqTLoh48XfVU9R7GBQ+nlpqQqD4OW8VdccCD275ifkNtS/k13lCA=="/>
-        </item>
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: EVgvs/x+6gyoBrFZoLLZnoKPhdeK/VTTRUgJxA8fogwOlLR9sFGBg1oOaOZ/Lu6FpmX7oj4MGRbw+1vzg74PCw==
-length: 6625
+edSignature: SNSX94yb3zMe+tpgw78YewBZrEAEMKq+0QAOONdZjGvjDhMiF8k/AhQeNs+2A1kFhIliNA4Joi4bCVu1kMh7BQ==
+length: 6846
 -->
