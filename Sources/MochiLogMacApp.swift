@@ -9,6 +9,8 @@ import SwiftUI
 struct MochiLogMacApp: App {
   @NSApplicationDelegateAdaptor(MochiLogMacAppDelegate.self) private var appDelegate
   @StateObject private var model = CompanionModel()
+  @StateObject private var windowMemory = WindowMemoryManager()
+  @AppStorage(MacAppPreferences.releaseUiKey) private var releaseUi = true
   @AppStorage(MacAppPreferences.menuBarKey) private var showMenuBar = true
   @AppStorage(MacAppPreferences.hideDockKey) private var hideDock = false
   @AppStorage("automaticUpdateChecks") private var automaticUpdateChecks = false
@@ -34,7 +36,8 @@ struct MochiLogMacApp: App {
 
   var body: some Scene {
     Window("MochiLog Mac", id: "main") {
-      CompanionView(checkForUpdates: { updaterController.checkForUpdates(nil) })
+      WindowMemoryContent(manager: windowMemory,
+        checkForUpdates: { updaterController.checkForUpdates(nil) })
         .environmentObject(model)
         .frame(minWidth: 780, minHeight: 620)
         .onAppear {
@@ -50,6 +53,7 @@ struct MochiLogMacApp: App {
         } message: { Text(MacTransferL10n.text("update_optin_note")) }
         .onChange(of: showMenuBar) { _, _ in MacAppPreferences.applyDockVisibility() }
         .onChange(of: hideDock) { _, _ in MacAppPreferences.applyDockVisibility() }
+        .onChange(of: releaseUi) { _, _ in windowMemory.update() }
     }
     .windowResizability(.contentSize)
     .commands {
@@ -67,7 +71,83 @@ struct MochiLogMacApp: App {
   }
 }
 
+private struct WindowMemoryContent: View {
+  @ObservedObject var manager: WindowMemoryManager
+  @EnvironmentObject private var model: CompanionModel
+  let checkForUpdates: () -> Void
+  var body: some View {
+    ScreenMemoryHost(manager: manager, model: model, checkForUpdates: checkForUpdates)
+    .background(WindowMemoryReference(manager: manager).frame(width: 0, height: 0))
+  }
+}
+
+private struct ScreenMemoryHost: NSViewControllerRepresentable {
+  let manager: WindowMemoryManager
+  let model: CompanionModel
+  let checkForUpdates: () -> Void
+  final class ScreenController: NSHostingController<AnyView> {
+    deinit { SupportDiagnostics.record("UI memory: hosting controller destroyed") }
+  }
+  final class Controller: NSViewController, ScreenMemoryOwning {
+    deinit { SupportDiagnostics.record("UI memory: container destroyed") }
+    private var screen: ScreenController?
+    private var wantsScreen = true
+    private var creationPending = false
+    var model: CompanionModel?
+    var checkForUpdates: (() -> Void)?
+    override func loadView() { view = NSView() }
+    func setScreenVisibility(suspended: Bool) {
+      wantsScreen = !suspended
+      if suspended {
+        guard let screen else { return }
+        let window = view.window
+        window?.makeFirstResponder(nil)
+        window?.initialFirstResponder = nil
+        if let sheet = window?.attachedSheet { window?.endSheet(sheet); sheet.orderOut(nil) }
+        screen.rootView = AnyView(EmptyView())
+        screen.view.needsLayout = true
+        screen.view.layoutSubtreeIfNeeded()
+        screen.view.prepareForReuse()
+        screen.view.removeFromSuperview()
+        screen.removeFromParent()
+        window?.recalculateKeyViewLoop()
+        self.screen = nil
+        SupportDiagnostics.record("UI memory: hosting controller detached; childCount=\(children.count); subviewCount=\(view.subviews.count)")
+      } else if screen == nil && !creationPending {
+        // Build an independent hosting graph outside the representable's
+        // SwiftUI update transaction; otherwise its first graph is retained
+        // by the enclosing scene even after the child controller is removed.
+        creationPending = true
+        DispatchQueue.main.async { [weak self] in self?.createScreenIfNeeded() }
+      }
+    }
+    private func createScreenIfNeeded() {
+      creationPending = false
+      if wantsScreen && screen == nil, let model, let checkForUpdates {
+        let screen = ScreenController(rootView: AnyView(
+          CompanionView(checkForUpdates: checkForUpdates).environmentObject(model)))
+        addChild(screen)
+        screen.view.frame = view.bounds
+        screen.view.autoresizingMask = [.width, .height]
+        view.addSubview(screen.view)
+        view.window?.recalculateKeyViewLoop()
+        self.screen = screen
+      }
+    }
+  }
+  func makeNSViewController(context: Context) -> Controller { Controller() }
+  func updateNSViewController(_ controller: Controller, context: Context) {
+    controller.model = model; controller.checkForUpdates = checkForUpdates
+    manager.attachOwner(controller)
+  }
+  static func dismantleNSViewController(_ controller: Controller, coordinator: ()) {
+    // Normal scene destruction drops the controller and its child too.
+    controller.setScreenVisibility(suspended: true)
+  }
+}
+
 final class MochiLogMacAppDelegate: NSObject, NSApplicationDelegate {
+  func applicationWillTerminate(_ notification: Notification) { GuardedProcess.stopAll() }
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
     MacAppPreferences.quitOnWindowClose
   }
@@ -84,7 +164,7 @@ private struct MacMenuBarContent: View {
       NSApp.activate(ignoringOtherApps: true)
     }
     Button(MacTransferL10n.text("mt_001")) {
-      Task { await model.collectAll(manual: true) }
+      Task { [model] in await model.collectAll(manual: true) }
     }.disabled(model.isBusy || model.state.devices.isEmpty)
     Button(MacTransferL10n.text("mt_send_now")) {
       model.sendQueuedNow()
@@ -144,7 +224,9 @@ final class CompanionModel: ObservableObject {
   private var liveBatteryViews: Set<UUID> = []
   private var lastBatteryAttempt: [UUID: Date] = [:]
   private var server: TransferServer?
-  private var pairProcess: Process?
+  private var pairCancellation: GuardedProcess.Cancellation?
+  private var diagnosticBusy = false
+  private var diagnosticSamples = 0
   private var lastAutomaticDecision: [UUID: String] = [:]
   private var automaticFailures: [UUID: (message: String, first: Date, count: Int)] = [:]
 
@@ -225,11 +307,15 @@ final class CompanionModel: ObservableObject {
     do { try server.start() }
     catch { status = MacTransferL10n.format("mt_m_02", error.localizedDescription) }
     Task {
+      await sampleDiagnostics()
       await refresh()
       await collectAll(trigger: "app launch")
     }
     Timer.scheduledTimer(withTimeInterval: 5 * 60, repeats: true) { [weak self] _ in
       Task { @MainActor in await self?.collectAll(trigger: "5-minute timer") }
+    }
+    Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+      Task { @MainActor in await self?.sampleDiagnostics() }
     }
     Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
       Task { @MainActor in
@@ -242,6 +328,26 @@ final class CompanionModel: ObservableObject {
         }
       }
     }
+  }
+
+  private func sampleDiagnostics() async {
+    guard !diagnosticBusy else { return }
+    diagnosticBusy = true
+    defer { diagnosticBusy = false }
+    let devices = Array(state.devices.prefix(NativeDiagnostics.maxDevices + 1))
+    let status = self.status
+    do {
+      let snapshot = try await Task.detached(priority: .utility) {
+        let snapshot = SupportDiagnostics.nativeSnapshot(status: status, devices: devices)
+        try SupportDiagnostics.saveNativeSnapshot(snapshot)
+        return snapshot
+      }.value
+      if diagnosticSamples % 5 == 0 {
+        let resources = snapshot.resources
+        SupportDiagnostics.record("Resource snapshot: pid=\(resources.processID), residentBytes=\(resources.residentBytes), peakResidentBytes=\(resources.peakResidentBytes), activeHelpers=\(resources.activeHelpers), nativeDiagnosticSchema=\(snapshot.schema)")
+      }
+      diagnosticSamples += 1
+    } catch { SupportDiagnostics.record("Native diagnostic snapshot failed: \(error.localizedDescription)") }
   }
 
   func watchBattery(_ id: UUID, visible: Bool) {
@@ -470,13 +576,13 @@ final class CompanionModel: ObservableObject {
         collectionDone = 0
         collectionTotal = 0
         let report = try await Task.detached(priority: .utility) { [weak self] in
-          try Collector.collect(device) { done, total in
+          try Collector.collect(device, progress: { done, total in
             Task { @MainActor [weak self] in
               self?.collectionDone = done
               self?.collectionTotal = total
               self?.status = MacTransferL10n.format("mt_m_07", device.name, done, total)
             }
-          }
+          })
         }.value
         if report.acquisitionComplete {
           finishAutomaticFailures(for: device, outcome: "recovered")
@@ -539,42 +645,36 @@ final class CompanionModel: ObservableObject {
       status = MacTransferL10n.text("mt_m_10")
       return
     }
-    let process = Process()
-    let pipe = Pipe()
-    process.executableURL = helper
-    process.arguments = ["remote", "pair-host", "--name", "MochiLog Mac", "--timeout", "180"]
-    process.standardOutput = pipe
-    process.standardError = pipe
-    process.environment = ["HOME": NSHomeDirectory(), "PATH": "/usr/bin:/bin",
-      "TERM": "dumb", "NO_COLOR": "1", "PYTHONUNBUFFERED": "1"]
-    pairProcess = process
+    let cancellation = GuardedProcess.Cancellation()
+    pairCancellation = cancellation
     isPairingSystem = true
     pairingCode = nil
     status = MacTransferL10n.text("mt_m_11")
-    do { try process.run() }
-    catch {
-      isPairingSystem = false
-      status = MacTransferL10n.format("mt_m_12", error.localizedDescription)
-      return
-    }
-    let handle = pipe.fileHandleForReading
     Task.detached { [weak self] in
-      var output = ""
-      while true {
-        let data = handle.availableData
-        if data.isEmpty { break }
-        output += String(decoding: data, as: UTF8.self)
-        if let range = output.range(of: #"Enter this code on your device: [0-9]{6}"#,
-          options: .regularExpression) {
-          let code = String(output[range].suffix(6))
-          await MainActor.run { [weak self] in self?.pairingCode = code }
-        }
-      }
-      process.waitUntilExit()
+      var succeeded = false
+      do {
+        var recent = ""
+        let result = try GuardedProcess.run(helper,
+          arguments: ["remote", "pair-host", "--name", "MochiLog Mac", "--timeout", "180"],
+          environment: ["HOME": NSHomeDirectory(), "PATH": "/usr/bin:/bin",
+            "TERM": "dumb", "NO_COLOR": "1", "PYTHONUNBUFFERED": "1"],
+          timeout: 190, outputLimit: 65_536, errorLimit: 65_536, cancellation: cancellation,
+          onOutput: { chunk in
+            recent = String((recent + String(decoding: chunk, as: UTF8.self)).suffix(512))
+            if let range = recent.range(of: #"Enter this code on your device: [0-9]{6}"#,
+              options: .regularExpression) {
+              let code = String(recent[range].suffix(6))
+              Task { @MainActor [weak self] in self?.pairingCode = code }
+            }
+          })
+        succeeded = result.exitCode == 0
+      } catch { /* The existing pairing result UI handles canceled/failed helpers. */ }
+      let success = succeeded
       await MainActor.run { [weak self] in
         self?.isPairingSystem = false
         self?.pairingCode = nil
-        self?.status = process.terminationStatus == 0
+        self?.pairCancellation = nil
+        self?.status = success
           ? MacTransferL10n.text("mt_m_13")
           : MacTransferL10n.text("mt_m_14")
         Task { [weak self] in await self?.refresh() }
@@ -582,7 +682,7 @@ final class CompanionModel: ObservableObject {
     }
   }
 
-  func stopSystemPairing() { pairProcess?.terminate() }
+  func stopSystemPairing() { pairCancellation?.cancel() }
 
   func prepareUSBPairing() async {
     guard !isPairingUSB else { return }
@@ -632,7 +732,8 @@ private struct CompanionView: View {
 
   let checkForUpdates: () -> Void
   @EnvironmentObject private var model: CompanionModel
-  @State private var page: Page? = .overview
+  @StateObject private var lifetime = ScreenLifetimeToken()
+  @State private var page: Page? = Page(rawValue: UserDefaults.standard.string(forKey: "MochiLogLastPage") ?? "overview")
   @State private var showingSupport = false
   @State private var showingDebugLog = false
   @State private var showingLicenses = false
@@ -645,6 +746,7 @@ private struct CompanionView: View {
   @AppStorage(MacAppPreferences.menuBarKey) private var showMenuBar = true
   @AppStorage(MacAppPreferences.hideDockKey) private var hideDock = false
   @AppStorage(MacAppPreferences.quitOnWindowCloseKey) private var quitOnWindowClose = false
+  @AppStorage(MacAppPreferences.releaseUiKey) private var releaseUi = true
   private var supportDevice: PairedDevice? {
     model.state.devices.first(where: { $0.udid == supportDeviceID })
       ?? model.state.devices.first(where: { $0.udid == model.selectedUDID })
@@ -700,6 +802,10 @@ private struct CompanionView: View {
     .sheet(isPresented: $showingLicenses) {
       MacLicensesView()
     }
+    .onChange(of: page) { _, page in
+      if let page { UserDefaults.standard.set(page.rawValue, forKey: "MochiLogLastPage") }
+    }
+    .onAppear { _ = lifetime }
   }
 
   private var overview: some View {
@@ -748,7 +854,7 @@ private struct CompanionView: View {
             } else { ProgressView() }
           }
           Button {
-            Task { await model.collectAll(manual: true) }
+            Task { [model] in await model.collectAll(manual: true) }
           } label: {
             Label(MacTransferL10n.text("mt_001"), systemImage: "arrow.down.doc")
           }
@@ -770,7 +876,7 @@ private struct CompanionView: View {
               .foregroundStyle(.secondary).padding(.top, 8)
           }
           Button(MacTransferL10n.text("mt_help_support")) { page = .support }
-            .buttonStyle(.link)
+            .buttonStyle(ScreenLinkButtonStyle())
         }
         .frame(maxWidth: .infinity, alignment: .leading).padding(12)
       }
@@ -826,7 +932,7 @@ private struct CompanionView: View {
           Text(MacTransferL10n.text("mt_presence_note"))
             .font(.caption).foregroundStyle(.secondary)
           Button(MacTransferL10n.text("mt_nav_manage_devices")) { page = .devices }
-            .buttonStyle(.link)
+            .buttonStyle(ScreenLinkButtonStyle())
         }.frame(maxWidth: .infinity, alignment: .leading).padding(12)
       }
   }
@@ -845,8 +951,8 @@ private struct CompanionView: View {
               LiveBatteryCard(snapshot: model.liveBatterySnapshots[device.physicalDeviceID],
                 failed: model.liveBatteryFailures.contains(device.physicalDeviceID),
                 busy: model.liveBatteryBusy.contains(device.physicalDeviceID),
-                receive: { Task { await model.refreshBattery(device.physicalDeviceID, manual: true) } },
-                send: { Task { await model.sendBatteryNow(device.physicalDeviceID) } })
+                receive: { Task { [model] in await model.refreshBattery(device.physicalDeviceID, manual: true) } },
+                send: { Task { [model] in await model.sendBatteryNow(device.physicalDeviceID) } })
                 .onAppear { model.watchBattery(device.physicalDeviceID, visible: true) }
                 .onDisappear { model.watchBattery(device.physicalDeviceID, visible: false) }
         }
@@ -1093,7 +1199,7 @@ private struct CompanionView: View {
           Text(MacTransferL10n.text("mt_usb_detail"))
             .foregroundStyle(.secondary)
           Button {
-            Task { await model.prepareUSBPairing() }
+            Task { [model] in await model.prepareUSBPairing() }
           } label: {
             if model.isPairingUSB { ProgressView().controlSize(.small) }
             Text(MacTransferL10n.text("mt_usb_button"))
@@ -1113,11 +1219,11 @@ private struct CompanionView: View {
             .onChange(of: model.selectedUDID) { _, _ in
               manualDeviceAddress = model.pairedSelected?.manualAddress ?? ""
               if !model.isRefreshing {
-                Task { await model.verifySelectedOSPairing() }
+                Task { [model] in await model.verifySelectedOSPairing() }
               }
             }
             Button {
-              Task { await model.refresh() }
+              Task { [model] in await model.refresh() }
             } label: { Image(systemName: "arrow.clockwise") }
               .help(MacTransferL10n.text("mt_015"))
           }
@@ -1207,7 +1313,7 @@ private struct CompanionView: View {
     }
     .onAppear {
       manualDeviceAddress = model.pairedSelected?.manualAddress ?? ""
-      Task { await model.refresh() }
+      Task { [model] in await model.refresh() }
     }
     .confirmationDialog(MacTransferL10n.text("mt_unpair_title"),
       isPresented: $showingUnpairConfirmation, titleVisibility: .visible) {
@@ -1335,6 +1441,8 @@ private struct CompanionView: View {
           Text(MacTransferL10n.text("mt_close_help"))
             .font(.caption)
             .foregroundStyle(.secondary)
+          Toggle(MacTransferL10n.text("ui_memory_title"), isOn: $releaseUi)
+          Text(MacTransferL10n.text("ui_memory_note")).font(.caption).foregroundStyle(.secondary)
           if let preferencesError { Text(preferencesError).foregroundStyle(.red) }
         }.frame(maxWidth: .infinity, alignment: .leading).padding(12)
       }

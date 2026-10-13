@@ -9,6 +9,7 @@ struct MacTransferSupportView: View {
   @State private var message = ""
   @State private var incidentDate = Date()
   @State private var errorMessage: String?
+  @State private var isPreparing = false
   private var valid: Bool {
     [nickname, email, message].allSatisfy {
       !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -45,12 +46,13 @@ struct MacTransferSupportView: View {
           .font(.caption).foregroundStyle(.orange)
       }
       if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
+      if isPreparing { ProgressView().controlSize(.small) }
       HStack {
         Spacer()
         Button(MacTransferL10n.text("mt_037")) { dismiss() }
         Button(MacTransferL10n.text("mt_038")) { compose() }
           .buttonStyle(.borderedProminent)
-          .disabled(!valid)
+          .disabled(!valid || isPreparing)
       }
     }
     .padding(24)
@@ -62,23 +64,27 @@ struct MacTransferSupportView: View {
       errorMessage = MacTransferL10n.text("mt_039")
       return
     }
-    do {
-      let attachments = try SupportDiagnostics.mailAttachments(for: device,
-        incidentDate: incidentDate)
-      service.recipients = ["support@mochilog.ryuya-dev.net"]
-      service.subject = "[MochiLog Mac] \(MacTransferL10n.text("mt_040"))"
-      let body = """
-      \(MacTransferL10n.text("mt_032")): \(nickname)
-      \(MacTransferL10n.text("mt_033")): \(email)
-      \(MacTransferL10n.text("mt_041")): \(device.model)
-      \(MacTransferL10n.text("mt_log_incident")): \(incidentDate.formatted(date: .abbreviated, time: .shortened))
+    isPreparing = true
+    let device = self.device, incidentDate = self.incidentDate
+    Task { @MainActor in
+      defer { isPreparing = false }
+      do {
+        let attachments = try await Task.detached(priority: .utility) {
+          try SupportDiagnostics.mailAttachments(for: device, incidentDate: incidentDate)
+        }.value
+        service.recipients = ["support@mochilog.ryuya-dev.net"]
+        service.subject = "[MochiLog Mac] \(MacTransferL10n.text("mt_040"))"
+        let body = """
+        \(MacTransferL10n.text("mt_032")): \(nickname)
+        \(MacTransferL10n.text("mt_033")): \(email)
+        \(MacTransferL10n.text("mt_041")): \(device.model)
+        \(MacTransferL10n.text("mt_log_incident")): \(incidentDate.formatted(date: .abbreviated, time: .shortened))
 
-      \(MacTransferL10n.text("mt_034")):
-      \(message)
-      """
-      service.perform(withItems: [body] + attachments)
-    } catch {
-      errorMessage = error.localizedDescription
+        \(MacTransferL10n.text("mt_034")):
+        \(message)
+        """
+        service.perform(withItems: [body] + attachments)
+      } catch { errorMessage = error.localizedDescription }
     }
   }
 }

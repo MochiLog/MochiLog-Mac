@@ -27,7 +27,7 @@ enum CrashDiagnostics {
   static func latest() -> Data? {
     lock.lock()
     defer { lock.unlock() }
-    return try? Data(contentsOf: file)
+    return BoundedDiagnosticFile.read(file, maximum: 2_097_152)
   }
 
   static func summary() -> String? {

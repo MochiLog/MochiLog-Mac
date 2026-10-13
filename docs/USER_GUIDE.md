@@ -104,3 +104,9 @@ On mobile, **Settings → Automatic Log Collection** has separate controls for P
 Current battery values can also be shared when both devices have confirmed iCloud sync enabled on the same Apple Account. Disabled sync, different accounts and unconfirmed devices do not share other devices’ values.
 
 Automatic update checks on the computer are off by default. Choose in the initial prompt or settings; manual checks remain available.
+
+## 常駐時の画面メモリ / Screen memory in the background
+
+設定の「常駐時に画面のメモリを解放」は初期状態でオンです。画面を閉じる・最小化する・アプリを隠すすると画面を破棄し、再表示時に直前のページを作り直します。入力途中のフォームはリセットされます。収集・転送・ペアリングは継続します。画面を保持したい場合はこの設定をオフにしてください。
+
+**Release screen memory in the background** is on by default in Settings. Closing, minimizing or hiding the Mac window discards the screen; reopening rebuilds the last page. Unsubmitted form contents reset. Collection, transfers and pairing continue. Turn the setting off to retain the screen.

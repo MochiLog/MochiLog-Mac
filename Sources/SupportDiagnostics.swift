@@ -13,6 +13,30 @@ enum SupportDiagnostics {
   private static let eventLock = NSLock()
   private static let snapshotLock = NSLock()
   private static var manifestSnapshots: [UUID: (Date, [String: Int])] = [:]
+  private static let nativeStore = DiagnosticSnapshotStore(root: Collector.root)
+
+  private static func recentEvents() -> [String] {
+    guard let data = BoundedDiagnosticFile.read(eventsURL, maximum: 1_048_576),
+      let events = try? JSONDecoder().decode([String].self, from: data) else { return [] }
+    return events.suffix(500).map { String($0.prefix(1200)) }
+  }
+
+  static func nativeSnapshot(status: String, devices: [PairedDevice]) -> NativeDiagnostics.Snapshot {
+    let summaries = devices.prefix(NativeDiagnostics.maxDevices + 1).map { device in
+      let collection = BoundedDiagnosticFile.read(file("collection", for: device), maximum: 8192)
+        .flatMap { try? JSONDecoder().decode(NativeDiagnostics.Collection.self, from: $0) }
+      return NativeDiagnostics.Device(physicalDeviceID: device.physicalDeviceID,
+        name: device.name, model: device.model, pairingConfirmed: device.confirmedAt != nil,
+        automaticPauseUntil: device.automaticPauseUntil.map(localTime),
+        routes: DiagnosticRoutes.describe(device), collection: collection)
+    }
+    eventLock.lock(); let events = recentEvents(); eventLock.unlock()
+    return NativeDiagnostics.capture(status: status, devices: summaries, events: events)
+  }
+
+  static func saveNativeSnapshot(_ snapshot: NativeDiagnostics.Snapshot) throws {
+    try nativeStore.save(snapshot, retentionDays: retentionDays)
+  }
 
   static var retentionDays: Int {
     get {
@@ -25,6 +49,7 @@ enum SupportDiagnostics {
       UserDefaults.standard.set(min(365, max(7, newValue)), forKey: retentionKey)
       pruneArchive()
       prunePhoneArchives()
+      nativeStore.prune(retentionDays: retentionDays)
     }
   }
 
@@ -40,7 +65,8 @@ enum SupportDiagnostics {
     defer { eventLock.unlock() }
     migrateLegacyEvents()
     guard validDay(day) else { return "" }
-    return (try? String(contentsOf: archiveURL(for: day), encoding: .utf8)) ?? ""
+    return BoundedDiagnosticFile.read(archiveURL(for: day), maximum: 64_000_000)
+      .map { String(decoding: $0, as: UTF8.self) } ?? ""
   }
 
   static func phoneArchiveDays(for device: PairedDevice) -> [String] {
@@ -53,8 +79,8 @@ enum SupportDiagnostics {
     guard validDay(day) else { return "" }
     let folder = phoneArchiveDirectory.appendingPathComponent(
       device.physicalDeviceID.uuidString, isDirectory: true)
-    return (try? String(contentsOf: folder.appendingPathComponent("\(day).log"),
-      encoding: .utf8)) ?? ""
+    return BoundedDiagnosticFile.read(folder.appendingPathComponent("\(day).log"), maximum: 64_000_000)
+      .map { String(decoding: $0, as: UTF8.self) } ?? ""
   }
 
   static func deleteLogs() {
@@ -65,6 +91,7 @@ enum SupportDiagnostics {
     defer { eventLock.unlock() }
     for day in storedDays() { DiagnosticLogArchive.removeDay(day, root: archiveDirectory) }
     try? FileManager.default.removeItem(at: eventsURL)
+    nativeStore.clear()
     UserDefaults.standard.set(true, forKey: migratedKey)
   }
 
@@ -109,8 +136,7 @@ enum SupportDiagnostics {
 
   private static func migrateLegacyEvents() {
     guard !UserDefaults.standard.bool(forKey: migratedKey) else { return }
-    let events = (try? JSONDecoder().decode([String].self,
-      from: Data(contentsOf: eventsURL))) ?? []
+    let events = recentEvents()
     guard events.allSatisfy({ appendArchivedEvent($0, legacy: true) }) else { return }
     UserDefaults.standard.set(true, forKey: migratedKey)
     pruneArchive()
@@ -148,8 +174,7 @@ enum SupportDiagnostics {
     defer { eventLock.unlock() }
     migrateLegacyEvents()
     let normalized = String(message.replacingOccurrences(of: "\n", with: " ").prefix(1024))
-    var events = (try? JSONDecoder().decode([String].self,
-      from: Data(contentsOf: eventsURL))) ?? []
+    var events = recentEvents()
     guard events.last?.hasSuffix(" | \(normalized)") != true else { return }
     let formatter = ISO8601DateFormatter()
     formatter.timeZone = .autoupdatingCurrent
@@ -161,8 +186,7 @@ enum SupportDiagnostics {
   }
 
   static func macLogText() -> String {
-    let events = (try? JSONDecoder().decode([String].self,
-      from: Data(contentsOf: eventsURL))) ?? []
+    eventLock.lock(); let events = recentEvents(); eventLock.unlock()
     return ([CrashDiagnostics.summary()].compactMap { $0 } + events).joined(separator: "\n")
   }
 
@@ -171,7 +195,8 @@ enum SupportDiagnostics {
   }
 
   static func savePhoneReport(_ data: Data, for device: PairedDevice) throws {
-    guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+    guard data.count <= 16_384,
+      let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
       object["schema"] as? Int == 1 else { return }
     if object["archiveRefresh"] as? Bool == true {
       snapshotLock.lock()
@@ -228,8 +253,8 @@ enum SupportDiagnostics {
 
   static func macReport(for device: PairedDevice) -> Data {
     let collection = file("collection", for: device)
-    let lastCollection = (try? JSONSerialization.jsonObject(with: Data(contentsOf: collection)))
-      as? [String: Any] ?? [:]
+    let lastCollection = BoundedDiagnosticFile.read(collection, maximum: 8192)
+      .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] } ?? [:]
     var recentEvents = Array(macLogText().split(separator: "\n").suffix(30)).map(String.init)
     var object: [String: Any] = [
       "schema": 1,
@@ -246,7 +271,7 @@ enum SupportDiagnostics {
       "recentEvents": recentEvents
     ]
     object["lastAppDiagnostic"] = CrashDiagnostics.summary()
-    let phone = phoneReport(for: device).flatMap { try? Data(contentsOf: $0) }
+    let phone = phoneReport(for: device).flatMap { BoundedDiagnosticFile.read($0, maximum: 16_384) }
       .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
     let phoneDirectory = phoneArchiveDirectory.appendingPathComponent(
       device.physicalDeviceID.uuidString, isDirectory: true)
@@ -395,16 +420,20 @@ enum SupportDiagnostics {
     let mac = directory.appendingPathComponent("mochilog-mac-diagnostics.json")
     try macReport(for: device).write(to: mac, options: .atomic)
     var attachments = [mac]
+    let native = directory.appendingPathComponent("mochilog-mac-native-diagnostics.json")
+    try NativeDiagnostics.encode(nativeSnapshot(status: "support export", devices: [device]))
+      .write(to: native, options: .atomic)
+    attachments.append(native)
     for offset in -2...0 {
       guard let date = Calendar.current.date(byAdding: .day, value: offset,
         to: incidentDate) else { continue }
       let day = dayString(date)
       let log = directory.appendingPathComponent("mochilog-mac-debug-\(day).log")
-      try logText(for: day).write(to: log, atomically: true, encoding: .utf8)
+      try copyLog(archiveURL(for: day), to: log)
       attachments.append(log)
       let phoneLog = directory.appendingPathComponent("mochilog-iphone-debug-\(day).log")
-      try phoneLogText(for: device, day: day).write(to: phoneLog,
-        atomically: true, encoding: .utf8)
+      try copyLog(phoneArchiveDirectory.appendingPathComponent(device.physicalDeviceID.uuidString)
+        .appendingPathComponent("\(day).log"), to: phoneLog)
       attachments.append(phoneLog)
     }
     if let diagnostic = CrashDiagnostics.latest() {
@@ -418,5 +447,12 @@ enum SupportDiagnostics {
       attachments.append(target)
     }
     return attachments
+  }
+
+  private static func copyLog(_ source: URL, to destination: URL) throws {
+    if FileManager.default.fileExists(atPath: source.path) {
+      // Preserve the full archive without decoding it or allocating a second String.
+      try FileManager.default.copyItem(at: source, to: destination)
+    } else { try Data().write(to: destination) }
   }
 }

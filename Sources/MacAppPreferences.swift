@@ -7,6 +7,10 @@ enum MacAppPreferences {
   static let menuBarKey = "MochiLogShowMenuBar"
   static let hideDockKey = "MochiLogHideDock"
   static let quitOnWindowCloseKey = "MochiLogQuitOnWindowClose"
+  static let releaseUiKey = "MochiLogReleaseUiWhenHidden"
+  static var releaseUiWhenHidden: Bool {
+    UserDefaults.standard.object(forKey: releaseUiKey) as? Bool ?? true
+  }
 
   static var quitOnWindowClose: Bool {
     UserDefaults.standard.bool(forKey: quitOnWindowCloseKey)

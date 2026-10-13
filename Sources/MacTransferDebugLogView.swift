@@ -160,7 +160,7 @@ private struct DiagnosticLogPanel: View {
         if isPhone {
           if let device, let day { raw = SupportDiagnostics.phoneLogText(for: device, day: day) }
           else if let device, let url = SupportDiagnostics.phoneReport(for: device),
-            let data = try? Data(contentsOf: url),
+            let data = BoundedDiagnosticFile.read(url, maximum: 16_384),
             let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
             let events = object["recentEvents"] as? [String] { raw = events.joined(separator: "\n") }
           else { raw = "" }

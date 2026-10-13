@@ -7,6 +7,23 @@ enum DiagnosticRoutes {
     let address: String
     let source: String
   }
+  struct Report: Codable {
+    struct Endpoint: Codable { let address, source: String }
+    var manual: String?
+    let peer: String?
+    let peerAt: String?
+    var hints: [String]
+    let hintsAt: String?
+    let verified: String?
+    let verifiedAt: String?
+    var candidates: [Endpoint]
+    var isBounded: Bool {
+      [manual, peer, verified].allSatisfy({ ($0?.count ?? 0) <= 64 })
+        && [peerAt, hintsAt, verifiedAt].allSatisfy({ ($0?.count ?? 0) <= 64 })
+        && hints.count <= 4 && hints.allSatisfy({ $0.count <= 64 })
+        && candidates.count <= 8 && candidates.allSatisfy({ $0.address.count <= 64 && $0.source.count <= 96 })
+    }
+  }
   private struct Cache: Codable {
     var version = 1
     var hints: [String] = []
@@ -32,10 +49,19 @@ enum DiagnosticRoutes {
       .appendingPathComponent(id.uuidString + ".json")
   }
   private static func load(_ id: UUID) -> Cache {
-    guard let bytes = try? Data(contentsOf: file(id)), bytes.count <= 8192,
+    guard let bytes = BoundedDiagnosticFile.read(file(id), maximum: 8192),
       let cache = try? JSONDecoder().decode(Cache.self, from: bytes), cache.version == 1
     else { return Cache() }
     return cache
+  }
+  static func describe(_ device: PairedDevice) -> Report {
+    lock.lock(); let cache = load(device.physicalDeviceID); lock.unlock()
+    let time: (Date?) -> String? = { $0.map(SupportDiagnostics.localTime) }
+    return Report(manual: device.manualAddress.map { String($0.prefix(64)) },
+      peer: cache.peer.flatMap(privateLANAddress), peerAt: time(cache.peerAt),
+      hints: cache.hints.prefix(4).compactMap(privateLANAddress), hintsAt: time(cache.hintsAt),
+      verified: cache.verified.flatMap(privateLANAddress), verifiedAt: time(cache.verifiedAt),
+      candidates: candidates(for: device).prefix(8).map { Report.Endpoint(address: $0.address, source: $0.source) })
   }
   private static func save(_ cache: Cache, id: UUID) {
     do {

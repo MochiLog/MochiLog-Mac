@@ -202,32 +202,16 @@ enum Collector {
     var successful = false
     SupportDiagnostics.record("Collector job started; job=\(traceID), operation=\(operation), timeoutSeconds=\(Int(timeout))")
     defer { SupportDiagnostics.record("Collector job finished; job=\(traceID), operation=\(operation), elapsedMs=\(Int((ProcessInfo.processInfo.systemUptime - started) * 1000)), success=\(successful)") }
-    let process = Process()
-    process.executableURL = helper
-    process.arguments = arguments
-    process.environment = ["HOME": NSHomeDirectory(), "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
-      "TERM": "dumb", "NO_COLOR": "1"]
-    let outputURL = root.appendingPathComponent("process-\(UUID().uuidString).out")
-    let errorURL = root.appendingPathComponent("process-\(UUID().uuidString).err")
-    FileManager.default.createFile(atPath: outputURL.path, contents: nil)
-    FileManager.default.createFile(atPath: errorURL.path, contents: nil)
-    defer {
-      try? FileManager.default.removeItem(at: outputURL)
-      try? FileManager.default.removeItem(at: errorURL)
-    }
-    let output = try FileHandle(forWritingTo: outputURL)
-    let errors = try FileHandle(forWritingTo: errorURL)
-    defer { try? output.close(); try? errors.close() }
-    process.standardOutput = output
-    process.standardError = errors
-    try process.run()
-    let deadline = Date().addingTimeInterval(timeout)
-    while process.isRunning && Date() < deadline { Thread.sleep(forTimeInterval: 0.1) }
-    if process.isRunning { process.terminate(); throw CollectorError.timeout }
-    let text = (try? String(contentsOf: outputURL, encoding: .utf8)) ?? ""
-    let stderr = (try? String(contentsOf: errorURL, encoding: .utf8)) ?? ""
+    let result: GuardedProcess.Result
+    do {
+      result = try GuardedProcess.run(helper, arguments: arguments,
+        environment: ["HOME": NSHomeDirectory(), "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
+          "TERM": "dumb", "NO_COLOR": "1"], timeout: timeout)
+    } catch GuardedProcess.Failure.timeout { throw CollectorError.timeout }
+    let text = String(decoding: result.output, as: UTF8.self)
+    let stderr = String(decoding: result.error, as: UTF8.self)
     let toolError = toolFailureLine(stdout: text, stderr: stderr)
-    guard process.terminationStatus == 0 && toolError == nil else {
+    guard result.exitCode == 0 && toolError == nil else {
       let errorText = stderr.isEmpty ? text : stderr
       let log = root.appendingPathComponent("last-collector-error.log")
       try? errorText.write(to: log, atomically: true, encoding: .utf8)
@@ -236,13 +220,13 @@ enum Collector {
         $0.contains("ERROR") || $0.contains("Error") || $0.contains("Traceback")
       })
       let detail = (toolError ?? meaningful.map(String.init)).map { stableDiagnostic(String($0.suffix(300))) }
-      if process.terminationReason == .uncaughtSignal {
-        throw CollectorError.signal(process.terminationStatus, detail ?? "")
+      if let signal = result.signal {
+        throw CollectorError.signal(signal, detail ?? "")
       }
-      if process.terminationStatus == 0, let detail {
+      if result.exitCode == 0, let detail {
         throw CollectorError.failed(MacTransferL10n.format("mt_collector_reported_error", detail))
       }
-      throw CollectorError.exitCode(process.terminationStatus, detail ?? "")
+      throw CollectorError.exitCode(result.exitCode, detail ?? "")
     }
     successful = true
     return text

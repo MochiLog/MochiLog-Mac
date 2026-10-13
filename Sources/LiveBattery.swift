@@ -241,37 +241,18 @@ extension Collector {
   static func currentBattery(_ device: PairedDevice, peerAddress: String? = nil) throws -> LiveBatterySnapshot {
     guard let tool = Bundle.main.url(forResource: "mochilog-collector", withExtension: nil,
       subdirectory: "Collector") else { throw CollectorError.helperMissing }
-    let process = Process()
-    process.executableURL = tool
-    process.arguments = ["battery-snapshot", "--udid", device.udid]
+    let arguments = ["battery-snapshot", "--udid", device.udid]
       + (device.manualAddress.map { ["--host", $0] }
         ?? (DiagnosticRoutes.candidates(for: device).first?.address ?? peerAddress)
           .map { ["--fallback-host", $0] } ?? [])
-    process.environment = ["HOME": NSHomeDirectory(), "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
-      "NO_COLOR": "1"]
-    let pipe = Pipe()
-    process.standardOutput = pipe
-    process.standardError = FileHandle.nullDevice
-    // Output stays in bounded private memory; it never enters diagnostic log storage.
-    let lock = NSLock()
-    var output = Data()
-    var overflow = false
-    pipe.fileHandleForReading.readabilityHandler = { handle in
-      let chunk = handle.availableData
-      lock.lock(); defer { lock.unlock() }
-      if output.count + chunk.count <= 1048576 { output.append(chunk) }
-      else { overflow = true }
-    }
-    defer { pipe.fileHandleForReading.readabilityHandler = nil; try? pipe.fileHandleForReading.close() }
-    try process.run()
-    let deadline = Date().addingTimeInterval(45)
-    while process.isRunning && Date() < deadline { Thread.sleep(forTimeInterval: 0.05) }
-    if process.isRunning { process.terminate(); throw CollectorError.timeout }
-    pipe.fileHandleForReading.readabilityHandler = nil
-    let tail = pipe.fileHandleForReading.readDataToEndOfFile()
-    lock.lock(); defer { lock.unlock() }
-    if output.count + tail.count <= 1048576 { output.append(tail) } else { overflow = true }
-    guard process.terminationStatus == 0, !overflow else { throw CollectorError.failed("battery_unavailable") }
-    return try LiveBatterySnapshot.decode(output)
+    let result: GuardedProcess.Result
+    do {
+      result = try GuardedProcess.run(tool, arguments: arguments,
+        environment: ["HOME": NSHomeDirectory(), "PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "NO_COLOR": "1"],
+        timeout: 45, outputLimit: 1_048_576, errorLimit: 65_536)
+    } catch GuardedProcess.Failure.timeout { throw CollectorError.timeout }
+    // Values stay in private bounded memory; neither stdout nor stderr is logged.
+    guard result.exitCode == 0 else { throw CollectorError.failed("battery_unavailable") }
+    return try LiveBatterySnapshot.decode(result.output)
   }
 }

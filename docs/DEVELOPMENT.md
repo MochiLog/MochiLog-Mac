@@ -2,6 +2,8 @@
 
 利用者向けの導入手順と困ったときの案内は[日本語・英語の利用ガイド](USER_GUIDE.md)を参照してください。
 
+実行時の調査は[ネイティブ診断の運用メモ](NATIVE_DIAGNOSTICS.md)に従い、アプリが保存するサイズ制限済みのレポートを使います。
+
 MochiLogのiOS/iPadOS 27向けワイヤレスログ転送機能のMac用ベータアプリです。macOS 27以降に対応します。Macが解析ログを取得して保持し、iPhone/iPadでMochiLogを開いたときにローカルネットワークで暗号化して転送します。解析と記録はiPhone/iPad側で行います。
 
 ## Mac連携でできること
@@ -79,3 +81,5 @@ Full-field verification: six Python tests, core/full-detail compatibility, chang
 ## コンパイルされた端末通信ヘルパー
 
 ローカルとCIで同じNuitkaビルドを使います。前提条件、実行コマンド、ランタイム依存の切り分けは[COMPILED_COLLECTOR.md](COMPILED_COLLECTOR.md)を参照してください。
+
+Incremental unsigned Xcode builds can replace the embedded Sparkle framework. Re-sign the complete app (including nested update helpers), verify it, and then notarize the exact unchanged bundle before publishing. The normal build-beta-dmg.sh path performs this signing; an outer-app-only signature is insufficient for distribution.

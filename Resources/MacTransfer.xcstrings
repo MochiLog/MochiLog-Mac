@@ -16164,6 +16164,112 @@
           }
         }
       }
+    },
+    "ui_memory_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Release screen memory in the background"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "常駐時に画面のメモリを解放"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "后台运行时释放界面内存"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "背景執行時釋放畫面記憶體"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "백그라운드에서 화면 메모리 해제"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bildschirmspeicher im Hintergrund freigeben"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Liberar memoria de la pantalla en segundo plano"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Libérer la mémoire de la vue en arrière-plan"
+          }
+        }
+      }
+    },
+    "ui_memory_note": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The screen is rebuilt when reopened. Collection and transfers continue. Unsubmitted form contents are reset."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "画面は再表示時に作り直します。収集・転送は継続します。入力途中のフォームはリセットされます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重新打开时会重建界面。收集和传输会继续。未提交的表单内容将重置。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重新開啟時會重建畫面。收集和傳輸會繼續。尚未提交的表單內容會重設。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "다시 열면 화면을 다시 만듭니다. 수집과 전송은 계속됩니다. 제출하지 않은 양식 내용은 초기화됩니다."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Beim Öffnen wird die Ansicht neu aufgebaut. Erfassung und Übertragung laufen weiter. Nicht abgesendete Formulare werden zurückgesetzt."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La pantalla se vuelve a crear al abrirla. La recopilación y las transferencias continúan. Los formularios sin enviar se restablecen."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La vue est reconstruite à la réouverture. La collecte et les transferts continuent. Les formulaires non envoyés sont réinitialisés."
+          }
+        }
+      }
     }
   },
   "version": "1.0"
