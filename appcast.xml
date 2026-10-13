@@ -6,6 +6,36 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>MochiLog Mac</title>
         <item>
+            <title>0.2.30</title>
+            <pubDate>Sat, 26 Sep 2026 02:20:52 +0900</pubDate>
+            <sparkle:version>33</sparkle:version>
+            <sparkle:shortVersionString>0.2.30</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>27.0</sparkle:minimumSystemVersion>
+            <description sparkle:format="markdown"><![CDATA[# MochiLog Mac 0.2.30 Beta
+
+## 日本語
+
+診断情報をSwiftで定期的に生成・保存する仕組みを追加しました。アプリのメモリ使用量、実行中の端末通信ツール数、端末ごとの接続候補、収集結果と直近の動作を記録し、サポートの添付にも含めます。件数・文字数・サイズに上限を設け、診断ファイルを読み込む前にもサイズを制限します。
+
+端末通信ツールの実行時間、出力量、メモリ使用量の監視を強化しました。時間切れ、キャンセル、出力超過時には関連するプロセスを止め、親プロセスの終了後に子プロセスだけが残るケースにも対応します。現在のバッテリー取得やペアリングにも適用しています。
+
+サポートの添付準備をバックグラウンドへ移し、日付別ログは丸ごとメモリに読み込まずファイルとしてコピーします。既存のペアリング、未転送ログ、スマホとの通信方式は維持されます。
+
+設定に「常駐時に画面のメモリを解放」を追加しました。初期設定はオンです。画面を閉じる・最小化する・アプリを隠すと画面を破棄し、再表示時に直前のページを作り直します。入力途中のフォームはリセットされます。オフにするとこの画面破棄を行いません。収集・転送は継続します。設定と説明は8言語に対応しています。
+
+## English
+
+Swift now produces bounded diagnostic snapshots automatically, covering process memory, active device helpers, per-device connection candidates, collection results and recent activity. Fresh snapshots are included in support attachments. Report counts, text lengths and total size are bounded, and diagnostic files are capped before decoding.
+
+Device helpers now share supervised execution with runtime, output and memory checks. Timeout, cancellation and output overflow stop the owned process group, including descendants that retain output pipes after their parent exits. The same supervision covers live battery queries and pairing.
+
+Support attachments are prepared off the UI thread, with daily archives copied directly instead of loaded and re-encoded in memory. Existing pairings, pending battery logs and mobile protocol compatibility are preserved.
+
+Settings now includes **Release screen memory in the background**, enabled by default. Closing, minimizing or hiding the window discards its screen; reopening rebuilds the last page. Unsubmitted forms reset. Turn it off to disable this explicit screen teardown. Background collection and transfers continue. The setting and explanation support all eight languages.
+]]></description>
+            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.30/MochiLog-Mac-Beta.dmg" length="117129322" type="application/octet-stream" sparkle:edSignature="T1Sb6fgN5ESHmpq+DLrsyl4wKDlKdVyKaWF3kQ3E2N2ZXyzpIVu4gjgfzoa5UAHS8REC26yCc7V63CyZ/m6tBQ=="/>
+        </item>
+        <item>
             <title>0.2.29</title>
             <pubDate>Sat, 26 Sep 2026 02:20:52 +0900</pubDate>
             <sparkle:version>32</sparkle:version>
@@ -51,35 +81,9 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
 ]]></description>
             <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.28/MochiLog-Mac-Beta.dmg" length="117988230" type="application/octet-stream" sparkle:edSignature="aRuchzZpG+ommmafZ1ToCH1OH1NC8NHLKsKksi0PvFrrw4mYqi3zv0ujd+GH7WmL9csDEypl1dCnDRn7eBl8Bg=="/>
         </item>
-        <item>
-            <title>0.2.27</title>
-            <pubDate>Sat, 26 Sep 2026 02:20:52 +0900</pubDate>
-            <sparkle:version>30</sparkle:version>
-            <sparkle:shortVersionString>0.2.27</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>27.0</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[# MochiLog Mac 0.2.27 beta
-
-## 日本語
-
-新しいバッテリーログを優先して取得するようにしました。古いファイルが権限エラーなどで読めないときは、ファイルごとに再試行を待つため、同じ失敗を収集のたびに繰り返しません。当日のファイルは短い間隔で再試行し、失敗したログを転送済み・対象外として扱うことはありません。
-
-当日のiPhone・iPad・Apple Watchのログが端末内に見つかった時点と、取得に失敗した理由・次回再試行時刻をデバッグログに記録します。ログの生成待ちと、取得・転送の遅延を調べやすくしました。
-
-既存のペアリング、暗号化、記録の重複防止、未転送ログの保護を維持しています。Windows版にも同じ収集修正を反映しています。
-
-## English
-
-Newer battery reports are collected first. When an older file cannot be read because of a permission or transport error, retries are scheduled per file instead of repeating the same failure on every collection. Reports for the current day use a shorter retry interval. A failed read is never marked as delivered or permanently excluded.
-
-Debug logs now record when today's iPhone, iPad and Apple Watch reports first appear in the device listing, along with per-file failure reasons and the next retry time. This helps distinguish report availability from collection or transfer delays.
-
-Existing pairing, encryption, duplicate prevention and protection of unsent reports are preserved. The same collection fixes are available in the Windows companion.
-]]></description>
-            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.27/MochiLog-Mac-Beta.dmg" length="115621142" type="application/octet-stream" sparkle:edSignature="TwkuUeb8W7XWF9kw/Zm2AM0QeavD6ybzJXqJW6gLKrpVVJtB+E9Nyzd8sNZNPL0NjSmxwYOFm2aztUXOScJzAw=="/>
-        </item>
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: SNSX94yb3zMe+tpgw78YewBZrEAEMKq+0QAOONdZjGvjDhMiF8k/AhQeNs+2A1kFhIliNA4Joi4bCVu1kMh7BQ==
-length: 6846
+edSignature: ARZo1t/XAes+C30QG6rifqqTMktoJCT3Xvq8UqKMNCAgpnK9F3633/Dl/G/IAxt5F564DqHg1D7N2A0ni5ySAQ==
+length: 7956
 -->
