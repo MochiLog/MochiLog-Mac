@@ -13,6 +13,8 @@ private struct PullRequest: Decodable {
   let presence: String?
   let presenceMAC: String?
   let clientDiagnosticsBox: String?
+  let diagnosticAddressVersion: String?
+  let diagnosticAddresses: String?
   let dailyPauseUntil: String?
   let dailyPauseMAC: String?
   let dailyResumeMAC: String?
@@ -693,6 +695,10 @@ final class TransferServer: @unchecked Sendable {
       if bytes[0] == 100 && (64...127).contains(bytes[1]) {
         liveBatteryPeerAddresses[device.physicalDeviceID] = peerAddress
       }
+    }
+    DiagnosticRoutes.rememberPeer(peerAddress, for: device.physicalDeviceID, at: now)
+    if secure, request.diagnosticAddressVersion == "1", let hints = request.diagnosticAddresses {
+      DiagnosticRoutes.receiveHints(hints, for: device.physicalDeviceID, at: now)
     }
     onAuthenticatedRequest?(device.physicalDeviceID, now)
     if backgroundNotice {

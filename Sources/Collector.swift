@@ -107,6 +107,8 @@ struct CollectionReport {
   let deferred: Int
   let lastError: String?
   let newestHostAnalyticsAt: Date?
+  var retryHeld: Int = 0
+  var acquisitionComplete: Bool { failed == 0 && retryHeld == 0 && deferred == 0 }
 }
 
 enum LogKind: String {
@@ -616,59 +618,82 @@ enum Collector {
     return nil
   }
 
+  private static func directListing(device: PairedDevice, candidate: DiagnosticRoutes.Candidate,
+    runCommand: ([String], TimeInterval) throws -> String) throws -> [RemoteLog] {
+    SupportDiagnostics.record("Diagnostic route requested; device=\(device.udid), transport=RemotePairing, address=\(candidate.address), addressSource=\(candidate.source)")
+    let text = try runCommand(["direct-rsd", "scan", "--udid", device.udid,
+      "--host", candidate.address, "--port", "49152"], 120)
+    guard let data = text.data(using: .utf8),
+      let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+      let files = object["files"] as? [[String: Any]] else {
+      throw CollectorError.failed("Invalid direct diagnostic listing")
+    }
+    DiagnosticRoutes.rememberVerified(candidate.address, for: device.physicalDeviceID)
+    return files.compactMap { item in
+      guard let path = item["path"] as? String else { return nil }
+      return RemoteLog(path: path, source: item["source"] as? String)
+    }
+  }
+
   static func collect(_ device: PairedDevice,
     runCommand: ([String], TimeInterval) throws -> String = {
       try Collector.run($0, timeout: $1)
     }, progress: ((Int, Int) -> Void)? = nil) throws -> CollectionReport {
     var remoteFiles: [RemoteLog] = []
     var connection: [String] = []
+    var directAddress = device.manualAddress
     if let address = device.manualAddress {
-      SupportDiagnostics.record("Diagnostic route requested; device=\(device.udid), transport=manual RemotePairing, address=\(address)")
-      let text = try runCommand(["direct-rsd", "scan", "--udid", device.udid,
-        "--host", address, "--port", "49152"], 120)
-      guard let data = text.data(using: .utf8),
-        let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-        let files = object["files"] as? [[String: Any]] else {
-        throw CollectorError.failed("Invalid direct diagnostic listing")
-      }
-      remoteFiles = files.compactMap { item in
-        guard let path = item["path"] as? String else { return nil }
-        return RemoteLog(path: path, source: item["source"] as? String)
-      }
+      remoteFiles = try directListing(device: device,
+        candidate: .init(address: address, source: "manual"), runCommand: runCommand)
     } else {
-      let (rootListing, chosenConnection) = try remoteRootListing(udid: device.udid,
-        runCommand: runCommand)
-      connection = chosenConnection
-      let proxiedSources = rootListing.split(separator: "\n").map(String.init).filter {
-        $0.range(of: #"^/ProxiedDevice-[a-fA-F0-9]+$"#,
-          options: .regularExpression) != nil
-      }
-      let listing = try runCommand(["crash", "ls"] + connection +
-        ["--remote-file", "/Retired", "--depth", "1"], 90)
-      remoteFiles = listing.split(separator: "\n").map {
-        RemoteLog(path: String($0), source: nil)
-      }
-      remoteFiles += rootListing.split(separator: "\n").map {
-        RemoteLog(path: String($0), source: nil)
-      }
-      for sourcePath in proxiedSources {
-        let source = String(sourcePath.dropFirst())
-        do {
-          let listed = try runCommand(["crash", "ls"] + connection +
-            ["--remote-file", "\(sourcePath)/Retired", "--depth", "1"], 90)
-          remoteFiles += listed.split(separator: "\n").map {
-            RemoteLog(path: String($0), source: source)
-          }
-          let current = try runCommand(["crash", "ls"] + connection +
-            ["--remote-file", sourcePath, "--depth", "1"], 90)
-          remoteFiles += current.split(separator: "\n").map {
-            RemoteLog(path: String($0), source: source)
-          }
-        } catch {
-          // One unavailable paired accessory must not block the host's logs.
-          SupportDiagnostics.record("\(device.name): accessory listing unavailable; source=\(source); error=\(stableDiagnostic(error.localizedDescription))")
-          continue
+      do {
+        let (rootListing, chosenConnection) = try remoteRootListing(udid: device.udid,
+          runCommand: runCommand)
+        connection = chosenConnection
+        let proxiedSources = rootListing.split(separator: "\n").map(String.init).filter {
+          $0.range(of: #"^/ProxiedDevice-[a-fA-F0-9]+$"#,
+            options: .regularExpression) != nil
         }
+        let listing = try runCommand(["crash", "ls"] + connection +
+          ["--remote-file", "/Retired", "--depth", "1"], 90)
+        remoteFiles = listing.split(separator: "\n").map {
+          RemoteLog(path: String($0), source: nil)
+        }
+        remoteFiles += rootListing.split(separator: "\n").map {
+          RemoteLog(path: String($0), source: nil)
+        }
+        for sourcePath in proxiedSources {
+          let source = String(sourcePath.dropFirst())
+          do {
+            let listed = try runCommand(["crash", "ls"] + connection +
+              ["--remote-file", "\(sourcePath)/Retired", "--depth", "1"], 90)
+            remoteFiles += listed.split(separator: "\n").map {
+              RemoteLog(path: String($0), source: source)
+            }
+            let current = try runCommand(["crash", "ls"] + connection +
+              ["--remote-file", sourcePath, "--depth", "1"], 90)
+            remoteFiles += current.split(separator: "\n").map {
+              RemoteLog(path: String($0), source: source)
+            }
+          } catch {
+            // One unavailable paired accessory must not block the host's logs.
+            SupportDiagnostics.record("\(device.name): accessory listing unavailable; source=\(source); error=\(stableDiagnostic(error.localizedDescription))")
+            continue
+          }
+        }
+      } catch {
+        var lastFailure = error
+        for candidate in DiagnosticRoutes.candidates(for: device) {
+          do {
+            remoteFiles = try directListing(device: device, candidate: candidate, runCommand: runCommand)
+            directAddress = candidate.address
+            break
+          } catch {
+            lastFailure = error
+            SupportDiagnostics.record("Diagnostic route rejected; device=\(device.udid), addressSource=\(candidate.source); error=\(stableDiagnostic(error.localizedDescription))")
+          }
+        }
+        guard directAddress != nil else { throw lastFailure }
       }
     }
     remoteFiles = analyticsCandidates(remoteFiles)
@@ -709,7 +734,7 @@ enum Collector {
     var directStaging: URL?
     var batchFailures: [Int: String] = [:]
     defer { if let directStaging { try? FileManager.default.removeItem(at: directStaging) } }
-    if let address = device.manualAddress, !newFiles.isEmpty {
+    if let address = directAddress, !newFiles.isEmpty {
       let staging = destination.appendingPathComponent(".direct-\(UUID().uuidString)")
       try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
       directStaging = staging
@@ -755,6 +780,10 @@ enum Collector {
             break
           } catch {
             pullError = error
+            // An immediate second open cannot recover from PERM_DENIED.
+            // Keep the file pending and use the normal persisted retry time.
+            if error.localizedDescription.range(of: #"FILE_OPEN failed with status:\s*10\b|PERM_DENIED"#,
+              options: [.regularExpression, .caseInsensitive]) != nil { break }
             if attempt == 0 { try? FileManager.default.removeItem(at: downloaded) }
           }
         }
@@ -818,7 +847,7 @@ enum Collector {
       progress?(index + 1, newFiles.count)
     }
     return CollectionReport(saved: saved, skipped: skipped, failed: failed, deferred: deferred,
-      lastError: lastError, newestHostAnalyticsAt: newestHostAnalyticsAt)
+      lastError: lastError, newestHostAnalyticsAt: newestHostAnalyticsAt, retryHeld: retryHeld)
   }
 
   static func analyticsCandidates(_ files: [RemoteLog]) -> [RemoteLog] {

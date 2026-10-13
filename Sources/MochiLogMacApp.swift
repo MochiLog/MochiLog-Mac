@@ -478,7 +478,12 @@ final class CompanionModel: ObservableObject {
             }
           }
         }.value
-        finishAutomaticFailures(for: device, outcome: "recovered")
+        if report.acquisitionComplete {
+          finishAutomaticFailures(for: device, outcome: "recovered")
+        } else if report.failed > 0 {
+          recordCollectionFailure(for: device, trigger: trigger,
+            error: CollectorError.failed(report.lastError ?? "Battery log download failed"), manual: manual)
+        }
         SupportDiagnostics.saveCollection(report, error: nil, for: device)
         let isStale = report.newestHostAnalyticsAt.map {
           Date().timeIntervalSince($0) >= 48 * 60 * 60
@@ -489,11 +494,14 @@ final class CompanionModel: ObservableObject {
           staleAnalyticsDeviceIDs.remove(device.physicalDeviceID)
         }
         savedAny = savedAny || report.saved > 0
-        SupportDiagnostics.record("\(device.name): collection finished; attempt=\(attempt); saved=\(report.saved), excluded=\(report.skipped), deferred=\(report.deferred), failed=\(report.failed), elapsedMs=\(Int((ProcessInfo.processInfo.systemUptime - started) * 1000))")
+        SupportDiagnostics.record("\(device.name): collection finished; attempt=\(attempt); saved=\(report.saved), excluded=\(report.skipped), deferred=\(report.deferred), failed=\(report.failed), retryHeld=\(report.retryHeld), acquisitionComplete=\(report.acquisitionComplete), elapsedMs=\(Int((ProcessInfo.processInfo.systemUptime - started) * 1000))")
         if selectedUDID == device.udid { osPairingState = .verified }
         status = report.failed == 0
           ? MacTransferL10n.format("mt_m_08", device.name, report.saved, report.skipped)
           : MacTransferL10n.format("mt_m_09", device.name, report.saved, report.skipped, report.failed, report.lastError ?? "")
+        if report.retryHeld + report.deferred > 0 {
+          status += " " + MacTransferL10n.format("mt_collection_retry_wait", report.retryHeld + report.deferred)
+        }
       } catch {
         SupportDiagnostics.record("\(device.name): collection attempt ended; attempt=\(attempt); result=failed; elapsedMs=\(Int((ProcessInfo.processInfo.systemUptime - started) * 1000))")
         recordCollectionFailure(for: device, trigger: trigger, error: error, manual: manual)

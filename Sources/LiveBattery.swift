@@ -245,7 +245,8 @@ extension Collector {
     process.executableURL = tool
     process.arguments = ["battery-snapshot", "--udid", device.udid]
       + (device.manualAddress.map { ["--host", $0] }
-        ?? peerAddress.map { ["--fallback-host", $0] } ?? [])
+        ?? (DiagnosticRoutes.candidates(for: device).first?.address ?? peerAddress)
+          .map { ["--fallback-host", $0] } ?? [])
     process.environment = ["HOME": NSHomeDirectory(), "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
       "NO_COLOR": "1"]
     let pipe = Pipe()

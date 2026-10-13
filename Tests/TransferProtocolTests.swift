@@ -353,6 +353,8 @@ struct TransferProtocolTests {
     let firstRetryReport = try Collector.collect(failureDevice, runCommand: mockPull)
     try check(firstRetryReport.saved == 1 && firstRetryReport.failed == 1 && pullNames.first == todayName,
       "An inaccessible older file delayed or prevented the current report")
+    try check(!firstRetryReport.acquisitionComplete && pullNames.filter { $0 == pastName }.count == 1,
+      "A permission failure was reported as complete or retried immediately")
     let retryURL = Collector.root.appendingPathComponent("recheck-\(failureDevice.physicalDeviceID.uuidString).json")
     var restoredRetries = try JSONDecoder().decode([String: Date].self, from: Data(contentsOf: retryURL))
     let pastRetryToken = "Host::\(pastName)"
@@ -361,15 +363,51 @@ struct TransferProtocolTests {
       "A denied file lost its retry time or was marked delivered")
     let pullCount = pullNames.count
     let heldRetryReport = try Collector.collect(failureDevice, runCommand: mockPull)
-    try check(heldRetryReport.failed == 0 && pullNames.count == pullCount,
+    try check(heldRetryReport.failed == 0 && heldRetryReport.retryHeld == 1 &&
+      !heldRetryReport.acquisitionComplete && pullNames.count == pullCount,
       "Persistent backoff did not protect the next collection")
+    SupportDiagnostics.saveCollection(heldRetryReport, error: nil, for: failureDevice)
+    let heldSupport = try JSONSerialization.jsonObject(with: Data(contentsOf:
+      Collector.root.appendingPathComponent("support-\(failureDevice.physicalDeviceID.uuidString)-collection.json"))) as! [String: Any]
+    try check(heldSupport["result"] as? String == "partial_failure" && heldSupport["retryHeld"] as? Int == 1,
+      "The support report described a held retry as completed")
     restoredRetries[pastRetryToken] = .distantPast
     try JSONEncoder().encode(restoredRetries).write(to: retryURL, options: .atomic)
     recover = true
     let recoveredReport = try Collector.collect(failureDevice, runCommand: mockPull)
     restoredRetries = try JSONDecoder().decode([String: Date].self, from: Data(contentsOf: retryURL))
-    try check(recoveredReport.saved == 1 && recoveredReport.failed == 0 && restoredRetries[pastRetryToken] == nil,
+    try check(recoveredReport.saved == 1 && recoveredReport.acquisitionComplete && restoredRetries[pastRetryToken] == nil,
       "A readable file could not recover after the retry interval")
+    print("Checking independent diagnostic routes, address changes and expired hints")
+    let routeDevice = PairedDevice(udid: "route-fixture", name: "Route fixture", model: "iPad16,6",
+      physicalDeviceID: UUID(), secret: device.secret)
+    let routeNow = Date()
+    DiagnosticRoutes.rememberPeer("192.168.3.31", for: routeDevice.physicalDeviceID, at: routeNow)
+    DiagnosticRoutes.rememberVerified("192.168.40.20", for: routeDevice.physicalDeviceID, at: routeNow)
+    try check(DiagnosticRoutes.receiveHints(#"["192.168.40.21","192.168.40.21"]"#,
+      for: routeDevice.physicalDeviceID, at: routeNow), "Fresh address hints were not accepted")
+    try check(DiagnosticRoutes.candidates(for: routeDevice, at: routeNow).map(\.address) ==
+      ["192.168.40.21", "192.168.40.20", "192.168.3.31"], "A transfer peer hid the mobile LAN endpoint")
+    for invalid in [#"["203.0.113.2"]"#, #"["127.0.0.1"]"#, #"["100.64.0.2"]"#,
+      #"["192.168.40.021"]"#, #"["192.168.40.21",null]"#, String(repeating: "x", count: 513)] {
+      try check(!DiagnosticRoutes.receiveHints(invalid, for: routeDevice.physicalDeviceID, at: routeNow),
+        "An invalid diagnostic hint was accepted")
+    }
+    try check(DiagnosticRoutes.candidates(for: routeDevice, at: routeNow.addingTimeInterval(3601)).first?.address ==
+      "192.168.40.20", "Expired mobile hints remained authoritative")
+    try check(DiagnosticRoutes.candidates(for: failureDevice, at: routeNow).isEmpty,
+      "A route cache leaked across physical devices")
+    var directAttempts: [String] = []
+    _ = try Collector.collect(routeDevice, runCommand: { args, _ in
+      guard args.prefix(2) == ["direct-rsd", "scan"], let index = args.firstIndex(of: "--host") else {
+        throw CollectorError.failed("Synthetic native route unavailable")
+      }
+      directAttempts.append(args[index + 1])
+      if args[index + 1] == "192.168.40.21" { throw CollectorError.failed("Synthetic stale hint") }
+      return #"{"files":[]}"#
+    })
+    try check(directAttempts == ["192.168.40.21", "192.168.40.20"],
+      "A failed hint prevented the next OS-authenticated candidate")
     let directFixture = PairedDevice(udid: failureDevice.udid, name: failureDevice.name,
       model: failureDevice.model, physicalDeviceID: UUID(), secret: device.secret, manualAddress: "127.0.0.1")
     let batchReport = try Collector.collect(directFixture, runCommand: { args, _ in
@@ -672,7 +710,10 @@ struct TransferProtocolTests {
     }
     let v2Nonce = UUID()
     let v2Response = try request(endpoint, hostID: hostID, device: device,
-      nonce: v2Nonce, diagnostics: phoneReport, version2: true)
+      nonce: v2Nonce, diagnostics: phoneReport, version2: true,
+      extra: ["diagnosticAddressVersion": "1", "diagnosticAddresses": #"["192.168.40.22"]"#])
+    try check(DiagnosticRoutes.candidates(for: device).allSatisfy { $0.address != "192.168.40.22" },
+      "Unsigned v2 extra fields installed a diagnostic endpoint")
     let v2Opened = try opened(v2Response, secret: device.secret,
       context: (hostID, device.physicalDeviceID, v2Nonce))
     try check(v2Opened.0 == "Host::\(v2Name)" && v2Opened.1 == v2Content,
@@ -872,8 +913,11 @@ struct TransferProtocolTests {
     print("Checking sealed transfer and protocol upgrade")
     let secureNonce = UUID()
     _ = try opened(request(endpoint, hostID: hostID, device: v3Paired,
-      nonce: secureNonce, sealed: true), secret: v3Key,
+      nonce: secureNonce, sealed: true,
+      extra: ["diagnosticAddressVersion": "1", "diagnosticAddresses": #"["192.168.40.23"]"#]), secret: v3Key,
       context: (hostID, mobilePhysicalID, secureNonce))
+    try check(DiagnosticRoutes.candidates(for: v3Paired).first?.address == "192.168.40.23",
+      "Sealed v3 request did not advertise the diagnostic LAN endpoint")
     print("Checking session-only live battery responses, unchanged values and replay")
     let registryData = try Data(contentsOf: URL(fileURLWithPath: "Tests/Fixtures/battery-registry.xml"))
     let native = try LiveBatterySnapshot.decode(registryData)

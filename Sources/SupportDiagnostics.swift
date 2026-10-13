@@ -206,7 +206,7 @@ enum SupportDiagnostics {
       }
     } else if error != nil {
       category = "collection_error"
-    } else { category = report?.failed == 0 ? "completed" : "partial_failure" }
+    } else { category = report?.acquisitionComplete == true ? "completed" : "partial_failure" }
     var object: [String: Any] = [
       "schema": 1,
       "collectedAt": ISO8601DateFormatter().string(from: Date()),
@@ -214,7 +214,9 @@ enum SupportDiagnostics {
       "saved": report?.saved ?? 0,
       "excluded": report?.skipped ?? 0,
       "deferred": report?.deferred ?? 0,
-      "failed": report?.failed ?? 0
+      "failed": report?.failed ?? 0,
+      "retryHeld": report?.retryHeld ?? 0,
+      "acquisitionComplete": report?.acquisitionComplete ?? false
     ]
     if let newest = report?.newestHostAnalyticsAt {
       object["newestHostAnalyticsAt"] = ISO8601DateFormatter().string(from: newest)
