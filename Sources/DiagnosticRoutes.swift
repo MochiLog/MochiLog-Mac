@@ -123,6 +123,13 @@ enum DiagnosticRoutes {
       let address = privateLANAddress(value) {
       result.append(Candidate(address: address, source: "previous OS-authenticated endpoint"))
     }
+    // Daily receipt pauses can suppress mobile requests for many hours. Keep
+    // recent authenticated hints as a fallback after the verified endpoint.
+    if !fresh(cache.hintsAt, seconds: 3600), fresh(cache.hintsAt, seconds: 86400) {
+      result += cache.hints.compactMap { privateLANAddress($0).map {
+        Candidate(address: $0, source: "recent authenticated mobile LAN hint (unverified)")
+      } }
+    }
     if fresh(cache.peerAt, seconds: 86400), let value = cache.peer,
       let address = privateLANAddress(value) {
       result.append(Candidate(address: address, source: "transfer peer fallback (unverified)"))

@@ -395,8 +395,10 @@ struct TransferProtocolTests {
       try check(!DiagnosticRoutes.receiveHints(invalid, for: routeDevice.physicalDeviceID, at: routeNow),
         "An invalid diagnostic hint was accepted")
     }
-    try check(DiagnosticRoutes.candidates(for: routeDevice, at: routeNow.addingTimeInterval(3601)).first?.address ==
-      "192.168.40.20", "Expired mobile hints remained authoritative")
+    try check(DiagnosticRoutes.candidates(for: routeDevice, at: routeNow.addingTimeInterval(3601)).map(\.address) ==
+      ["192.168.40.20", "192.168.40.21", "192.168.3.31"], "Recent hint fallback displaced an OS-authenticated endpoint")
+    try check(DiagnosticRoutes.candidates(for: routeDevice, at: routeNow.addingTimeInterval(86401)).map(\.address) ==
+      ["192.168.40.20"], "An older-than-one-day hint or transfer peer stayed active")
     try check(DiagnosticRoutes.candidates(for: failureDevice, at: routeNow).isEmpty,
       "A route cache leaked across physical devices")
     var directAttempts: [String] = []
@@ -421,10 +423,68 @@ struct TransferProtocolTests {
     })
     let batchRetries = try JSONDecoder().decode([String: Date].self, from: Data(contentsOf:
       Collector.root.appendingPathComponent("recheck-\(directFixture.physicalDeviceID.uuidString).json")))
-    try check(batchReport.failed == 2 && batchReport.lastError?.contains("status: 10") == true &&
-      batchRetries["Host::\(todayName)"]!.timeIntervalSinceNow < 301 &&
-      batchRetries[pastRetryToken]!.timeIntervalSinceNow > 29 * 60,
-      "Direct batch failure lost its actual cause or delayed today's file for thirty minutes")
+    try check(batchReport.failed == 1 && batchReport.retryHeld == 1 && !batchReport.acquisitionComplete &&
+      batchReport.lastError?.contains("status: 10") == true &&
+      batchRetries["Host::\(todayName)"]!.timeIntervalSinceNow < 301 && batchRetries[pastRetryToken] == nil &&
+      Collector.delivered(for: directFixture).isEmpty,
+      "A denied source retried all files, lost its cause or excluded an unattempted file")
+    try check(Collector.readPermissionDenied("FILE_OPEN failed with status: 10: None") &&
+      Collector.readPermissionDenied("PERM_DENIED") && !Collector.readPermissionDenied("FILE_OPEN failed with status: 100") &&
+      !Collector.readPermissionDenied("TimeoutError 10 seconds"), "Read denial classification is too broad")
+    print("Checking source-scoped permission gate, Watch isolation and probe rotation")
+    let sourceFixture = PairedDevice(udid: "source-gate", name: "Source gate", model: "iPhone18,3",
+      physicalDeviceID: UUID(), secret: device.secret)
+    let anotherToday = todayName.replacingOccurrences(of: "090007", with: "090006")
+    let gateWatchSource = "ProxiedDevice-ab12"
+    var sourcePulls: [String] = []
+    let sourceMock: ([String], TimeInterval) throws -> String = { args, _ in
+      if args.prefix(2) == ["crash", "ls"] {
+        let path = args[args.firstIndex(of: "--remote-file")! + 1]
+        if path == "/" { return "/Retired\n/\(gateWatchSource)" }
+        if path == "/Retired" { return "/Retired/\(todayName)\n/Retired/\(anotherToday)" }
+        if path == "/\(gateWatchSource)/Retired" { return path + "/" + todayName }
+        return ""
+      }
+      let remote = args[args.firstIndex(of: "--remote-file")! + 1]
+      sourcePulls.append(remote)
+      if remote == "/Retired/" + todayName { throw CollectorError.failed("FILE_OPEN failed with status: 10") }
+      let data = remote.contains(gateWatchSource) ? Data(("{\"os_version\":\"watchOS 27.2\"}\n" + String(repeating:
+        "last_value_CycleCount last_value_NominalChargeCapacity last_value_AppleRawMaxCapacity\n", count: 120)).utf8) : fixtureBody
+      try data.write(to: URL(fileURLWithPath: args[2]).appendingPathComponent(URL(fileURLWithPath: remote).lastPathComponent))
+      return ""
+    }
+    let gated = try Collector.collect(sourceFixture, runCommand: sourceMock)
+    try check(gated.failed == 1 && gated.retryHeld == 1 && gated.saved == 1 &&
+      sourcePulls.count == 2 && sourcePulls.contains("/\(gateWatchSource)/Retired/\(todayName)"),
+      "Host permission denial blocked Watch or tried the same source again")
+    let gateRetryURL = Collector.root.appendingPathComponent("recheck-\(sourceFixture.physicalDeviceID.uuidString).json")
+    try JSONEncoder().encode(["Host::" + todayName: Date.distantPast]).write(to: gateRetryURL)
+    sourcePulls.removeAll()
+    let nextProbe = try Collector.collect(sourceFixture, runCommand: sourceMock)
+    try check(nextProbe.saved == 1 && sourcePulls.first == "/Retired/" + anotherToday,
+      "A permanently unreadable first file starved other files on subsequent polls")
+    let mappedFixture = PairedDevice(udid: "batch-map", name: "Batch map", model: "iPad16,6",
+      physicalDeviceID: UUID(), secret: device.secret, manualAddress: "127.0.0.1")
+    var batchSizes: [Int] = []
+    let mappingReport = try Collector.collect(mappedFixture, runCommand: { args, _ in
+      if args.prefix(2) == ["direct-rsd", "scan"] {
+        return String(data: try JSONSerialization.data(withJSONObject: ["files": [todayName, anotherToday, pastName].map {
+          ["path": "/Retired/" + $0] }]), encoding: .utf8)!
+      }
+      let manifest = URL(fileURLWithPath: args[args.firstIndex(of: "--manifest")! + 1])
+      let items = try JSONSerialization.jsonObject(with: Data(contentsOf: manifest)) as! [[String: String]]
+      let output = URL(fileURLWithPath: args[args.firstIndex(of: "--output")! + 1])
+      batchSizes.append(items.count)
+      for (index, item) in items.enumerated() {
+        let folder = output.appendingPathComponent(String(index))
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try fixtureBody.write(to: folder.appendingPathComponent(URL(fileURLWithPath: item["path"]!).lastPathComponent))
+      }
+      return String(data: try JSONSerialization.data(withJSONObject: ["results": items.indices.map {
+        ["index": $0, "ok": true] as [String: Any] }]), encoding: .utf8)!
+    })
+    try check(mappingReport.saved == 3 && mappingReport.acquisitionComplete && batchSizes == [1, 2],
+      "Splitting a direct batch lost its local/global result mapping")
     let hostID = UUID()
     let state = CompanionState(hostID: hostID, devices: [device])
     print("Checking plaintext-key migration to Keychain")

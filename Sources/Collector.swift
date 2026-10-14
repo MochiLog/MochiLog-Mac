@@ -510,8 +510,20 @@ enum Collector {
 
   // Failed reads never become delivered/excluded. Use the same daily policy
   // as incomplete reports so an old, inaccessible file cannot dominate every poll.
-  static func prioritizedCandidates(_ files: [RemoteLog]) -> [RemoteLog] {
+  static func readPermissionDenied(_ message: String) -> Bool {
+    message.range(of: #"FILE_OPEN failed with status:\s*10\b|\bPERM_DENIED\b"#,
+      options: [.regularExpression, .caseInsensitive]) != nil
+  }
+
+  static func prioritizedCandidates(_ files: [RemoteLog], rechecked: Set<String> = []) -> [RemoteLog] {
     files.sorted {
+      // Keep recent days first, but let an untried file in the same day probe
+      // the source next time. A permanently unreadable first file cannot starve it.
+      let day0 = $0.name.prefix(20), day1 = $1.name.prefix(20)
+      if day0 != day1 { return day0 > day1 }
+      if rechecked.contains($0.token) != rechecked.contains($1.token) {
+        return !rechecked.contains($0.token)
+      }
       if $0.name != $1.name { return $0.name > $1.name }
       return ($0.source ?? "") < ($1.source ?? "")
     }
@@ -711,33 +723,58 @@ enum Collector {
       return ![host, watch].compactMap { $0 }.contains {
         FileManager.default.fileExists(atPath: $0.path)
       }
-    })
-    let retryHeld = remoteFiles.filter { (rechecks[$0.token] ?? .distantPast) > now }.count
+    }, rechecked: Set(rechecks.keys))
+    var retryHeld = remoteFiles.filter { (rechecks[$0.token] ?? .distantPast) > now }.count
     SupportDiagnostics.record("\(device.name): diagnostic listing ready; hostCandidates=\(remoteFiles.filter { $0.source == nil }.count); proxyCandidates=\(remoteFiles.filter { $0.source != nil }.count); downloadDue=\(newFiles.count); retryHeld=\(retryHeld)")
     progress?(0, newFiles.count)
     var directStaging: URL?
     var batchFailures: [Int: String] = [:]
+    var batchDownloads: [Int: URL] = [:]
+    var blockedIndices: Set<Int> = []
     defer { if let directStaging { try? FileManager.default.removeItem(at: directStaging) } }
     if let address = directAddress, !newFiles.isEmpty {
       let staging = destination.appendingPathComponent(".direct-\(UUID().uuidString)")
       try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
       directStaging = staging
-      let manifest = staging.appendingPathComponent("manifest.json")
-      let items = newFiles.map { ["path": $0.path] }
-      try JSONSerialization.data(withJSONObject: items).write(to: manifest)
-      let result = try runCommand(["direct-rsd", "pull-batch", "--udid", device.udid,
-        "--host", address, "--port", "49152", "--manifest", manifest.path,
-        "--output", staging.path], TimeInterval(min(1800, max(180, newFiles.count * 180))))
-      guard let data = result.data(using: .utf8),
-        let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-        let results = object["results"] as? [[String: Any]] else {
-        throw CollectorError.failed("Invalid diagnostic batch result")
-      }
-      for index in newFiles.indices {
-        let row = results.first { $0["index"] as? Int == index }
-        if row?["ok"] as? Bool != true {
-          batchFailures[index] = row?["error"] as? String ?? "Missing diagnostic download result"
+      var part = 0
+      func pull(_ indices: [Int]) throws {
+        let directory = staging.appendingPathComponent("part-\(part)"); part += 1
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let manifest = directory.appendingPathComponent("manifest.json")
+        try JSONSerialization.data(withJSONObject: indices.map { ["path": newFiles[$0].path] }).write(to: manifest)
+        for index in indices {
+          SupportDiagnostics.record("\(device.name): battery candidate download requested; file=\(newFiles[index].name); source=\(newFiles[index].source ?? "host")")
         }
+        let result = try runCommand(["direct-rsd", "pull-batch", "--udid", device.udid,
+          "--host", address, "--port", "49152", "--manifest", manifest.path,
+          "--output", directory.path], TimeInterval(min(1800, max(180, indices.count * 180))))
+        guard let data = result.data(using: .utf8),
+          let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+          let results = object["results"] as? [[String: Any]] else {
+          throw CollectorError.failed("Invalid diagnostic batch result")
+        }
+        for (local, index) in indices.enumerated() {
+          let row = results.first { $0["index"] as? Int == local }
+          if row?["ok"] as? Bool != true {
+            batchFailures[index] = row?["error"] as? String ?? "Missing diagnostic download result"
+          } else {
+            batchDownloads[index] = directory.appendingPathComponent(String(local))
+              .appendingPathComponent(newFiles[index].name)
+          }
+        }
+      }
+      // A listing can work while every file open in that source is denied.
+      // Probe once per host/accessory before starting the rest of its batch.
+      var sources: [String] = []
+      for file in newFiles where !sources.contains(file.source ?? "host") { sources.append(file.source ?? "host") }
+      for source in sources {
+        let indices = newFiles.indices.filter { (newFiles[$0].source ?? "host") == source }
+        guard let first = indices.first else { continue }
+        try pull([first])
+        if let failure = batchFailures[first], readPermissionDenied(failure) {
+          blockedIndices.formUnion(indices.dropFirst())
+          SupportDiagnostics.record("\(device.name): source download suspended; source=\(source); trigger=AFC permission denied; blocked=\(indices.count - 1); retry=next collection; other sources continue")
+        } else if indices.count > 1 { try pull(Array(indices.dropFirst())) }
       }
     }
     var saved = 0
@@ -745,16 +782,22 @@ enum Collector {
     var failed = 0
     var deferred = 0
     var lastError: String?
+    var deniedSources: Set<String> = []
+    var blocked = 0
     for (index, remote) in newFiles.enumerated() {
       let name = remote.name
-      SupportDiagnostics.record("\(device.name): battery candidate download requested; file=\(name); source=\(remote.source ?? "host")")
+      if blockedIndices.contains(index) || (directStaging == nil && deniedSources.contains(remote.source ?? "host")) {
+        blocked += 1; progress?(index + 1, newFiles.count); continue
+      }
+      if directStaging == nil {
+        SupportDiagnostics.record("\(device.name): battery candidate download requested; file=\(name); source=\(remote.source ?? "host")")
+      }
       do {
         if let failure = batchFailures[index] { throw CollectorError.failed(failure) }
         let staging = destination.appendingPathComponent(".staging-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: staging) }
-        let downloaded = (directStaging?.appendingPathComponent(String(index)) ?? staging)
-          .appendingPathComponent(name)
+        let downloaded = batchDownloads[index] ?? staging.appendingPathComponent(name)
         var pullError: Error?
         for attempt in 0..<(directStaging == nil ? 2 : 0) {
           do {
@@ -766,8 +809,7 @@ enum Collector {
             pullError = error
             // An immediate second open cannot recover from PERM_DENIED.
             // Keep the file pending and use the normal persisted retry time.
-            if error.localizedDescription.range(of: #"FILE_OPEN failed with status:\s*10\b|PERM_DENIED"#,
-              options: [.regularExpression, .caseInsensitive]) != nil { break }
+            if readPermissionDenied(error.localizedDescription) { break }
             if attempt == 0 { try? FileManager.default.removeItem(at: downloaded) }
           }
         }
@@ -823,12 +865,17 @@ enum Collector {
       } catch {
         failed += 1
         lastError = error.localizedDescription
+        if readPermissionDenied(error.localizedDescription) { deniedSources.insert(remote.source ?? "host") }
         let retryAt = unclassifiedRetryAt(name: name)
         rechecks[remote.token] = retryAt
         try saveRechecks(rechecks, for: device)
         SupportDiagnostics.record("\(device.name): battery candidate download failed; file=\(name); source=\(remote.source ?? "host"); retry=\(SupportDiagnostics.localTime(retryAt)); error=\(stableDiagnostic(error.localizedDescription))")
       }
       progress?(index + 1, newFiles.count)
+    }
+    if blocked > 0 {
+      retryHeld += blocked
+      SupportDiagnostics.record("\(device.name): source read gate held \(blocked) unattempted file(s); trigger=AFC permission denied; files remain pending; retry=next collection")
     }
     return CollectionReport(saved: saved, skipped: skipped, failed: failed, deferred: deferred,
       lastError: lastError, newestHostAnalyticsAt: newestHostAnalyticsAt, retryHeld: retryHeld)
