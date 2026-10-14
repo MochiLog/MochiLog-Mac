@@ -6,6 +6,32 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>MochiLog Mac</title>
         <item>
+            <title>0.2.31</title>
+            <pubDate>Sat, 26 Sep 2026 02:20:52 +0900</pubDate>
+            <sparkle:version>34</sparkle:version>
+            <sparkle:shortVersionString>0.2.31</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>27.0</sparkle:minimumSystemVersion>
+            <description sparkle:format="markdown"><![CDATA[# MochiLog Mac 0.2.31 Beta
+
+## 日本語
+
+診断ファイルの読み取りを拒否された際、同じ保存元の残りのファイルをその回で繰り返し取得しないようにしました。未取得のファイルは再試行待ちとして残し、次回は同じ日付の未試行ファイルを優先します。iPhone本体とApple Watchは別々に扱い、一方の拒否で他方を止めません。
+
+スマホから認証済みの通信で受け取ったLANアドレスを、最大24時間、予備の接続候補として利用します。最初の1時間を過ぎると、以前OS認証が成功した接続先を先に試します。接続時のOSペアリング認証は従来どおり必要です。既存のペアリング、当日分がそろった後の停止、未転送ログの保護は維持します。
+
+読み取り停止の理由、保留件数と再試行を動作ログに記録します。
+
+## English
+
+When a diagnostic file open is denied, collection now holds the remaining files from that source for the current attempt instead of repeatedly requesting them. Held files remain pending. The next attempt prioritizes untried files from the same date, so one permanently unreadable file does not starve other reports. iPhone and Apple Watch sources are handled independently.
+
+LAN addresses received through authenticated mobile requests remain available as fallback candidates for up to 24 hours. After the first hour, a previously OS-authenticated endpoint takes priority. Every connection still requires the existing OS pairing authentication. Existing pairings, automatic daily completion and pending-file protection remain compatible.
+
+Activity logs record source read-gate triggers, held counts and retry decisions.
+]]></description>
+            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.31/MochiLog-Mac-Beta.dmg" length="123239161" type="application/octet-stream" sparkle:edSignature="1/RL6xSeYWNecO1Ot1jEGxeg/J8upszsM6DgB9exFO4IYIH7ueXDQxv4e89UO7Qpmh10lXNyGC7Fw1/leGjtBw=="/>
+        </item>
+        <item>
             <title>0.2.30</title>
             <pubDate>Sat, 26 Sep 2026 02:20:52 +0900</pubDate>
             <sparkle:version>33</sparkle:version>
@@ -59,31 +85,9 @@ Settings now includes **Release screen memory in the background**, enabled by de
 ]]></description>
             <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.29/MochiLog-Mac-Beta.dmg" length="117239562" type="application/octet-stream" sparkle:edSignature="3IgNUFeGid3NB7d756/oBRCnJzhHLFXg1vJKYS7ajdST528u8aPLF1Er8sNL2ePKiNyIYs81sLLLvZ2MEx//BA=="/>
         </item>
-        <item>
-            <title>0.2.28</title>
-            <pubDate>Sat, 26 Sep 2026 02:20:52 +0900</pubDate>
-            <sparkle:version>31</sparkle:version>
-            <sparkle:shortVersionString>0.2.28</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>27.0</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[# MochiLog Mac 0.2.28 beta
-
-## 日本語
-
-- iPhone・iPadとの日付別デバッグログ交換で、送信中に増えたログを今回の受信範囲へ混ぜず、保存済み位置から正確に再開します。旧版との通信も引き続き利用できます。
-- デバッグログの受信進捗、保存先の日付、受信範囲の完了、重複した断片の拒否を記録し、サポート時に途中で止まった位置を追いやすくしました。
-- 診断ログの取得に使った経路を記録します。ツールがエラーを報告した場合の「終了コード0で停止」という紛らわしい表示を修正しました。
-
-## English
-
-- Daily diagnostic history now resumes from saved byte offsets within the advertised snapshot, even when the original log grows during an exchange. Older companion and mobile versions remain compatible.
-- Diagnostic events identify the day, stored progress, completion of the advertised range, and rejected duplicate chunks, making interrupted exchanges easier to investigate.
-- Collection diagnostics identify the selected device transport. An error reported by a successfully exited helper is now described as a reported error instead of an exit-code-zero failure.
-]]></description>
-            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.28/MochiLog-Mac-Beta.dmg" length="117988230" type="application/octet-stream" sparkle:edSignature="aRuchzZpG+ommmafZ1ToCH1OH1NC8NHLKsKksi0PvFrrw4mYqi3zv0ujd+GH7WmL9csDEypl1dCnDRn7eBl8Bg=="/>
-        </item>
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: ARZo1t/XAes+C30QG6rifqqTMktoJCT3Xvq8UqKMNCAgpnK9F3633/Dl/G/IAxt5F564DqHg1D7N2A0ni5ySAQ==
-length: 7956
+edSignature: 8o7VExOpQ+sxA5PMpySiE/YB1IHV0wW86QIx/Xflw9c7YcoNlBAi0pGDBba+k4sFCmRpXhhgcjNpKPMuJQT7Dw==
+length: 8470
 -->
