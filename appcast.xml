@@ -6,6 +6,32 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>MochiLog Mac</title>
         <item>
+            <title>0.2.32</title>
+            <pubDate>Sat, 26 Sep 2026 02:20:52 +0900</pubDate>
+            <sparkle:version>35</sparkle:version>
+            <sparkle:shortVersionString>0.2.32</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>27.0</sparkle:minimumSystemVersion>
+            <description sparkle:format="markdown"><![CDATA[# MochiLog Mac 0.2.32 Beta
+
+## 日本語
+
+外出・ロックなどでログを読み取れなかった後、ファイル別の待機時間と5分ごとの収集がずれ、次の回を逃す問題を修正しました。取得に失敗したファイルは、次の収集で再試行できます。過去の日付の取得失敗にも追加の30分待ちを設定しません。
+
+同じ保存元への連続した読み取り拒否を、その収集中だけ抑える仕組みは維持します。最初に試すファイルを保存元ごとに交代し、1つの読めないファイルで他の日付まで止まらないようにしました。その後は新しい日付のログを優先します。
+
+既にダウンロードしたものの内容をまだ判定できないファイルの再確認待ち、当日分がそろった後の自動休止、重複防止と既存ペアリングは維持します。旧版が残した待機値は元の期限まで残る場合があります。自動収集は5分ごとです。帰宅直後の即時取得を保証する変更ではありません。
+
+## English
+
+Fixed an extra retry delay caused by a per-file failure cooldown drifting past the five-minute collection timer. Failed downloads are eligible on the next collection attempt, including historical files that previously received a further thirty-minute cooldown.
+
+Repeated permission-denied reads from the same source are still held for the current collection only. Each host/accessory rotates its initial probe through untried or least recently attempted reports; the remaining files keep their daily priority. A permanently unreadable first report no longer hides every other date.
+
+Downloaded-but-unclassified content keeps its separate recheck interval. Daily completion stops, duplicate prevention and existing pairings remain compatible. Pre-existing retry deadlines retain their original expiry. Automatic collection still runs every five minutes; this does not guarantee an immediate collection on arriving home.
+]]></description>
+            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.32/MochiLog-Mac-Beta.dmg" length="123194137" type="application/octet-stream" sparkle:edSignature="oUU9I5N961oGW6pQoCaJTkRf5k775eCivaUfWDZtWZhqyyztabIqJBNcjzTiBwg1vtrH0GRs9L5v7qZgo+sLCA=="/>
+        </item>
+        <item>
             <title>0.2.31</title>
             <pubDate>Sat, 26 Sep 2026 02:20:52 +0900</pubDate>
             <sparkle:version>34</sparkle:version>
@@ -61,33 +87,9 @@ Settings now includes **Release screen memory in the background**, enabled by de
 ]]></description>
             <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.30/MochiLog-Mac-Beta.dmg" length="117129322" type="application/octet-stream" sparkle:edSignature="T1Sb6fgN5ESHmpq+DLrsyl4wKDlKdVyKaWF3kQ3E2N2ZXyzpIVu4gjgfzoa5UAHS8REC26yCc7V63CyZ/m6tBQ=="/>
         </item>
-        <item>
-            <title>0.2.29</title>
-            <pubDate>Sat, 26 Sep 2026 02:20:52 +0900</pubDate>
-            <sparkle:version>32</sparkle:version>
-            <sparkle:shortVersionString>0.2.29</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>27.0</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[# MochiLog Mac 0.2.29 Beta
-
-## 日本語
-
-- Macのネイティブ診断経路が使えないとき、スマホから暗号化して受け取ったLAN候補をOSの既存ペアリングで認証して試します。IP変更やVPNによる転送元と診断先の違いを区別します。
-- 取得失敗や再試行待ちがある場合に、復旧・完了と誤って表示しないよう修正しました。待機件数の表示は8言語に対応しています。
-- 新しい接続先通知にはMochiLog 4.0.0ベータ1057が必要です。古い版との通信と既存のペアリングは維持されます。
-- 端末はログ収集中にロック解除が必要です。ログが未生成の場合やOSが読み取りを拒否する場合まで解決したことを意味しません。
-
-## English
-
-- When the native Mac diagnostic route is unavailable, authenticated, encrypted LAN hints from the mobile app provide fallback endpoints, each verified with the existing OS pairing record.
-- Failed downloads, deferred classification and retry waiting no longer count as recovery or completed acquisition. Waiting counts are localized in all eight languages.
-- New endpoint hints require MochiLog 4.0.0 beta 1057. Existing pairings and communication with older versions are retained.
-- Mobile devices must be unlocked for log collection. This update does not bypass OS access restrictions or generate missing Analytics logs.
-]]></description>
-            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.29/MochiLog-Mac-Beta.dmg" length="117239562" type="application/octet-stream" sparkle:edSignature="3IgNUFeGid3NB7d756/oBRCnJzhHLFXg1vJKYS7ajdST528u8aPLF1Er8sNL2ePKiNyIYs81sLLLvZ2MEx//BA=="/>
-        </item>
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: 8o7VExOpQ+sxA5PMpySiE/YB1IHV0wW86QIx/Xflw9c7YcoNlBAi0pGDBba+k4sFCmRpXhhgcjNpKPMuJQT7Dw==
-length: 8470
+edSignature: x3EsdtJmzOZC6eSpW1bithCd9u5DB+E+maVn3lX04t8zKyinriewzJLdmSQ/oEaM/F8GuvBKyRvAZR+fE7BIDQ==
+length: 9065
 -->
