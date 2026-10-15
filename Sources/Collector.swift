@@ -508,8 +508,8 @@ enum Collector {
     return now.addingTimeInterval(currentDay ? 5 * 60 : 30 * 60)
   }
 
-  // Failed reads never become delivered/excluded. Use the same daily policy
-  // as incomplete reports so an old, inaccessible file cannot dominate every poll.
+  // Permission errors hold only this source during the current collection.
+  // Failed reads remain pending for the next outer-scheduler attempt.
   static func readPermissionDenied(_ message: String) -> Bool {
     message.range(of: #"FILE_OPEN failed with status:\s*10\b|\bPERM_DENIED\b"#,
       options: [.regularExpression, .caseInsensitive]) != nil
@@ -527,6 +527,24 @@ enum Collector {
       if $0.name != $1.name { return $0.name > $1.name }
       return ($0.source ?? "") < ($1.source ?? "")
     }
+  }
+
+  // Probe an untried file (or the least recently attempted file) per source.
+  // Keep the remaining files in daily priority order. One permanently denied
+  // report must not hide every other day when no file-level cooldown is used.
+  static func readProbeOrder(_ files: [RemoteLog], attempts: [String: Date]) -> [RemoteLog] {
+    var sources: [String] = []
+    for file in files where !sources.contains(file.source ?? "host") { sources.append(file.source ?? "host") }
+    var probes: [RemoteLog] = []
+    for source in sources {
+      let candidates = files.filter { ($0.source ?? "host") == source }
+      let probe = candidates.first { attempts[$0.token] == nil } ?? candidates.min {
+        (attempts[$0.token] ?? .distantPast) < (attempts[$1.token] ?? .distantPast)
+      }
+      if let probe { probes.append(probe) }
+    }
+    let tokens = Set(probes.map(\.token))
+    return probes + files.filter { !tokens.contains($0.token) }
   }
 
   static func recordCandidateListing(_ files: [RemoteLog], deviceName: String) {
@@ -706,7 +724,7 @@ enum Collector {
     var rechecks = rechecks(for: device)
     var observations = observations(for: device)
     let now = Date()
-    let newFiles = prioritizedCandidates(remoteFiles.filter { remote in
+    let newFiles = readProbeOrder(prioritizedCandidates(remoteFiles.filter { remote in
       let name = remote.name
       guard name.range(of: #"^Analytics-[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{6}.*\.ips\.ca\.synced$"#,
         options: .regularExpression) != nil else { return false }
@@ -723,7 +741,7 @@ enum Collector {
       return ![host, watch].compactMap { $0 }.contains {
         FileManager.default.fileExists(atPath: $0.path)
       }
-    }, rechecked: Set(rechecks.keys))
+    }, rechecked: Set(rechecks.keys)), attempts: rechecks)
     var retryHeld = remoteFiles.filter { (rechecks[$0.token] ?? .distantPast) > now }.count
     SupportDiagnostics.record("\(device.name): diagnostic listing ready; hostCandidates=\(remoteFiles.filter { $0.source == nil }.count); proxyCandidates=\(remoteFiles.filter { $0.source != nil }.count); downloadDue=\(newFiles.count); retryHeld=\(retryHeld)")
     progress?(0, newFiles.count)
@@ -866,10 +884,12 @@ enum Collector {
         failed += 1
         lastError = error.localizedDescription
         if readPermissionDenied(error.localizedDescription) { deniedSources.insert(remote.source ?? "host") }
-        let retryAt = unclassifiedRetryAt(name: name)
-        rechecks[remote.token] = retryAt
+        // The outer scheduler already limits automatic collection to five
+        // minutes. A second failure cooldown can miss the next timer by seconds.
+        // Persist the attempt for probe rotation, without delaying the next poll.
+        rechecks[remote.token] = Date()
         try saveRechecks(rechecks, for: device)
-        SupportDiagnostics.record("\(device.name): battery candidate download failed; file=\(name); source=\(remote.source ?? "host"); retry=\(SupportDiagnostics.localTime(retryAt)); error=\(stableDiagnostic(error.localizedDescription))")
+        SupportDiagnostics.record("\(device.name): battery candidate download failed; file=\(name); source=\(remote.source ?? "host"); retry=next collection; fileCooldown=false; error=\(stableDiagnostic(error.localizedDescription))")
       }
       progress?(index + 1, newFiles.count)
     }

@@ -325,7 +325,7 @@ struct TransferProtocolTests {
     let device = PairedDevice(udid: "test-iphone", name: "Test iPhone",
       model: "iPhone18,3", physicalDeviceID: UUID(),
       secret: Data((0..<32).map { UInt8($0) }))
-    print("Checking daily priority and persistent failed-file retry without exclusion")
+    print("Checking daily priority and recovery without a second failure cooldown")
     let failureDevice = PairedDevice(udid: "failed-file-fixture", name: "Retry fixture",
       model: "iPhone18,3", physicalDeviceID: UUID(), secret: device.secret)
     let fileDay = DateFormatter()
@@ -360,26 +360,41 @@ struct TransferProtocolTests {
     let retryURL = Collector.root.appendingPathComponent("recheck-\(failureDevice.physicalDeviceID.uuidString).json")
     var restoredRetries = try JSONDecoder().decode([String: Date].self, from: Data(contentsOf: retryURL))
     let pastRetryToken = "Host::\(pastName)"
-    try check(restoredRetries[pastRetryToken]!.timeIntervalSinceNow > 29 * 60 &&
+    try check(restoredRetries[pastRetryToken]!.timeIntervalSinceNow <= 0 &&
       !Collector.delivered(for: failureDevice).contains(pastRetryToken),
-      "A denied file lost its retry time or was marked delivered")
-    let pullCount = pullNames.count
-    let heldRetryReport = try Collector.collect(failureDevice, runCommand: mockPull)
-    try check(heldRetryReport.failed == 0 && heldRetryReport.retryHeld == 1 &&
-      !heldRetryReport.acquisitionComplete && pullNames.count == pullCount,
-      "Persistent backoff did not protect the next collection")
-    SupportDiagnostics.saveCollection(heldRetryReport, error: nil, for: failureDevice)
-    let heldSupport = try JSONSerialization.jsonObject(with: Data(contentsOf:
-      Collector.root.appendingPathComponent("support-\(failureDevice.physicalDeviceID.uuidString)-collection.json"))) as! [String: Any]
-    try check(heldSupport["result"] as? String == "partial_failure" && heldSupport["retryHeld"] as? Int == 1,
-      "The support report described a held retry as completed")
-    restoredRetries[pastRetryToken] = .distantPast
-    try JSONEncoder().encode(restoredRetries).write(to: retryURL, options: .atomic)
+      "Failed download added another cooldown or was marked delivered")
     recover = true
     let recoveredReport = try Collector.collect(failureDevice, runCommand: mockPull)
     restoredRetries = try JSONDecoder().decode([String: Date].self, from: Data(contentsOf: retryURL))
     try check(recoveredReport.saved == 1 && recoveredReport.acquisitionComplete && restoredRetries[pastRetryToken] == nil,
-      "A readable file could not recover after the retry interval")
+      "Recovered source missed the next collection while waiting for a file timer")
+    let contentFixture = PairedDevice(udid: "content-wait", name: "Content wait", model: "iPad16,6",
+      physicalDeviceID: UUID(), secret: device.secret)
+    var contentPulls = 0
+    let contentMock: ([String], TimeInterval) throws -> String = { args, _ in
+      if args.prefix(2) == ["crash", "ls"] {
+        return args.contains("/Retired") ? "/Retired/\(todayName)" : "/Retired"
+      }
+      contentPulls += 1
+      try Data(String(repeating: "unrelated diagnostic value\n", count: 1000).utf8)
+        .write(to: URL(fileURLWithPath: args[2]).appendingPathComponent(todayName))
+      return ""
+    }
+    let contentFirst = try Collector.collect(contentFixture, runCommand: contentMock)
+    let contentHeld = try Collector.collect(contentFixture, runCommand: contentMock)
+    try check(contentFirst.deferred == 1 && contentHeld.retryHeld == 1 && contentPulls == 1,
+      "Failure recovery disabled content recheck protection")
+    SupportDiagnostics.saveCollection(contentHeld, error: nil, for: contentFixture)
+    let heldSupport = try JSONSerialization.jsonObject(with: Data(contentsOf:
+      Collector.root.appendingPathComponent("support-\(contentFixture.physicalDeviceID.uuidString)-collection.json"))) as! [String: Any]
+    try check(heldSupport["result"] as? String == "partial_failure" && heldSupport["retryHeld"] as? Int == 1,
+      "The support report described a held content recheck as completed")
+    let probeFiles = Collector.prioritizedCandidates([
+      RemoteLog(path: "/Retired/" + todayName, source: nil),
+      RemoteLog(path: "/Retired/" + pastName, source: nil)])
+    let rotatedProbe = Collector.readProbeOrder(probeFiles, attempts: ["Host::" + todayName: Date()])
+    try check(rotatedProbe.map(\.name) == [pastName, todayName],
+      "A permanently denied current file starved an untried previous day")
     print("Checking independent diagnostic routes, address changes and expired hints")
     let routeDevice = PairedDevice(udid: "route-fixture", name: "Route fixture", model: "iPad16,6",
       physicalDeviceID: UUID(), secret: device.secret)
@@ -425,7 +440,7 @@ struct TransferProtocolTests {
       Collector.root.appendingPathComponent("recheck-\(directFixture.physicalDeviceID.uuidString).json")))
     try check(batchReport.failed == 1 && batchReport.retryHeld == 1 && !batchReport.acquisitionComplete &&
       batchReport.lastError?.contains("status: 10") == true &&
-      batchRetries["Host::\(todayName)"]!.timeIntervalSinceNow < 301 && batchRetries[pastRetryToken] == nil &&
+      batchRetries["Host::\(todayName)"]!.timeIntervalSinceNow <= 0 && batchRetries[pastRetryToken] == nil &&
       Collector.delivered(for: directFixture).isEmpty,
       "A denied source retried all files, lost its cause or excluded an unattempted file")
     try check(Collector.readPermissionDenied("FILE_OPEN failed with status: 10: None") &&
@@ -457,8 +472,6 @@ struct TransferProtocolTests {
     try check(gated.failed == 1 && gated.retryHeld == 1 && gated.saved == 1 &&
       sourcePulls.count == 2 && sourcePulls.contains("/\(gateWatchSource)/Retired/\(todayName)"),
       "Host permission denial blocked Watch or tried the same source again")
-    let gateRetryURL = Collector.root.appendingPathComponent("recheck-\(sourceFixture.physicalDeviceID.uuidString).json")
-    try JSONEncoder().encode(["Host::" + todayName: Date.distantPast]).write(to: gateRetryURL)
     sourcePulls.removeAll()
     let nextProbe = try Collector.collect(sourceFixture, runCommand: sourceMock)
     try check(nextProbe.saved == 1 && sourcePulls.first == "/Retired/" + anotherToday,
