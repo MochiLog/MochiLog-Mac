@@ -21,3 +21,9 @@ The compiled transport returns bounded listingFailures metadata. Swift and C# pr
 The new helper field is additive; native readers accept older helper output without that field. Existing pairing identities, request encryption, replay rejection, preflight deduplication, ACK, daily completion and mobile transfer formats are unchanged. Python remains only the maintained transport adapter; report selection and application policy remain native.
 
 Regression checks reproduce an inaccessible archive with readable current Watch data, an unavailable current directory with an independent archived listing, omitted optional archive folders, a partial result with no pending downloads, and recovery on the next collection. The complete native Mac suite and complete Release suite on the physical Windows PC passed, along with all ten Python tests in each repository. Physical installed-build verification and release artifact results are recorded below after packaging.
+
+## Mac packaging and physical verification
+
+Mac 0.2.33 (36) passed the final native suite, including older-summary decoding. The fully recompiled helper passed standalone checks both before and after Developer ID signing, with Python paths deliberately unavailable. Apple accepted and stapled both the app and DMG. The physical Mac was updated with graceful termination and an atomic app swap; both paired identities were preserved. The new helper successfully read the iPhone's OS diagnostic root, and daily suspension after the stored host/Watch reports remained active. The iPad's Mac route remained unavailable, so no claim of new physical iPad acquisition is made. Its partial-directory failure cases were verified with controlled regression fixtures.
+
+DMG: 124023853 bytes; SHA-256 0dab07a6ab582acab061d1a5de3b3c95f6d81493b35cb950bdd263572a9c4f48.
