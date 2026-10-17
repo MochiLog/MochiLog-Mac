@@ -6,6 +6,32 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>MochiLog Mac</title>
         <item>
+            <title>0.2.33</title>
+            <pubDate>Sat, 26 Sep 2026 02:20:52 +0900</pubDate>
+            <sparkle:version>36</sparkle:version>
+            <sparkle:shortVersionString>0.2.33</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>27.0</sparkle:minimumSystemVersion>
+            <description sparkle:format="markdown"><![CDATA[# MochiLog Mac 0.2.33
+
+## 日本語
+
+- Apple Watchの古いログ用フォルダを確認できなくても、現在のログ用フォルダから取得を続けるよう改善しました。
+- 一部のログ一覧を確認できなかった場合は、取得できたログを保存し、残りは次回自動で再試行します。未確認の一覧があるのに取得完了と表示される問題を修正しました。
+- 一覧取得の失敗をファイル取得の失敗と分けて診断ログに記録します。接続が戻った後の再試行間隔は延ばしていません。
+- 既存のペアリングを引き継ぎます。暗号化、再送防止、受信済みログの事前確認、確認応答の仕組みは維持しています。
+- 新しい案内を8言語に対応させました。
+
+## English
+
+- Current Apple Watch reports can still be collected when their archive directory is unavailable.
+- Available reports are saved even if another directory cannot be checked. Unchecked directories are retried automatically, and partial listings no longer appear as completed acquisition.
+- Diagnostic logs now distinguish directory-listing failures from file-download failures. The normal retry interval has not been extended.
+- Existing pairings are retained. Encryption, replay protection, duplicate preflight checks and receipt acknowledgements are unchanged.
+- The new partial-result explanation is available in all eight supported languages.
+]]></description>
+            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.33/MochiLog-Mac-Beta.dmg" length="124023853" type="application/octet-stream" sparkle:edSignature="FrzBh0xw9zeZUZlIlpq78UznHvq2KBjb+cnpQEdk5zoNIJYcevGBCk+X3OsHyh6VjnTDCp8cea020Qk2w4/jDw=="/>
+        </item>
+        <item>
             <title>0.2.32</title>
             <pubDate>Sat, 26 Sep 2026 02:20:52 +0900</pubDate>
             <sparkle:version>35</sparkle:version>
@@ -57,39 +83,9 @@ Activity logs record source read-gate triggers, held counts and retry decisions.
 ]]></description>
             <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.31/MochiLog-Mac-Beta.dmg" length="123239161" type="application/octet-stream" sparkle:edSignature="1/RL6xSeYWNecO1Ot1jEGxeg/J8upszsM6DgB9exFO4IYIH7ueXDQxv4e89UO7Qpmh10lXNyGC7Fw1/leGjtBw=="/>
         </item>
-        <item>
-            <title>0.2.30</title>
-            <pubDate>Sat, 26 Sep 2026 02:20:52 +0900</pubDate>
-            <sparkle:version>33</sparkle:version>
-            <sparkle:shortVersionString>0.2.30</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>27.0</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[# MochiLog Mac 0.2.30 Beta
-
-## 日本語
-
-診断情報をSwiftで定期的に生成・保存する仕組みを追加しました。アプリのメモリ使用量、実行中の端末通信ツール数、端末ごとの接続候補、収集結果と直近の動作を記録し、サポートの添付にも含めます。件数・文字数・サイズに上限を設け、診断ファイルを読み込む前にもサイズを制限します。
-
-端末通信ツールの実行時間、出力量、メモリ使用量の監視を強化しました。時間切れ、キャンセル、出力超過時には関連するプロセスを止め、親プロセスの終了後に子プロセスだけが残るケースにも対応します。現在のバッテリー取得やペアリングにも適用しています。
-
-サポートの添付準備をバックグラウンドへ移し、日付別ログは丸ごとメモリに読み込まずファイルとしてコピーします。既存のペアリング、未転送ログ、スマホとの通信方式は維持されます。
-
-設定に「常駐時に画面のメモリを解放」を追加しました。初期設定はオンです。画面を閉じる・最小化する・アプリを隠すと画面を破棄し、再表示時に直前のページを作り直します。入力途中のフォームはリセットされます。オフにするとこの画面破棄を行いません。収集・転送は継続します。設定と説明は8言語に対応しています。
-
-## English
-
-Swift now produces bounded diagnostic snapshots automatically, covering process memory, active device helpers, per-device connection candidates, collection results and recent activity. Fresh snapshots are included in support attachments. Report counts, text lengths and total size are bounded, and diagnostic files are capped before decoding.
-
-Device helpers now share supervised execution with runtime, output and memory checks. Timeout, cancellation and output overflow stop the owned process group, including descendants that retain output pipes after their parent exits. The same supervision covers live battery queries and pairing.
-
-Support attachments are prepared off the UI thread, with daily archives copied directly instead of loaded and re-encoded in memory. Existing pairings, pending battery logs and mobile protocol compatibility are preserved.
-
-Settings now includes **Release screen memory in the background**, enabled by default. Closing, minimizing or hiding the window discards its screen; reopening rebuilds the last page. Unsubmitted forms reset. Turn it off to disable this explicit screen teardown. Background collection and transfers continue. The setting and explanation support all eight languages.
-]]></description>
-            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.30/MochiLog-Mac-Beta.dmg" length="117129322" type="application/octet-stream" sparkle:edSignature="T1Sb6fgN5ESHmpq+DLrsyl4wKDlKdVyKaWF3kQ3E2N2ZXyzpIVu4gjgfzoa5UAHS8REC26yCc7V63CyZ/m6tBQ=="/>
-        </item>
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: x3EsdtJmzOZC6eSpW1bithCd9u5DB+E+maVn3lX04t8zKyinriewzJLdmSQ/oEaM/F8GuvBKyRvAZR+fE7BIDQ==
-length: 9065
+edSignature: 7ARH1Qp0kEiQcb7/6Yv2FdxTqyM5D1FLygwXej4AdSj+4CH70EmzEq+F1TnWuHDEQldJj1Fo3mPdOB07kN8+Ag==
+length: 7783
 -->
