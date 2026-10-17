@@ -66,6 +66,34 @@ class DiagnosticBridgeTests(unittest.IsolatedAsyncioTestCase):
         result = await self.scan({"/": ["/Retired", "/ProxiedDevice-abc"], "/Retired": [name],
             "/ProxiedDevice-abc/Retired": TimeoutError(), "/ProxiedDevice-abc": TimeoutError()})
         self.assertIn({"path": name, "source": None}, result["files"])
+        self.assertEqual(len(result["listingFailures"]), 2)
+
+    async def test_failed_retired_preserves_current_watch(self):
+        source = "/ProxiedDevice-abc"
+        name = source + "/Analytics-2026-10-17-090007.ips.ca.synced"
+        result = await self.scan({"/": ["/Retired", source], "/Retired": [],
+            source: [source + "/Retired", name], source + "/Retired": TimeoutError("expired")})
+        self.assertIn({"path": name, "source": source[1:]}, result["files"])
+        self.assertEqual(result["listingFailures"][0]["directory"], source + "/Retired")
+
+    async def test_optional_retired_not_advertised(self):
+        source = "/ProxiedDevice-abc"
+        result = await self.scan({"/": [source], source: []})
+        self.assertEqual(result["listingFailures"], [])
+
+    async def test_failed_current_still_checks_archived_watch(self):
+        source = "/ProxiedDevice-abc"
+        name = source + "/Retired/Analytics-2026-10-17-090007.ips.ca.synced"
+        result = await self.scan({"/": [source], source: TimeoutError("current"),
+            source + "/Retired": [name]})
+        self.assertIn({"path": name, "source": source[1:]}, result["files"])
+        self.assertEqual(len(result["listingFailures"]), 1)
+
+    async def test_host_retired_failure_keeps_current_host(self):
+        name = "/Analytics-2026-10-17-090007.ips.ca.synced"
+        result = await self.scan({"/": ["/Retired", name], "/Retired": TimeoutError("late")})
+        self.assertIn({"path": name, "source": None}, result["files"])
+        self.assertIsNone(result["listingFailures"][0]["source"])
 
 if __name__ == "__main__":
     unittest.main()

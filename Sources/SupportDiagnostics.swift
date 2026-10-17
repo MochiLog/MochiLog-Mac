@@ -241,6 +241,7 @@ enum SupportDiagnostics {
       "deferred": report?.deferred ?? 0,
       "failed": report?.failed ?? 0,
       "retryHeld": report?.retryHeld ?? 0,
+      "listingFailures": report?.listingFailures ?? 0,
       "acquisitionComplete": report?.acquisitionComplete ?? false
     ]
     if let newest = report?.newestHostAnalyticsAt {

@@ -36,3 +36,7 @@ Screen state creation/destruction and allocator relief are logged. After a compl
 The macOS 27.2 integration check also exercises window hiding, minimizing and app hiding on the overview, settings and current-battery pages. The child hosting controller is created outside the enclosing SwiftUI update transaction so its graph has an independent lifetime. A minimal local probe reproduced retained state with the native `.link` button style; text actions use a custom SwiftUI ButtonStyle to avoid that path. No private AppKit/SwiftUI API is used.
 
 Final physical-Mac report at 2026-10-14 05:00 JST: all three screen-state release/recreation checks passed (overview/window hide, settings/minimize, current battery/app hide), and disabling teardown retained the same state. Window minimization is checked after its actual animation completes. All saved preferences are restored. Resident memory includes shared framework/graphics caches and need not immediately drop by the amount of freed screen allocations.
+
+## Incomplete directory listings (2026-10-17)
+
+Collection summaries now include an additive listingFailures count. A directory that could not be checked is distinct from a failed file download or a successfully checked empty directory. Partial listings retain available reports, stay incomplete and are retried by the existing scheduler. Per-directory errors and final counts enter the activity log. Older saved summaries without the new field still decode; the snapshot schema and encrypted mobile protocol are unchanged.

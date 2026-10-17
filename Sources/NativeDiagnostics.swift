@@ -23,6 +23,7 @@ enum NativeDiagnostics {
     var result: String
     var saved, excluded, deferred, failed, retryHeld: Int
     var acquisitionComplete: Bool
+    var listingFailures: Int? = nil
   }
   struct Device: Codable {
     let physicalDeviceID: UUID

@@ -46,22 +46,21 @@ async def run(arguments: argparse.Namespace) -> None:
                 root = await asyncio.wait_for(reports.ls("/", depth=1), timeout=30)
                 if not root:
                     raise RuntimeError("Diagnostic root listing is empty")
-                directories = [("/Retired", None), ("/", None)]
-                for entry in root:
-                    if re.fullmatch(r"/ProxiedDevice-[a-fA-F0-9]+", entry):
-                        directories.extend(((entry + "/Retired", entry[1:]), (entry, entry[1:])))
                 files = []
+                failures = []
                 seen = set()
-                for directory, source in directories:
-                    phase = "host listing" if source is None else "accessory listing"
+
+                async def add_directory(directory, source, cached=None):
                     try:
-                        entries = root if directory == "/" else await asyncio.wait_for(
+                        entries = cached if cached is not None else await asyncio.wait_for(
                             reports.ls(directory, depth=1), timeout=60
                         )
-                    except Exception:
-                        if source is None:
-                            raise
-                        continue
+                    except Exception as error:
+                        if len(failures) >= 128:
+                            raise ValueError("Diagnostic listing failures exceed limit") from error
+                        failures.append({"directory": directory, "source": source,
+                            "error": f"{type(error).__name__}: {error}"[:200]})
+                        return None
                     for entry in entries:
                         # Selection and deduplication belong to Swift/C#. This
                         # bridge only describes files exposed by the library.
@@ -71,7 +70,21 @@ async def run(arguments: argparse.Namespace) -> None:
                             files.append({"path": entry, "source": source})
                         if len(files) > 10000:
                             raise ValueError("Diagnostic listing exceeds limit")
-                print(json.dumps({"files": files}))
+                    return entries
+
+                # Read independent directories independently. A failed archive
+                # listing must not hide today's current host or Watch reports.
+                await add_directory("/", None, root)
+                if "/Retired" in root:
+                    await add_directory("/Retired", None)
+                for entry in root:
+                    if re.fullmatch(r"/ProxiedDevice-[a-fA-F0-9]+", entry):
+                        phase = "accessory listing"
+                        current = await add_directory(entry, entry[1:])
+                        retired = entry + "/Retired"
+                        if current is None or retired in current:
+                            await add_directory(retired, entry[1:])
+                print(json.dumps({"files": files, "listingFailures": failures}))
             elif arguments.action == "pull-batch":
                 phase = "diagnostic batch download"
                 with open(arguments.manifest, encoding="utf-8") as stream:

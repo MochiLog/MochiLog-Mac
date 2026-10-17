@@ -16270,6 +16270,59 @@
           }
         }
       }
+    },
+    "mt_collection_listing_incomplete": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Some log lists could not be checked. Available logs were saved; the remaining lists will be retried automatically."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "一部のログ一覧を確認できませんでした。確認できたログは保存し、残りは次回自動で再試行します。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einige Protokolllisten konnten nicht geprüft werden. Verfügbare Protokolle wurden gespeichert; die übrigen Listen werden automatisch erneut geprüft."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudieron consultar algunas listas de registros. Se guardaron los registros disponibles; las listas restantes se volverán a consultar automáticamente."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Certaines listes de journaux n’ont pas pu être consultées. Les journaux disponibles ont été enregistrés ; les autres listes seront vérifiées à nouveau automatiquement."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "일부 로그 목록을 확인하지 못했습니다. 확인된 로그는 저장했으며 나머지 목록은 다음에 자동으로 다시 확인합니다."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "部分日志列表无法检查。已保存可用日志，其余列表将在下次自动重试。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "部分日誌列表無法檢查。已儲存可用日誌，其餘列表將在下次自動重試。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

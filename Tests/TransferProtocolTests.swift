@@ -184,6 +184,10 @@ struct TransferProtocolTests {
   static func main() throws {
     if NativeDiagnosticTests.fixture() { return }
     try NativeDiagnosticTests.run()
+    let oldCollection = try JSONDecoder().decode(NativeDiagnostics.Collection.self, from: Data(
+      #"{"result":"completed","saved":1,"excluded":0,"deferred":0,"failed":0,"retryHeld":0,"acquisitionComplete":true}"#.utf8))
+    try check(oldCollection.listingFailures == nil && oldCollection.acquisitionComplete,
+      "An older native collection snapshot no longer loads")
     try check(LocalDiagnosticsPairing.identifier(hostname: "MixedCase-Mac.local") == "A4374A9C-4036-30DE-AD77-D8C2176D6D2F",
       "Existing Python UUIDv3 pairing identity must preserve hostname case")
     try check(LocalDiagnosticsPairing.identifier(hostname: "MixedCase-Mac.local") != LocalDiagnosticsPairing.identifier(hostname: "mixedcase-mac.local"),
@@ -446,6 +450,43 @@ struct TransferProtocolTests {
     try check(Collector.readPermissionDenied("FILE_OPEN failed with status: 10: None") &&
       Collector.readPermissionDenied("PERM_DENIED") && !Collector.readPermissionDenied("FILE_OPEN failed with status: 100") &&
       !Collector.readPermissionDenied("TimeoutError 10 seconds"), "Read denial classification is too broad")
+    print("Checking independent current/archive listings and partial-list recovery")
+    let partialFixture = PairedDevice(udid: "partial-list", name: "Partial list", model: "iPhone18,3",
+      physicalDeviceID: UUID(), secret: device.secret)
+    let partialSource = "ProxiedDevice-ac12"
+    var listingRecovered = false
+    let partialMock: ([String], TimeInterval) throws -> String = { args, _ in
+      let path = args[args.firstIndex(of: "--remote-file")! + 1]
+      if args.prefix(2) == ["crash", "ls"] {
+        if path == "/" { return "/Retired\n/\(todayName)\n/\(partialSource)" }
+        if path == "/Retired" { return "" }
+        if path == "/\(partialSource)" { return "\(path)/Retired\n\(path)/\(todayName)" }
+        if listingRecovered { return "" }
+        throw CollectorError.failed("Accessory archive temporarily unavailable")
+      }
+      let data = path.contains(partialSource) ? Data(("{\"os_version\":\"watchOS 27.2\"}\n" + String(repeating:
+        "last_value_CycleCount last_value_NominalChargeCapacity last_value_AppleRawMaxCapacity\n", count: 120)).utf8) : fixtureBody
+      try data.write(to: URL(fileURLWithPath: args[2]).appendingPathComponent(URL(fileURLWithPath: path).lastPathComponent))
+      return ""
+    }
+    let partialReport = try Collector.collect(partialFixture, runCommand: partialMock)
+    try check(partialReport.saved == 2 && partialReport.failed == 0 && partialReport.listingFailures == 1 &&
+      !partialReport.acquisitionComplete && partialReport.lastError != nil,
+      "An unreadable archive hid the current Watch report or falsely completed acquisition")
+    let stillPartial = try Collector.collect(partialFixture, runCommand: partialMock)
+    try check(stillPartial.saved == 0 && stillPartial.listingFailures == 1 && !stillPartial.acquisitionComplete,
+      "An empty pending queue hid an incomplete listing")
+    listingRecovered = true
+    let listingRestored = try Collector.collect(partialFixture, runCommand: partialMock)
+    try check(listingRestored.acquisitionComplete && listingRestored.listingFailures == 0,
+      "A transient listing error persisted after recovery")
+    let incompleteDirect = PairedDevice(udid: "partial-direct", name: "Partial direct", model: "iPhone18,3",
+      physicalDeviceID: UUID(), secret: device.secret, manualAddress: "127.0.0.1")
+    let directPartial = try Collector.collect(incompleteDirect, runCommand: { _, _ in
+      #"{"files":[],"listingFailures":[{"directory":"/ProxiedDevice-ac12","source":"ProxiedDevice-ac12","error":"TimeoutError"}]}"#
+    })
+    try check(directPartial.listingFailures == 1 && !directPartial.acquisitionComplete,
+      "Direct helper listing failures were discarded")
     print("Checking source-scoped permission gate, Watch isolation and probe rotation")
     let sourceFixture = PairedDevice(udid: "source-gate", name: "Source gate", model: "iPhone18,3",
       physicalDeviceID: UUID(), secret: device.secret)
@@ -458,6 +499,7 @@ struct TransferProtocolTests {
         if path == "/" { return "/Retired\n/\(gateWatchSource)" }
         if path == "/Retired" { return "/Retired/\(todayName)\n/Retired/\(anotherToday)" }
         if path == "/\(gateWatchSource)/Retired" { return path + "/" + todayName }
+        if path == "/\(gateWatchSource)" { return path + "/Retired" }
         return ""
       }
       let remote = args[args.firstIndex(of: "--remote-file")! + 1]
