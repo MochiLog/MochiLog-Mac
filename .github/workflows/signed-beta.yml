@@ -22,8 +22,9 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: Build/CompilerCache
-          key: collector-${{ runner.os }}-${{ runner.arch }}-py313-homebrew-${{ hashFiles('requirements-build.txt', '*.py', 'scripts/collector.nuitka-package.config.yml') }}
+          key: collector-${{ runner.os }}-${{ runner.arch }}-py313-homebrew-${{ hashFiles('requirements-build.txt', '*.py', 'scripts/compile-collector.py', 'scripts/collector.nuitka-package.config.yml') }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
+            collector-${{ runner.os }}-${{ runner.arch }}-py313-homebrew-${{ hashFiles('requirements-build.txt', '*.py', 'scripts/compile-collector.py', 'scripts/collector.nuitka-package.config.yml') }}-
             collector-${{ runner.os }}-${{ runner.arch }}-py313-homebrew-
       - name: Install build tools
         run: |
@@ -92,7 +93,7 @@ jobs:
             Build/MochiLog-Mac-Beta.sha256
             Build/UpdateFeed/appcast.xml
           if-no-files-found: error
-          retention-days: 90
+          retention-days: 7
       - uses: actions/upload-artifact@v4
         if: always()
         with:

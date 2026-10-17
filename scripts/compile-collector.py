@@ -20,6 +20,7 @@ def main():
     command = [sys.executable, '-m', 'nuitka', '--mode=standalone',
                '--output-dir=' + str(output), '--output-filename=' + executable,
                '--jobs=' + str(args.jobs), '--low-memory', '--assume-yes-for-downloads',
+               '--show-scons',
                '--python-flag=isolated', '--python-flag=safe_path', '--python-flag=unbuffered',
                '--include-package=pymobiledevice3', '--include-package-data=pymobiledevice3',
                '--include-package=pytun_pmd3', '--include-package-data=pytun_pmd3',
