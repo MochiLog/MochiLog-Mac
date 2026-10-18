@@ -7,6 +7,11 @@ on:
     branches: [main]
     paths: ['*.py', 'requirements-build.txt', 'scripts/**', '.github/workflows/collector.yml']
   workflow_dispatch:
+    inputs:
+      cold_compile:
+        description: Measure a full build with Nuitka caches disabled
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -18,9 +23,11 @@ jobs:
     timeout-minutes: 120
     env:
       NUITKA_CACHE_DIR: ${{ github.workspace }}/Build/CompilerCache
+      MOCHILOG_COLLECTOR_COLD_BUILD: ${{ inputs.cold_compile && '1' || '0' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
+        if: ${{ !inputs.cold_compile }}
         with:
           path: Build/CompilerCache
           # Refresh the immutable cache after each successful compiler run.
@@ -30,12 +37,12 @@ jobs:
             collector-${{ runner.os }}-${{ runner.arch }}-py313-homebrew-
       - name: Install the locally verified Python runtime
         run: brew install python@3.13
+      - name: Select compiler parallelism from runner resources
+        run: '"$(brew --prefix python@3.13)/bin/python3.13" scripts/compiler-resources.py --github-env'
       - name: Verify transport adapters
         run: |
           "$(brew --prefix python@3.13)/bin/python3.13" -m unittest discover -s Tests -p 'test_*.py'
       - name: Compile and verify without a user Python environment
-        env:
-          MOCHILOG_COMPILER_JOBS: '2'
         run: |
           export MOCHILOG_PYTHON_BIN="$(brew --prefix python@3.13)/bin/python3.13"
           bash scripts/build-collector.sh
@@ -46,5 +53,7 @@ jobs:
           path: |
             Build/Nuitka/compilation-report.xml
             Build/collector-build.log
+            Build/compiler-resources.json
+            Build/collector-build-metrics.json
           if-no-files-found: ignore
           retention-days: 14

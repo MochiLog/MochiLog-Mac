@@ -3,6 +3,10 @@ name: Signed beta DMG
 on:
   workflow_dispatch:
     inputs:
+      cold_compile:
+        description: Measure a full build with Nuitka caches disabled
+        type: boolean
+        default: false
       prepare_update_feed:
         description: Prepare a signed update feed artifact without publishing a release
         type: boolean
@@ -17,9 +21,11 @@ jobs:
     timeout-minutes: 120
     env:
       NUITKA_CACHE_DIR: ${{ github.workspace }}/Build/CompilerCache
+      MOCHILOG_COLLECTOR_COLD_BUILD: ${{ inputs.cold_compile && '1' || '0' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
+        if: ${{ !inputs.cold_compile }}
         with:
           path: Build/CompilerCache
           key: collector-${{ runner.os }}-${{ runner.arch }}-py313-homebrew-${{ hashFiles('requirements-build.txt', '*.py', 'scripts/compile-collector.py', 'scripts/collector.nuitka-package.config.yml') }}-${{ github.run_id }}-${{ github.run_attempt }}
@@ -30,6 +36,8 @@ jobs:
         run: |
           brew install xcodegen python@3.13
           fastlane --version
+      - name: Select compiler parallelism from runner resources
+        run: '"$(brew --prefix python@3.13)/bin/python3.13" scripts/compiler-resources.py --github-env'
       - name: Verify native protocol and Python transport
         run: |
           "$(brew --prefix python@3.13)/bin/python3.13" -m unittest discover -s Tests -p 'test_*.py'
@@ -65,7 +73,6 @@ jobs:
           chmod 600 "$RUNNER_TEMP/notary-key.p8"
           export MOCHILOG_NOTARY_KEY_PATH="$RUNNER_TEMP/notary-key.p8"
           export MOCHILOG_PYTHON_BIN="$(brew --prefix python@3.13)/bin/python3.13"
-          export MOCHILOG_COMPILER_JOBS=2
           fastlane mac beta_dmg
           fastlane mac notarize_beta
           xcrun stapler validate 'Build/DerivedData/Build/Products/Release/MochiLog Mac.app'
@@ -101,5 +108,7 @@ jobs:
           path: |
             Build/Nuitka/compilation-report.xml
             Build/collector-build.log
+            Build/compiler-resources.json
+            Build/collector-build-metrics.json
           if-no-files-found: ignore
           retention-days: 14

@@ -2,10 +2,13 @@
 """Compile the maintained device library and adapters; include their runtime."""
 
 import argparse
+import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
 import sys
+import time
 
 
 def main():
@@ -26,7 +29,6 @@ def main():
         "--output-dir=" + str(output),
         "--output-filename=" + executable,
         "--jobs=" + str(args.jobs),
-        "--low-memory",
         "--assume-yes-for-downloads",
         "--show-scons",
         "--python-flag=isolated",
@@ -43,13 +45,32 @@ def main():
         + str(root / "scripts/collector.nuitka-package.config.yml"),
         "--report=" + str(output / "compilation-report.xml"),
     ]
+    low_memory = os.environ.get("MOCHILOG_COMPILER_LOW_MEMORY", "1") != "0"
+    cold_build = os.environ.get("MOCHILOG_COLLECTOR_COLD_BUILD", "0") == "1"
+    if low_memory:
+        command.append("--low-memory")
+    if cold_build:
+        command.append("--disable-cache=all")
     # The CLI queries its own version dynamically. Nuitka handles dependency
     # metadata at the import sites; build-only distributions must not be bundled.
     command.append("--include-distribution-metadata=pymobiledevice3")
     if sys.platform == "win32":
         command += ["--msvc=latest", "--windows-console-mode=force"]
     command.append(str(root / "CollectorEntry.py"))
+    started = time.monotonic()
+    print(
+        json.dumps(
+            {
+                "phase": "native-compile",
+                "jobs": args.jobs,
+                "lowMemory": low_memory,
+                "coldBuild": cold_build,
+            }
+        ),
+        flush=True,
+    )
     subprocess.run(command, cwd=root, check=True)
+    compiled_at = time.monotonic()
     distribution = output / "CollectorEntry.dist"
     if not (distribution / executable).is_file():
         raise SystemExit("Compiled standalone collector was not produced.")
@@ -68,6 +89,18 @@ def main():
         cwd=root,
         check=True,
     )
+    metrics = {
+        "schema": 1,
+        "jobs": args.jobs,
+        "lowMemory": low_memory,
+        "coldBuild": cold_build,
+        "compileSeconds": round(compiled_at - started, 3),
+        "stageAndVerifySeconds": round(time.monotonic() - compiled_at, 3),
+    }
+    (root / "Build/collector-build-metrics.json").write_text(
+        json.dumps(metrics, indent=2) + "\n", encoding="utf-8"
+    )
+    print(json.dumps(metrics), flush=True)
 
 
 if __name__ == "__main__":
