@@ -1,91 +1,44 @@
-<?xml version="1.0" standalone="yes"?>
-<!-- sparkle-sign-warning:
+<?xml version="1.0" standalone="yes"?><!-- sparkle-sign-warning:
 IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
--->
-<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+--><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
     <channel>
         <title>MochiLog Mac</title>
         <item>
-            <title>0.2.33</title>
-            <pubDate>Sat, 26 Sep 2026 02:20:52 +0900</pubDate>
-            <sparkle:version>36</sparkle:version>
-            <sparkle:shortVersionString>0.2.33</sparkle:shortVersionString>
+            <title>0.2.34</title>
+            <pubDate>Sun, 18 Oct 2026 16:15:37 +0000</pubDate>
+            <sparkle:version>37</sparkle:version>
+            <sparkle:shortVersionString>0.2.34</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>27.0</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[# MochiLog Mac 0.2.33
+            <description sparkle:format="markdown"><![CDATA[# MochiLog Mac 0.2.34 Beta
 
 ## 日本語
 
-- Apple Watchの古いログ用フォルダを確認できなくても、現在のログ用フォルダから取得を続けるよう改善しました。
-- 一部のログ一覧を確認できなかった場合は、取得できたログを保存し、残りは次回自動で再試行します。未確認の一覧があるのに取得完了と表示される問題を修正しました。
-- 一覧取得の失敗をファイル取得の失敗と分けて診断ログに記録します。接続が戻った後の再試行間隔は延ばしていません。
-- 既存のペアリングを引き継ぎます。暗号化、再送防止、受信済みログの事前確認、確認応答の仕組みは維持しています。
-- 新しい案内を8言語に対応させました。
+今後の改善を続けやすくするため、内部コードの整形と保守用設定を整えたメンテナンス版です。
+
+- Swift・Pythonの字下げ、長い式や引数の改行を統一し、ソースを読みやすくしました。
+- 既存のペアリング、暗号化転送、受信済み確認、確認応答、ログの保管設定を引き継ぎます。
+- 0.2.33で改善した、Apple Watchの現在のログと古いログ用フォルダを独立して確認する処理を含みます。一部の一覧を読めなくても取得できたログを保存し、未確認分は次回再試行します。
+- 暗号化・再送防止・複数端末の共有条件・確認応答・保管庫の既存テストと、Pythonの回帰テストを確認しました。
+- 配布アプリと同梱の収集ツールはネイティブコンパイル版です。利用者によるPythonなどの環境構築は不要です。
+
+日次解析ログの収集時はiPhone・iPadのロック解除が必要です。
 
 ## English
 
-- Current Apple Watch reports can still be collected when their archive directory is unavailable.
-- Available reports are saved even if another directory cannot be checked. Unchecked directories are retried automatically, and partial listings no longer appear as completed acquisition.
-- Diagnostic logs now distinguish directory-listing failures from file-download failures. The normal retry interval has not been extended.
-- Existing pairings are retained. Encryption, replay protection, duplicate preflight checks and receipt acknowledgements are unchanged.
-- The new partial-result explanation is available in all eight supported languages.
+This maintenance release standardizes internal source formatting and development settings to make future fixes easier to maintain.
+
+- Swift and Python indentation, long expressions and argument lists now follow consistent formatting.
+- Existing pairings, encrypted transfers, received-file checks, acknowledgements and log-storage settings are retained.
+- Includes the 0.2.33 improvements that check current and archived Apple Watch directories independently. Available logs are saved even when another directory cannot be listed, and unchecked work is retried later.
+- Existing encryption, replay protection, multi-device consent, acknowledgement and storage tests, together with Python regression tests, were verified.
+- The app and its bundled collector are native compiled distributions. Users do not need to install Python or configure a development environment.
+
+Daily Analytics collection requires an unlocked iPhone or iPad.
 ]]></description>
-            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.33/MochiLog-Mac-Beta.dmg" length="124023853" type="application/octet-stream" sparkle:edSignature="FrzBh0xw9zeZUZlIlpq78UznHvq2KBjb+cnpQEdk5zoNIJYcevGBCk+X3OsHyh6VjnTDCp8cea020Qk2w4/jDw=="/>
-        </item>
-        <item>
-            <title>0.2.32</title>
-            <pubDate>Sat, 26 Sep 2026 02:20:52 +0900</pubDate>
-            <sparkle:version>35</sparkle:version>
-            <sparkle:shortVersionString>0.2.32</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>27.0</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[# MochiLog Mac 0.2.32 Beta
-
-## 日本語
-
-外出・ロックなどでログを読み取れなかった後、ファイル別の待機時間と5分ごとの収集がずれ、次の回を逃す問題を修正しました。取得に失敗したファイルは、次の収集で再試行できます。過去の日付の取得失敗にも追加の30分待ちを設定しません。
-
-同じ保存元への連続した読み取り拒否を、その収集中だけ抑える仕組みは維持します。最初に試すファイルを保存元ごとに交代し、1つの読めないファイルで他の日付まで止まらないようにしました。その後は新しい日付のログを優先します。
-
-既にダウンロードしたものの内容をまだ判定できないファイルの再確認待ち、当日分がそろった後の自動休止、重複防止と既存ペアリングは維持します。旧版が残した待機値は元の期限まで残る場合があります。自動収集は5分ごとです。帰宅直後の即時取得を保証する変更ではありません。
-
-## English
-
-Fixed an extra retry delay caused by a per-file failure cooldown drifting past the five-minute collection timer. Failed downloads are eligible on the next collection attempt, including historical files that previously received a further thirty-minute cooldown.
-
-Repeated permission-denied reads from the same source are still held for the current collection only. Each host/accessory rotates its initial probe through untried or least recently attempted reports; the remaining files keep their daily priority. A permanently unreadable first report no longer hides every other date.
-
-Downloaded-but-unclassified content keeps its separate recheck interval. Daily completion stops, duplicate prevention and existing pairings remain compatible. Pre-existing retry deadlines retain their original expiry. Automatic collection still runs every five minutes; this does not guarantee an immediate collection on arriving home.
-]]></description>
-            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.32/MochiLog-Mac-Beta.dmg" length="123194137" type="application/octet-stream" sparkle:edSignature="oUU9I5N961oGW6pQoCaJTkRf5k775eCivaUfWDZtWZhqyyztabIqJBNcjzTiBwg1vtrH0GRs9L5v7qZgo+sLCA=="/>
-        </item>
-        <item>
-            <title>0.2.31</title>
-            <pubDate>Sat, 26 Sep 2026 02:20:52 +0900</pubDate>
-            <sparkle:version>34</sparkle:version>
-            <sparkle:shortVersionString>0.2.31</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>27.0</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[# MochiLog Mac 0.2.31 Beta
-
-## 日本語
-
-診断ファイルの読み取りを拒否された際、同じ保存元の残りのファイルをその回で繰り返し取得しないようにしました。未取得のファイルは再試行待ちとして残し、次回は同じ日付の未試行ファイルを優先します。iPhone本体とApple Watchは別々に扱い、一方の拒否で他方を止めません。
-
-スマホから認証済みの通信で受け取ったLANアドレスを、最大24時間、予備の接続候補として利用します。最初の1時間を過ぎると、以前OS認証が成功した接続先を先に試します。接続時のOSペアリング認証は従来どおり必要です。既存のペアリング、当日分がそろった後の停止、未転送ログの保護は維持します。
-
-読み取り停止の理由、保留件数と再試行を動作ログに記録します。
-
-## English
-
-When a diagnostic file open is denied, collection now holds the remaining files from that source for the current attempt instead of repeatedly requesting them. Held files remain pending. The next attempt prioritizes untried files from the same date, so one permanently unreadable file does not starve other reports. iPhone and Apple Watch sources are handled independently.
-
-LAN addresses received through authenticated mobile requests remain available as fallback candidates for up to 24 hours. After the first hour, a previously OS-authenticated endpoint takes priority. Every connection still requires the existing OS pairing authentication. Existing pairings, automatic daily completion and pending-file protection remain compatible.
-
-Activity logs record source read-gate triggers, held counts and retry decisions.
-]]></description>
-            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.31/MochiLog-Mac-Beta.dmg" length="123239161" type="application/octet-stream" sparkle:edSignature="1/RL6xSeYWNecO1Ot1jEGxeg/J8upszsM6DgB9exFO4IYIH7ueXDQxv4e89UO7Qpmh10lXNyGC7Fw1/leGjtBw=="/>
+            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v0.2.34/MochiLog-Mac-Beta.dmg" length="122132289" type="application/octet-stream" sparkle:edSignature="Yy/uGPzjGIsp/3QxmiNaq5GYKQG0DYThRpP1xW0Qh908ByLczt+FsCuo0Q35fWdNdzVFzIHd7AC0RKuyXpHUDA=="></enclosure>
         </item>
     </channel>
-</rss>
-<!-- sparkle-signatures:
-edSignature: 7ARH1Qp0kEiQcb7/6Yv2FdxTqyM5D1FLygwXej4AdSj+4CH70EmzEq+F1TnWuHDEQldJj1Fo3mPdOB07kN8+Ag==
-length: 7783
+</rss><!-- sparkle-signatures:
+edSignature: tR20T4ENm6mfcfovDvWmOi23i5+EqRts+JR4EJyJKIpeYBNSCqkgnAJNEcXahb5x5hynd/OzQFXmBKLa1zIEAw==
+length: 3147
 -->
