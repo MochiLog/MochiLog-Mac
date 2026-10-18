@@ -43,3 +43,7 @@ same-machine benchmark.
 
 Sources: [GitHub runner specifications](https://docs.github.com/en/actions/reference/runners/github-hosted-runners),
 [Nuitka compiler and cache documentation](https://nuitka.net/user-documentation/tips.html).
+
+The cache-disabled signed run subsequently passed in 29 minutes 46 seconds; the common
+Nuitka compilation boundary fell from about 25m54s to 22m00s. See
+[cold-build measurements and comparison limits](COLD_BUILD_2026-10-19.md).
