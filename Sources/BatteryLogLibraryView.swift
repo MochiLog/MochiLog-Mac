@@ -40,18 +40,25 @@ struct BatteryLogLibraryView: View {
               Text("\(MacTransferL10n.text("mt_battery_months")): \(months)")
             }
           }
-          .onChange(of: limitMB) { _, value in BatteryLogStorage.limitMB = value; refresh() }
-          .onChange(of: months) { _, value in BatteryLogStorage.retentionMonths = value; refresh() }
+          .onChange(of: limitMB) { _, value in
+            BatteryLogStorage.limitMB = value; refresh()
+          }
+          .onChange(of: months) { _, value in
+            BatteryLogStorage.retentionMonths = value; refresh()
+          }
         }
         .padding(8)
       }
 
       HStack {
-        Label("\(MacTransferL10n.text("mt_battery_archive_usage")): \(ByteCountFormatter.string(fromByteCount: archiveBytes, countStyle: .file)) / \(ByteCountFormatter.string(fromByteCount: Int64(limitMB) * 1_000_000, countStyle: .file))",
+        Label(
+          "\(MacTransferL10n.text("mt_battery_archive_usage")): \(ByteCountFormatter.string(fromByteCount: archiveBytes, countStyle: .file)) / \(ByteCountFormatter.string(fromByteCount: Int64(limitMB) * 1_000_000, countStyle: .file))",
           systemImage: "externaldrive")
         Spacer()
-        Text("\(MacTransferL10n.text("mt_battery_pending_usage")): \(ByteCountFormatter.string(fromByteCount: pendingBytes, countStyle: .file))")
-          .foregroundStyle(.secondary)
+        Text(
+          "\(MacTransferL10n.text("mt_battery_pending_usage")): \(ByteCountFormatter.string(fromByteCount: pendingBytes, countStyle: .file))"
+        )
+        .foregroundStyle(.secondary)
       }
       HStack {
         TextField(MacTransferL10n.text("mt_battery_search"), text: $search)
@@ -81,11 +88,13 @@ struct BatteryLogLibraryView: View {
         Button(MacTransferL10n.text("mt_battery_export")) { exportSelection() }
           .disabled(selectedRows.isEmpty)
         Button(MacTransferL10n.text("mt_battery_resend")) { resendSelection() }
-          .disabled(!selectedRows.contains(where: { item in
-            !item.pending && model.state.devices.contains(where: {
-              $0.physicalDeviceID == item.deviceID
-            })
-          }))
+          .disabled(
+            !selectedRows.contains(where: { item in
+              !item.pending
+                && model.state.devices.contains(where: {
+                  $0.physicalDeviceID == item.deviceID
+                })
+            }))
         Spacer()
         Button(MacTransferL10n.text("mt_battery_delete"), role: .destructive) {
           showingDelete = true
@@ -97,8 +106,10 @@ struct BatteryLogLibraryView: View {
       if let notice { Text(notice).font(.caption).foregroundStyle(.secondary) }
     }
     .onAppear { refresh() }
-    .confirmationDialog(MacTransferL10n.text("mt_battery_delete_confirm"),
-      isPresented: $showingDelete) {
+    .confirmationDialog(
+      MacTransferL10n.text("mt_battery_delete_confirm"),
+      isPresented: $showingDelete
+    ) {
       Button(MacTransferL10n.text("mt_battery_delete"), role: .destructive) {
         do {
           try BatteryLogStorage.delete(selectedRows)
@@ -110,8 +121,7 @@ struct BatteryLogLibraryView: View {
   }
 
   private func refresh() {
-    do { try BatteryLogStorage.prune() }
-    catch { notice = error.localizedDescription }
+    do { try BatteryLogStorage.prune() } catch { notice = error.localizedDescription }
     rows = BatteryLogStorage.list(devices: model.state.devices)
     selected.formIntersection(Set(rows.map(\.id)))
   }

@@ -3,6 +3,7 @@
 Protocol references: libimobiledevice file_relay.c/header (Sources/Acknowledged)
 and POSIX cpio odc/newc formats. No reference implementation is imported.
 """
+
 import hashlib
 import time
 import zlib
@@ -63,8 +64,8 @@ class Cpio:
                 count = self.namesize + self.namepad
                 if len(self.buffer) < count:
                     return
-                raw = bytes(self.buffer[:self.namesize])
-                padding = self.buffer[self.namesize:count]
+                raw = bytes(self.buffer[: self.namesize])
+                padding = self.buffer[self.namesize : count]
                 if not raw.endswith(b"\0") or b"\0" in raw[:-1] or any(padding):
                     raise ArchiveError("Invalid CPIO member name")
                 name = raw[:-1].decode("utf-8")
@@ -81,10 +82,15 @@ class Cpio:
                 if any(part.startswith("ProxiedDevice-") for part in components):
                     matched = False
                 else:
-                    matched = (name == self.filename or name.endswith("/" + self.filename))
+                    matched = name == self.filename or name.endswith("/" + self.filename)
                 if matched:
-                    if self.mode & 0o170000 != 0o100000 or not 0 < self.filesize <= 128 * 1024 * 1024:
-                        raise ArchiveError("Requested Analytics member is not a bounded regular file")
+                    if (
+                        self.mode & 0o170000 != 0o100000
+                        or not 0 < self.filesize <= 128 * 1024 * 1024
+                    ):
+                        raise ArchiveError(
+                            "Requested Analytics member is not a bounded regular file"
+                        )
                     self.current = {"digest": hashlib.sha256(), "bytes": 0, "lines": 0}
                 self.remaining = self.filesize
                 self.state = "body"
@@ -95,7 +101,7 @@ class Cpio:
                     del self.buffer[:count]
                     self.remaining -= count
                     if self.checksum is not None:
-                        self.current_sum = (self.current_sum + sum(block)) & 0xffffffff
+                        self.current_sum = (self.current_sum + sum(block)) & 0xFFFFFFFF
                     if self.current is not None:
                         self.current["digest"].update(block)
                         self.current["bytes"] += len(block)
@@ -106,16 +112,21 @@ class Cpio:
                     raise ArchiveError("CPIO checksum mismatch")
                 if self.current is not None:
                     item = self.current
-                    self.matches.append({"bytes": item["bytes"], "lines": item["lines"],
-                                         "sha256": item["digest"].hexdigest()})
+                    self.matches.append(
+                        {
+                            "bytes": item["bytes"],
+                            "lines": item["lines"],
+                            "sha256": item["digest"].hexdigest(),
+                        }
+                    )
                     self.current = None
                 self.state = "padding"
             else:
                 if len(self.buffer) < self.datapad:
                     return
-                if any(self.buffer[:self.datapad]):
+                if any(self.buffer[: self.datapad]):
                     raise ArchiveError("Invalid CPIO data padding")
-                del self.buffer[:self.datapad]
+                del self.buffer[: self.datapad]
                 self.state = "header"
 
     def finish(self):
@@ -155,7 +166,11 @@ def read_archive(stream, filename, emit):
                     if inflater.unused_data and any(inflater.unused_data):
                         raise ArchiveError("Unexpected trailing gzip member")
             except (ArchiveError, zlib.error, UnicodeDecodeError) as error:
-                failure = error if isinstance(error, ArchiveError) else ArchiveError("Invalid relay archive encoding")
+                failure = (
+                    error
+                    if isinstance(error, ArchiveError)
+                    else ArchiveError("Invalid relay archive encoding")
+                )
         if time.monotonic() - last_progress >= 10:
             emit("relay_archive_draining", compressed_bytes=compressed)
             last_progress = time.monotonic()

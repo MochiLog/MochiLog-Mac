@@ -4,6 +4,7 @@ Protocol reference: pymobiledevice3 v11.19.1 remote/xpc_message.py and
 remote/remotexpc.py (MIT). No reference library code is imported or executed.
 Used for discovery and fixed read-only research requests, not file-write APIs.
 """
+
 import re
 import socket
 import struct
@@ -31,7 +32,7 @@ def encode(value):
     if isinstance(value, int):
         return struct.pack("<IQ", 0x4000, value)
     if isinstance(value, uuid.UUID):
-        return struct.pack("<I", 0xa000) + value.bytes
+        return struct.pack("<I", 0xA000) + value.bytes
     if isinstance(value, str):
         text = value.encode() + b"\0"
         return struct.pack("<II", 0x9000, len(text)) + padded(text)
@@ -39,14 +40,14 @@ def encode(value):
         body = struct.pack("<I", len(value))
         for key, item in value.items():
             body += padded(key.encode() + b"\0") + encode(item)
-        return struct.pack("<II", 0xf000, len(body)) + body
+        return struct.pack("<II", 0xF000, len(body)) + body
     if isinstance(value, list):
         if len(value) > 4096:
             raise ValueError("Outgoing XPC array exceeds limit")
         body = struct.pack("<I", len(value)) + b"".join(encode(item) for item in value)
         if len(body) > LIMIT:
             raise ValueError("Outgoing XPC array exceeds byte limit")
-        return struct.pack("<II", 0xe000, len(body)) + body
+        return struct.pack("<II", 0xE000, len(body)) + body
     raise ValueError("Unsupported outgoing discovery value")
 
 
@@ -57,7 +58,7 @@ class Decoder:
     def take(self, length):
         if length < 0 or self.position + length > len(self.data):
             raise ValueError("Truncated XPC value")
-        result = self.data[self.position:self.position + length]
+        result = self.data[self.position : self.position + length]
         self.position += length
         return result
 
@@ -76,7 +77,7 @@ class Decoder:
             return self.number("q" if kind == 0x3000 else "Q")
         if kind == 0x5000:
             return self.number("d")
-        if kind == 0xa000:
+        if kind == 0xA000:
             return uuid.UUID(bytes=self.take(16))
         if kind in (0x8000, 0x9000):
             length = self.number()
@@ -89,7 +90,7 @@ class Decoder:
                     raise ValueError("Unterminated XPC string")
                 return data[:-1].decode()
             return data
-        if kind in (0xe000, 0xf000):
+        if kind in (0xE000, 0xF000):
             length = self.number()
             if not 4 <= length <= LIMIT:
                 raise ValueError("Invalid XPC collection length")
@@ -97,9 +98,9 @@ class Decoder:
             count = collection.number()
             if count > 4096:
                 raise ValueError("Too many XPC entries")
-            result = {} if kind == 0xf000 else []
+            result = {} if kind == 0xF000 else []
             for _ in range(count):
-                if kind == 0xf000:
+                if kind == 0xF000:
                     end = collection.data.find(b"\0", collection.position)
                     if end < 0:
                         raise ValueError("Unterminated XPC key")
@@ -121,14 +122,14 @@ def wrapper(value=None, flags=1, message_id=0):
     body = b"" if value is None else struct.pack("<II", 0x42133742, 5) + encode(value)
     if value:
         flags |= 0x100
-    return struct.pack("<IIQQ", 0x29b00b92, flags, len(body), message_id) + body
+    return struct.pack("<IIQQ", 0x29B00B92, flags, len(body), message_id) + body
 
 
 def decode_wrapper(packet):
     if len(packet) < 24:
         raise ValueError("Truncated XPC envelope")
     magic, flags, length, message_id = struct.unpack("<IIQQ", packet[:24])
-    if magic != 0x29b00b92 or length > LIMIT or len(packet) != length + 24:
+    if magic != 0x29B00B92 or length > LIMIT or len(packet) != length + 24:
         raise ValueError("Invalid XPC envelope")
     if not length:
         return None
@@ -142,8 +143,13 @@ def decode_wrapper(packet):
 
 
 def find_port(address):
-    output = subprocess.run(["/usr/bin/nettop", "-n", "-x", "-L", "1", "-m", "tcp", "-J", "interface,state"],
-                            capture_output=True, text=True, timeout=10, check=True).stdout
+    output = subprocess.run(
+        ["/usr/bin/nettop", "-n", "-x", "-L", "1", "-m", "tcp", "-J", "interface,state"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=True,
+    ).stdout
     owner, ports = "", set()
     for line in output.splitlines():
         fields = line.split(",")
@@ -160,8 +166,13 @@ def find_port(address):
 
 
 def host_identity():
-    state = subprocess.run(["/usr/libexec/remotectl", "dumpstate"],
-                           capture_output=True, text=True, timeout=10, check=True).stdout
+    state = subprocess.run(
+        ["/usr/libexec/remotectl", "dumpstate"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=True,
+    ).stdout
     match = re.search(r"^Local device\n\s+UUID: ([0-9A-Fa-f-]{36})$", state, re.M)
     if not match:
         raise ValueError("Could not obtain the existing OS peer identity")
@@ -188,13 +199,20 @@ class Rsd:
     def frame(self, kind, stream=0, data=b"", flags=0):
         if len(data) > 16384:
             raise ValueError("Discovery frame exceeds peer frame size")
-        self.socket.sendall(len(data).to_bytes(3, "big") + bytes((kind, flags)) + struct.pack(">I", stream) + data)
+        self.socket.sendall(
+            len(data).to_bytes(3, "big") + bytes((kind, flags)) + struct.pack(">I", stream) + data
+        )
 
     def receive(self):
         received = 0
         for _ in range(4096):
             header = self.read(9)
-            length, kind, flags, stream = int.from_bytes(header[:3], "big"), header[3], header[4], int.from_bytes(header[5:], "big") & 0x7fffffff
+            length, kind, flags, stream = (
+                int.from_bytes(header[:3], "big"),
+                header[3],
+                header[4],
+                int.from_bytes(header[5:], "big") & 0x7FFFFFFF,
+            )
             if length > LIMIT:
                 raise ValueError("Incoming RSD frame too large")
             received += length + 9
@@ -213,7 +231,7 @@ class Rsd:
                 if flags & 8:
                     if not data or data[0] >= len(data):
                         raise ValueError("Invalid padded RSD frame")
-                    data = data[1:len(data) - data[0]]
+                    data = data[1 : len(data) - data[0]]
                 if data:
                     self.frame(8, data=struct.pack(">I", length))
                     self.frame(8, stream, struct.pack(">I", length))
@@ -227,8 +245,8 @@ class Rsd:
                         raise ValueError("RSD envelope exceeds limit")
                     if len(buffer) < length + 24:
                         break
-                    packet = bytes(buffer[:length + 24])
-                    del buffer[:length + 24]
+                    packet = bytes(buffer[: length + 24])
+                    del buffer[: length + 24]
                     value = decode_wrapper(packet)
                     if isinstance(value, dict) and value:
                         return value
@@ -261,10 +279,23 @@ class Rsd:
 
     def discover(self):
         self.bootstrap()
-        self.frame(0, 1, wrapper({"MessageType": "Handshake", "MessagingProtocolVersion": 7,
-                                 "UUID": host_identity(), "Services": {},
-                                 "Properties": {"RemoteXPCVersionFlags": 0x0100000000000006,
-                                                "SensitivePropertiesVisible": True}}, message_id=1))
+        self.frame(
+            0,
+            1,
+            wrapper(
+                {
+                    "MessageType": "Handshake",
+                    "MessagingProtocolVersion": 7,
+                    "UUID": host_identity(),
+                    "Services": {},
+                    "Properties": {
+                        "RemoteXPCVersionFlags": 0x0100000000000006,
+                        "SensitivePropertiesVisible": True,
+                    },
+                },
+                message_id=1,
+            ),
+        )
         for _ in range(4):
             response = self.receive()
             if "Services" in response and "Properties" in response:

@@ -13,12 +13,17 @@ struct RawBatteryField: Codable, Equatable {
     let data = Data(text.utf8)
     guard data.count <= 262144,
       revision.range(of: "^[a-f0-9]{64}$", options: .regularExpression) != nil,
-      SHA256.hash(data: data).map({ String(format: "%02x", $0) }).joined() == revision else { throw Failure.invalid }
+      SHA256.hash(data: data).map({ String(format: "%02x", $0) }).joined() == revision
+    else { throw Failure.invalid }
     let fields = try JSONDecoder().decode([RawBatteryField].self, from: data)
     guard !fields.isEmpty, fields.count <= 10000,
-      fields.allSatisfy({ !$0.path.isEmpty && $0.path.count <= 32 && $0.path.allSatisfy({ $0.count <= 512 })
-        && ["null", "boolean", "number", "string", "data", "date", "dictionary", "array"].contains($0.kind)
-        && $0.value.utf8.count <= 524288 }) else { throw Failure.invalid }
+      fields.allSatisfy({
+        !$0.path.isEmpty && $0.path.count <= 32 && $0.path.allSatisfy({ $0.count <= 512 })
+          && ["null", "boolean", "number", "string", "data", "date", "dictionary", "array"]
+            .contains($0.kind)
+          && $0.value.utf8.count <= 524288
+      })
+    else { throw Failure.invalid }
     return fields
   }
 }
@@ -42,16 +47,24 @@ enum BatteryPresentation {
   static func primary(_ field: RawBatteryField) -> BatterySummaryRow? {
     guard field.path.count == 1, let key = field.path.first, primaryKeys.contains(key),
       field.kind == "number", let value = Int(field.value),
-      (key == "CycleCount" ? 0...100000 : 1...200000).contains(value) else { return nil }
-    return BatterySummaryRow(key: key, value: value.formatted(), unit: key == "CycleCount" ? "" : " mAh")
+      (key == "CycleCount" ? 0...100000 : 1...200000).contains(value)
+    else { return nil }
+    return BatterySummaryRow(
+      key: key, value: value.formatted(), unit: key == "CycleCount" ? "" : " mAh")
   }
-  static let extraKeys = ["IsCharging", "FullyCharged", "ExternalConnected", "ExternalChargeCapable",
-    "AppleRawExternalConnected", "BatteryInstalled", "AtCriticalLevel", "Voltage", "Amperage", "InstantAmperage", "Serial"]
+  static let extraKeys = [
+    "IsCharging", "FullyCharged", "ExternalConnected", "ExternalChargeCapable",
+    "AppleRawExternalConnected", "BatteryInstalled", "AtCriticalLevel", "Voltage", "Amperage",
+    "InstantAmperage", "Serial",
+  ]
   static func extra(_ field: RawBatteryField) -> BatterySummaryRow? {
-    guard field.path.count == 1, let key = field.path.first, extraKeys.contains(key) else { return nil }
+    guard field.path.count == 1, let key = field.path.first, extraKeys.contains(key) else {
+      return nil
+    }
     if ["Voltage", "Amperage", "InstantAmperage"].contains(key) {
       guard field.kind == "number", let value = Int64(field.value),
-        (key == "Voltage" ? 0...100000 : -2000000...2000000).contains(value) else { return nil }
+        (key == "Voltage" ? 0...100000 : -2000000...2000000).contains(value)
+      else { return nil }
       return BatterySummaryRow(key: key, value: field.value, unit: key == "Voltage" ? " mV" : " mA")
     }
     if key == "Serial" {
@@ -61,25 +74,37 @@ enum BatteryPresentation {
     guard field.kind == "boolean", ["true", "false"].contains(field.value) else { return nil }
     return BatterySummaryRow(key: key, value: field.value, kind: "boolean")
   }
-  static func summary(values: [String: Int], charging: Bool?, fields: [RawBatteryField]) -> [BatterySummaryRow] {
+  static func summary(values: [String: Int], charging: Bool?, fields: [RawBatteryField])
+    -> [BatterySummaryRow]
+  {
     var rows = primaryKeys.map { key in
-      if let field = fields.first(where: { $0.path == [key] }), let row = primary(field) { return row }
+      if let field = fields.first(where: { $0.path == [key] }), let row = primary(field) {
+        return row
+      }
       // Old helpers attest a root CycleCount, but their capacity fields have no provenance.
-      return BatterySummaryRow(key: key, value: fields.isEmpty && key == "CycleCount" ? values[key].map { $0.formatted() } : nil,
+      return BatterySummaryRow(
+        key: key,
+        value: fields.isEmpty && key == "CycleCount" ? values[key].map { $0.formatted() } : nil,
         unit: key == "CycleCount" ? "" : " mAh")
     }
     for key in extraKeys {
       if key == "IsCharging", let charging {
-        rows.append(BatterySummaryRow(key: key, value: charging ? "true" : "false", kind: "boolean"))
-      } else if let field = fields.first(where: { $0.path == [key] }), let row = extra(field) { rows.append(row) }
+        rows.append(
+          BatterySummaryRow(key: key, value: charging ? "true" : "false", kind: "boolean"))
+      } else if let field = fields.first(where: { $0.path == [key] }), let row = extra(field) {
+        rows.append(row)
+      }
     }
     return rows
   }
-  static func details(values: [String: Int], charging: Bool?, fields: [RawBatteryField]) -> [RawBatteryField] {
+  static func details(values: [String: Int], charging: Bool?, fields: [RawBatteryField])
+    -> [RawBatteryField]
+  {
     fields.filter { field in
       if let row = extra(field) {
         // A contradictory raw charging flag must remain inspectable.
-        return row.key == "IsCharging" && charging != nil && row.value != (charging! ? "true" : "false")
+        return row.key == "IsCharging" && charging != nil
+          && row.value != (charging! ? "true" : "false")
       }
       return primary(field) == nil
     }
@@ -109,38 +134,51 @@ struct LiveBatterySnapshot: Codable, Equatable {
       let revision = object["revision"] as? String,
       revision.range(of: "^[a-f0-9]{64}$", options: .regularExpression) != nil,
       let acquired = object["acquiredAt"] as? String,
-      ISO8601DateFormatter().date(from: acquired) != nil else {
+      ISO8601DateFormatter().date(from: acquired) != nil
+    else {
       throw CollectorError.failed("battery_unavailable")
     }
-    let limits = ["CycleCount": 0...100000, "DesignCapacity": 1...200000,
+    let limits = [
+      "CycleCount": 0...100000, "DesignCapacity": 1...200000,
       "FullChargeCapacity": 1...200000, "NominalChargeCapacity": 1...200000,
-      "AppleRawMaxCapacity": 1...200000, "CurrentCapacity": 0...100]
+      "AppleRawMaxCapacity": 1...200000, "CurrentCapacity": 0...100,
+    ]
     var values: [String: Int] = [:]
     for (key, range) in limits {
       if let number = raw[key] as? NSNumber,
         CFGetTypeID(number) != CFBooleanGetTypeID(),
         number.doubleValue.isFinite, number.doubleValue == Double(number.intValue),
-        range.contains(number.intValue) { values[key] = number.intValue }
+        range.contains(number.intValue)
+      {
+        values[key] = number.intValue
+      }
     }
     let details = object["detailsJSON"] as? String
     let detailsRevision = object["detailsRevision"] as? String
-    if let details, let detailsRevision { _ = try RawBatteryField.decode(details, revision: detailsRevision) }
-    else if details != nil || detailsRevision != nil { throw CollectorError.failed("battery_unavailable") }
+    if let details, let detailsRevision {
+      _ = try RawBatteryField.decode(details, revision: detailsRevision)
+    } else if details != nil || detailsRevision != nil {
+      throw CollectorError.failed("battery_unavailable")
+    }
     guard !values.filter({ $0.key != "CurrentCapacity" }).isEmpty || details != nil else {
       throw CollectorError.failed("battery_unavailable")
     }
     let charging = (raw["IsCharging"] as? NSNumber).flatMap {
       CFGetTypeID($0) == CFBooleanGetTypeID() ? $0.boolValue : nil
     }
-    return LiveBatterySnapshot(version: 1, values: values, revision: revision,
-      acquiredAt: acquired, charging: charging, detailsJSON: details, detailsRevision: detailsRevision)
+    return LiveBatterySnapshot(
+      version: 1, values: values, revision: revision,
+      acquiredAt: acquired, charging: charging, detailsJSON: details,
+      detailsRevision: detailsRevision)
   }
 
   /// Native interpretation of the helper's lossless plist. Legacy JSON remains supported.
   static func fromRegistry(_ data: Data) throws -> LiveBatterySnapshot {
     guard data.count <= 1048576,
-      let registry = try PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any],
-      !registry.isEmpty else { throw RawBatteryField.Failure.invalid }
+      let registry = try PropertyListSerialization.propertyList(
+        from: data, options: [], format: nil) as? [String: Any],
+      !registry.isEmpty
+    else { throw RawBatteryField.Failure.invalid }
     var fields: [RawBatteryField] = []
     func visit(_ value: Any, path: [String]) throws {
       guard path.count <= 32, fields.count < 10000 else { throw RawBatteryField.Failure.invalid }
@@ -174,14 +212,20 @@ struct LiveBatterySnapshot: Codable, Equatable {
     }
     try visit(registry, path: [])
     let battery = registry["BatteryData"] as? [String: Any] ?? [:]
-    let limits = ["CycleCount": 0...100000, "DesignCapacity": 1...200000,
+    let limits = [
+      "CycleCount": 0...100000, "DesignCapacity": 1...200000,
       "FullChargeCapacity": 1...200000, "NominalChargeCapacity": 1...200000,
-      "AppleRawMaxCapacity": 1...200000, "CurrentCapacity": 0...100]
+      "AppleRawMaxCapacity": 1...200000, "CurrentCapacity": 0...100,
+    ]
     var values: [String: Int] = [:]
     for (key, range) in limits {
-      let raw = ["CycleCount", "CurrentCapacity"].contains(key) ? registry[key] : (battery[key] ?? registry[key])
+      let raw =
+        ["CycleCount", "CurrentCapacity"].contains(key)
+        ? registry[key] : (battery[key] ?? registry[key])
       if let number = raw as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
-        number.doubleValue.isFinite, number.doubleValue == Double(number.intValue), range.contains(number.intValue) {
+        number.doubleValue.isFinite, number.doubleValue == Double(number.intValue),
+        range.contains(number.intValue)
+      {
         values[key] = number.intValue
       }
     }
@@ -190,12 +234,16 @@ struct LiveBatterySnapshot: Codable, Equatable {
     }
     var core: [String: Any] = values
     if let charging { core["IsCharging"] = charging }
-    let coreData = try JSONSerialization.data(withJSONObject: core, options: [.sortedKeys, .withoutEscapingSlashes])
+    let coreData = try JSONSerialization.data(
+      withJSONObject: core, options: [.sortedKeys, .withoutEscapingSlashes])
     let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
     let details = try encoder.encode(fields)
     guard details.count <= 262144 else { throw RawBatteryField.Failure.invalid }
-    let hash: (Data) -> String = { SHA256.hash(data: $0).map { String(format: "%02x", $0) }.joined() }
-    return LiveBatterySnapshot(version: 1, values: values, revision: hash(coreData),
+    let hash: (Data) -> String = {
+      SHA256.hash(data: $0).map { String(format: "%02x", $0) }.joined()
+    }
+    return LiveBatterySnapshot(
+      version: 1, values: values, revision: hash(coreData),
       acquiredAt: ISO8601DateFormatter().string(from: Date()), charging: charging,
       detailsJSON: String(decoding: details, as: UTF8.self), detailsRevision: hash(details))
   }
@@ -207,22 +255,27 @@ final class LiveBatteryCache: @unchecked Sendable {
   private var failures: Set<UUID> = []
   func set(_ snapshot: LiveBatterySnapshot?, for id: UUID) {
     lock.lock(); defer { lock.unlock() }
-    if let snapshot { snapshots[id] = snapshot; failures.remove(id) }
-    else { failures.insert(id) }
+    if let snapshot { snapshots[id] = snapshot; failures.remove(id) } else { failures.insert(id) }
   }
   func remove(_ id: UUID) {
     lock.lock(); defer { lock.unlock() }
     snapshots.removeValue(forKey: id); failures.remove(id)
   }
-  func response(for id: UUID, revision: String?, includesDetails: Bool = false, detailsRevision: String? = nil) -> Data? {
+  func response(
+    for id: UUID, revision: String?, includesDetails: Bool = false, detailsRevision: String? = nil
+  ) -> Data? {
     lock.lock(); defer { lock.unlock() }
-    var object: [String: Any] = ["type": "live-battery", "version": 1,
-      "state": failures.contains(id) ? "unavailable" : "waiting"]
+    var object: [String: Any] = [
+      "type": "live-battery", "version": 1,
+      "state": failures.contains(id) ? "unavailable" : "waiting",
+    ]
     if let snapshot = snapshots[id] {
       object["state"] = failures.contains(id) ? "stale" : "current"
       object["acquiredAt"] = snapshot.acquiredAt
       object["revision"] = snapshot.revision
-      if includesDetails, let detailText = snapshot.detailsJSON, let detailDigest = snapshot.detailsRevision {
+      if includesDetails, let detailText = snapshot.detailsJSON,
+        let detailDigest = snapshot.detailsRevision
+      {
         object["detailsVersion"] = 1
         object["detailsRevision"] = detailDigest
         if detailsRevision != detailDigest { object["detailsJSON"] = detailText }
@@ -238,17 +291,26 @@ final class LiveBatteryCache: @unchecked Sendable {
 
 extension Collector {
   /// Private pipes only: current values never touch run()'s output/error files.
-  static func currentBattery(_ device: PairedDevice, peerAddress: String? = nil) throws -> LiveBatterySnapshot {
-    guard let tool = Bundle.main.url(forResource: "mochilog-collector", withExtension: nil,
-      subdirectory: "Collector") else { throw CollectorError.helperMissing }
-    let arguments = ["battery-snapshot", "--udid", device.udid]
+  static func currentBattery(_ device: PairedDevice, peerAddress: String? = nil) throws
+    -> LiveBatterySnapshot
+  {
+    guard
+      let tool = Bundle.main.url(
+        forResource: "mochilog-collector", withExtension: nil,
+        subdirectory: "Collector")
+    else { throw CollectorError.helperMissing }
+    let arguments =
+      ["battery-snapshot", "--udid", device.udid]
       + (device.manualAddress.map { ["--host", $0] }
         ?? (DiagnosticRoutes.candidates(for: device).first?.address ?? peerAddress)
-          .map { ["--fallback-host", $0] } ?? [])
+        .map { ["--fallback-host", $0] } ?? [])
     let result: GuardedProcess.Result
     do {
-      result = try GuardedProcess.run(tool, arguments: arguments,
-        environment: ["HOME": NSHomeDirectory(), "PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "NO_COLOR": "1"],
+      result = try GuardedProcess.run(
+        tool, arguments: arguments,
+        environment: [
+          "HOME": NSHomeDirectory(), "PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "NO_COLOR": "1",
+        ],
         timeout: 45, outputLimit: 1_048_576, errorLimit: 65_536)
     } catch GuardedProcess.Failure.timeout { throw CollectorError.timeout }
     // Values stay in private bounded memory; neither stdout nor stderr is logged.

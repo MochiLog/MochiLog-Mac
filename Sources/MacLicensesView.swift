@@ -34,7 +34,8 @@ private enum LicenseDocument: String, CaseIterable, Identifiable {
   var contents: String {
     let (name, ext) = resource
     guard let url = Bundle.main.url(forResource: name, withExtension: ext),
-      let text = try? String(contentsOf: url, encoding: .utf8) else {
+      let text = try? String(contentsOf: url, encoding: .utf8)
+    else {
       return MacTransferL10n.text("mt_l_06")
     }
     return text
@@ -48,15 +49,19 @@ struct MacLicensesView: View {
   private var pythonLicenses: [URL] {
     guard let root = Bundle.main.resourceURL?.appendingPathComponent("PythonLicenses"),
       let urls = try? FileManager.default.contentsOfDirectory(
-        at: root, includingPropertiesForKeys: nil) else { return [] }
+        at: root, includingPropertiesForKeys: nil)
+    else { return [] }
     return urls.filter { $0.pathExtension == "txt" }
-      .sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
+      .sorted {
+        $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
+      }
   }
 
   private var selectedContents: String {
     if let document = LicenseDocument(rawValue: selection) { return document.contents }
     guard let url = pythonLicenses.first(where: { $0.path == selection }),
-      let text = try? String(contentsOf: url, encoding: .utf8) else {
+      let text = try? String(contentsOf: url, encoding: .utf8)
+    else {
       return MacTransferL10n.text("mt_l_06")
     }
     return text

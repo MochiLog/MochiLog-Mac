@@ -20,6 +20,7 @@ from pymobiledevice3.services.crash_reports import CrashReportsManager
 
 async def run(arguments: argparse.Namespace) -> None:
     """Connect through the maintained library and perform one bounded operation."""
+
     async def direct_provider(serial, autopair, remotepairing_fallback=True):
         provider = await create_core_device_tunnel_service_using_remotepairing(
             arguments.udid, arguments.host, arguments.port, autopair=False
@@ -52,14 +53,21 @@ async def run(arguments: argparse.Namespace) -> None:
 
                 async def add_directory(directory, source, cached=None):
                     try:
-                        entries = cached if cached is not None else await asyncio.wait_for(
-                            reports.ls(directory, depth=1), timeout=60
+                        entries = (
+                            cached
+                            if cached is not None
+                            else await asyncio.wait_for(reports.ls(directory, depth=1), timeout=60)
                         )
                     except Exception as error:
                         if len(failures) >= 128:
                             raise ValueError("Diagnostic listing failures exceed limit") from error
-                        failures.append({"directory": directory, "source": source,
-                            "error": f"{type(error).__name__}: {error}"[:200]})
+                        failures.append(
+                            {
+                                "directory": directory,
+                                "source": source,
+                                "error": f"{type(error).__name__}: {error}"[:200],
+                            }
+                        )
                         return None
                     for entry in entries:
                         # Selection and deduplication belong to Swift/C#. This

@@ -34,7 +34,8 @@ enum CrashDiagnostics {
     guard let data = latest(),
       let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
       let kind = object["kind"] as? String,
-      let receivedAt = object["receivedAt"] as? String else { return nil }
+      let receivedAt = object["receivedAt"] as? String
+    else { return nil }
     return "OS diagnostic: \(kind) received \(receivedAt)"
   }
 
@@ -42,16 +43,18 @@ enum CrashDiagnostics {
     // A bounded report prevents a corrupt or unusually large payload filling app storage.
     guard diagnostic.count <= 1_048_576,
       let report = try? JSONSerialization.jsonObject(with: diagnostic),
-      let data = try? JSONSerialization.data(withJSONObject: [
-        "schema": 1, "platform": "macOS", "kind": kind,
-        "receivedAt": ISO8601DateFormatter().string(from: Date()),
-        "report": report
-      ], options: [.prettyPrinted, .sortedKeys]) else { return }
+      let data = try? JSONSerialization.data(
+        withJSONObject: [
+          "schema": 1, "platform": "macOS", "kind": kind,
+          "receivedAt": ISO8601DateFormatter().string(from: Date()),
+          "report": report,
+        ], options: [.prettyPrinted, .sortedKeys])
+    else { return }
     lock.lock()
     defer { lock.unlock() }
     do {
       try data.write(to: file, options: .atomic)
       try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
-    } catch { /* Diagnostics must never interrupt the app. */ }
+    } catch { /* Diagnostics must never interrupt the app. */  }
   }
 }

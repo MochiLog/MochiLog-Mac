@@ -24,9 +24,11 @@ struct PairedDevice: Codable, Identifiable {
       automaticPauseUntil
   }
 
-  init(udid: String, name: String, model: String, physicalDeviceID: UUID,
+  init(
+    udid: String, name: String, model: String, physicalDeviceID: UUID,
     secret: Data, confirmedAt: Date? = nil, manualAddress: String? = nil,
-    automaticPauseUntil: Date? = nil) {
+    automaticPauseUntil: Date? = nil
+  ) {
     self.udid = udid
     self.name = name
     self.model = model
@@ -71,8 +73,10 @@ struct CompanionState: Codable {
 
   private enum CodingKeys: String, CodingKey { case hostID, devices, revokedDevices }
 
-  init(hostID: UUID = UUID(), devices: [PairedDevice] = [],
-    revokedDevices: [PairedDevice] = []) {
+  init(
+    hostID: UUID = UUID(), devices: [PairedDevice] = [],
+    revokedDevices: [PairedDevice] = []
+  ) {
     self.hostID = hostID
     self.devices = devices
     self.revokedDevices = revokedDevices
@@ -87,7 +91,8 @@ struct CompanionState: Codable {
 }
 
 enum CollectorError: LocalizedError {
-  case helperMissing, timeout, discoveryTimeout, signal(Int32, String), exitCode(Int32, String), failed(String)
+  case helperMissing, timeout, discoveryTimeout, signal(Int32, String), exitCode(Int32, String),
+    failed(String)
   var errorDescription: String? {
     switch self {
     case .helperMissing: MacTransferL10n.text("mt_c_00")
@@ -109,7 +114,9 @@ struct CollectionReport {
   let newestHostAnalyticsAt: Date?
   var retryHeld: Int = 0
   var listingFailures: Int = 0
-  var acquisitionComplete: Bool { failed == 0 && retryHeld == 0 && deferred == 0 && listingFailures == 0 }
+  var acquisitionComplete: Bool {
+    failed == 0 && retryHeld == 0 && deferred == 0 && listingFailures == 0
+  }
 }
 
 enum LogKind: String {
@@ -119,7 +126,7 @@ enum LogKind: String {
 
 struct RemoteLog {
   let path: String
-  let source: String? // ProxiedDevice directory on the paired iPhone.
+  let source: String?  // ProxiedDevice directory on the paired iPhone.
   var name: String { URL(fileURLWithPath: path).lastPathComponent }
   var token: String {
     if let source { return "Watch::\(source)::\(name)" }
@@ -136,11 +143,11 @@ struct UnclassifiedObservation: Codable {
 enum Collector {
   static let root: URL = {
     #if TRANSFER_TESTING
-    if let path = ProcessInfo.processInfo.environment["MOCHILOG_TRANSFER_TEST_ROOT"] {
-      let base = URL(fileURLWithPath: path, isDirectory: true)
-      try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
-      return base
-    }
+      if let path = ProcessInfo.processInfo.environment["MOCHILOG_TRANSFER_TEST_ROOT"] {
+        let base = URL(fileURLWithPath: path, isDirectory: true)
+        try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        return base
+      }
     #endif
     let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
       .appendingPathComponent("MochiLog Mac", isDirectory: true)
@@ -163,13 +170,17 @@ enum Collector {
         else { return state }
         needsMigration = true
       } else if let secret = PairingKeyStore.load(for: device.physicalDeviceID) {
-        let restored = PairedDevice(udid: device.udid, name: device.name,
+        let restored = PairedDevice(
+          udid: device.udid, name: device.name,
           model: device.model, physicalDeviceID: device.physicalDeviceID,
           secret: secret, confirmedAt: device.confirmedAt,
           manualAddress: device.manualAddress,
           automaticPauseUntil: device.automaticPauseUntil)
-        if index < state.devices.count { state.devices[index] = restored }
-        else { state.revokedDevices[index - state.devices.count] = restored }
+        if index < state.devices.count {
+          state.devices[index] = restored
+        } else {
+          state.revokedDevices[index - state.devices.count] = restored
+        }
       }
     }
     if needsMigration { try? saveState(state) }
@@ -178,7 +189,9 @@ enum Collector {
 
   static func saveState(_ state: CompanionState) throws {
     for device in state.devices + state.revokedDevices {
-      guard device.secret.count == 32 else { throw CollectorError.failed("Pairing key unavailable") }
+      guard device.secret.count == 32 else {
+        throw CollectorError.failed("Pairing key unavailable")
+      }
       try PairingKeyStore.save(device.secret, for: device.physicalDeviceID)
     }
     let data = try JSONEncoder().encode(state)
@@ -188,26 +201,39 @@ enum Collector {
 
   static func run(_ arguments: [String], timeout: TimeInterval = 120) throws -> String {
     #if TRANSFER_TESTING
-    let testHelper = ProcessInfo.processInfo.environment["MOCHILOG_TEST_COLLECTOR"]
-      .map { URL(fileURLWithPath: $0) }
+      let testHelper = ProcessInfo.processInfo.environment["MOCHILOG_TEST_COLLECTOR"]
+        .map { URL(fileURLWithPath: $0) }
     #else
-    let testHelper: URL? = nil
+      let testHelper: URL? = nil
     #endif
-    guard let helper = testHelper ?? Bundle.main.url(forResource: "mochilog-collector",
-      withExtension: nil, subdirectory: "Collector") else {
+    guard
+      let helper = testHelper
+        ?? Bundle.main.url(
+          forResource: "mochilog-collector",
+          withExtension: nil, subdirectory: "Collector")
+    else {
       throw CollectorError.helperMissing
     }
     let operation = arguments.prefix(2).filter { !$0.hasPrefix("--") }.joined(separator: " ")
     let traceID = UUID().uuidString
     let started = ProcessInfo.processInfo.systemUptime
     var successful = false
-    SupportDiagnostics.record("Collector job started; job=\(traceID), operation=\(operation), timeoutSeconds=\(Int(timeout))")
-    defer { SupportDiagnostics.record("Collector job finished; job=\(traceID), operation=\(operation), elapsedMs=\(Int((ProcessInfo.processInfo.systemUptime - started) * 1000)), success=\(successful)") }
+    SupportDiagnostics.record(
+      "Collector job started; job=\(traceID), operation=\(operation), timeoutSeconds=\(Int(timeout))"
+    )
+    defer {
+      SupportDiagnostics.record(
+        "Collector job finished; job=\(traceID), operation=\(operation), elapsedMs=\(Int((ProcessInfo.processInfo.systemUptime - started) * 1000)), success=\(successful)"
+      )
+    }
     let result: GuardedProcess.Result
     do {
-      result = try GuardedProcess.run(helper, arguments: arguments,
-        environment: ["HOME": NSHomeDirectory(), "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
-          "TERM": "dumb", "NO_COLOR": "1"], timeout: timeout)
+      result = try GuardedProcess.run(
+        helper, arguments: arguments,
+        environment: [
+          "HOME": NSHomeDirectory(), "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
+          "TERM": "dumb", "NO_COLOR": "1",
+        ], timeout: timeout)
     } catch GuardedProcess.Failure.timeout { throw CollectorError.timeout }
     let text = String(decoding: result.output, as: UTF8.self)
     let stderr = String(decoding: result.error, as: UTF8.self)
@@ -220,7 +246,9 @@ enum Collector {
       let meaningful = errorText.split(separator: "\n").last(where: {
         $0.contains("ERROR") || $0.contains("Error") || $0.contains("Traceback")
       })
-      let detail = (toolError ?? meaningful.map(String.init)).map { stableDiagnostic(String($0.suffix(300))) }
+      let detail = (toolError ?? meaningful.map(String.init)).map {
+        stableDiagnostic(String($0.suffix(300)))
+      }
       if let signal = result.signal {
         throw CollectorError.signal(signal, detail ?? "")
       }
@@ -233,9 +261,11 @@ enum Collector {
     return text
   }
 
-  static func browse(runCommand: ([String], TimeInterval) throws -> String = {
-    try Collector.run($0, timeout: $1)
-  }) throws -> [ConnectedDevice] {
+  static func browse(
+    runCommand: ([String], TimeInterval) throws -> String = {
+      try Collector.run($0, timeout: $1)
+    }
+  ) throws -> [ConnectedDevice] {
     var devices: [ConnectedDevice] = []
     var nativeError: Error?
     do {
@@ -245,7 +275,8 @@ enum Collector {
       else { throw CollectorError.failed(MacTransferL10n.text("mt_c_04")) }
       devices = rows.compactMap { row in
         guard let udid = row["udid"] as? String, let model = row["model"] as? String,
-          model.hasPrefix("iPhone") || model.hasPrefix("iPad") else { return nil }
+          model.hasPrefix("iPhone") || model.hasPrefix("iPad")
+        else { return nil }
         return ConnectedDevice(udid: udid, name: row["name"] as? String ?? model, model: model)
       }
     } catch { nativeError = error }
@@ -254,15 +285,19 @@ enum Collector {
     // the independent Wi-Fi lockdown discovery used by USB-trusted devices.
     if let text = try? runCommand(["usbmux", "list", "--network", "--simple"], 20),
       let data = text.data(using: .utf8),
-      let udids = try? JSONDecoder().decode([String].self, from: data) {
+      let udids = try? JSONDecoder().decode([String].self, from: data)
+    {
       for udid in udids where !devices.contains(where: { $0.udid == udid }) {
         guard let info = try? runCommand(["lockdown", "info", "--mobdev2", "--udid", udid], 20),
           let data = info.data(using: .utf8),
           let values = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
           let model = values["ProductType"] as? String,
-          model.hasPrefix("iPhone") || model.hasPrefix("iPad") else { continue }
-        devices.append(ConnectedDevice(udid: udid,
-          name: values["DeviceName"] as? String ?? model, model: model))
+          model.hasPrefix("iPhone") || model.hasPrefix("iPad")
+        else { continue }
+        devices.append(
+          ConnectedDevice(
+            udid: udid,
+            name: values["DeviceName"] as? String ?? model, model: model))
       }
     }
     if devices.isEmpty, let nativeError {
@@ -281,8 +316,9 @@ enum Collector {
       let udids = try JSONSerialization.jsonObject(with: data) as? [String]
     else { throw CollectorError.failed(MacTransferL10n.text("mt_c_04")) }
     guard udids.count == 1, let udid = udids.first else {
-      throw CollectorError.failed(MacTransferL10n.text(
-        udids.isEmpty ? "mt_usb_no_device" : "mt_usb_multiple_devices"))
+      throw CollectorError.failed(
+        MacTransferL10n.text(
+          udids.isEmpty ? "mt_usb_no_device" : "mt_usb_multiple_devices"))
     }
     if (try? run(["lockdown", "info", "--udid", udid], timeout: 20)) == nil {
       _ = try run(["lockdown", "pair", "--udid", udid], timeout: 90)
@@ -293,20 +329,23 @@ enum Collector {
       let model = values["ProductType"] as? String,
       let version = values["ProductVersion"] as? String,
       (Int(version.split(separator: ".").first ?? "0") ?? 0) >= 27,
-      model.hasPrefix("iPhone") || model.hasPrefix("iPad") else {
+      model.hasPrefix("iPhone") || model.hasPrefix("iPad")
+    else {
       throw CollectorError.failed(MacTransferL10n.text("mt_usb_unsupported"))
     }
     _ = try run(["lockdown", "wifi-connections", "on", "--udid", udid], timeout: 20)
     let state = try run(["lockdown", "wifi-connections", "--udid", udid], timeout: 20)
     guard let stateData = state.data(using: .utf8),
       let settings = try JSONSerialization.jsonObject(with: stateData) as? [String: Any],
-      settings["EnableWifiConnections"] as? Bool == true else {
+      settings["EnableWifiConnections"] as? Bool == true
+    else {
       throw CollectorError.failed(MacTransferL10n.text("mt_usb_wifi_failed"))
     }
     // This creates a pymobiledevice3 RemotePairing record. The collector uses
     // Apple's native route, so USB command success alone must not unlock QR.
     _ = try run(["lockdown", "remotepairing", "--pair", "--udid", udid], timeout: 45)
-    return ConnectedDevice(udid: udid, name: values["DeviceName"] as? String ?? model,
+    return ConnectedDevice(
+      udid: udid, name: values["DeviceName"] as? String ?? model,
       model: model)
   }
 
@@ -329,24 +368,31 @@ enum Collector {
     try usbmuxDeviceIDs("--usb").contains(udid)
   }
 
-  static func remoteRootListing(udid: String,
+  static func remoteRootListing(
+    udid: String,
     runCommand: ([String], TimeInterval) throws -> String = {
       try Collector.run($0, timeout: $1)
-    }) throws -> (String, [String]) {
+    }
+  ) throws -> (String, [String]) {
     let native = ["--native", "--udid", udid]
     let network = ["--mobdev2", "--udid", udid]
     let root = ["--remote-file", "/", "--depth", "1"]
     if let listing = try? runCommand(["crash", "ls"] + native + root, 45),
-      !listing.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-      SupportDiagnostics.record("Diagnostic route selected; device=\(udid), transport=native OS tunnel")
+      !listing.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    {
+      SupportDiagnostics.record(
+        "Diagnostic route selected; device=\(udid), transport=native OS tunnel")
       return (listing, native)
     }
-    let networkIDs = try? JSONDecoder().decode([String].self,
+    let networkIDs = try? JSONDecoder().decode(
+      [String].self,
       from: Data(try runCommand(["usbmux", "list", "--network", "--simple"], 20).utf8))
     if networkIDs?.contains(udid) == true,
       let listing = try? runCommand(["crash", "ls"] + network + root, 45),
-      !listing.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-      SupportDiagnostics.record("Diagnostic route selected; device=\(udid), transport=Wi-Fi lockdown")
+      !listing.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    {
+      SupportDiagnostics.record(
+        "Diagnostic route selected; device=\(udid), transport=Wi-Fi lockdown")
       return (listing, network)
     }
     throw CollectorError.failed(MacTransferL10n.text("mt_empty_diagnostic_listing"))
@@ -360,7 +406,8 @@ enum Collector {
   }
 
   static func directory(for device: PairedDevice, kind: LogKind) throws -> URL {
-    let url = try directory(for: device).appendingPathComponent(kind.rawValue,
+    let url = try directory(for: device).appendingPathComponent(
+      kind.rawValue,
       isDirectory: true)
     try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
     return url
@@ -369,8 +416,11 @@ enum Collector {
   static func directory(for device: PairedDevice, kind: LogKind, source: String?) throws -> URL {
     let base = try directory(for: device, kind: kind)
     guard let source else { return base }
-    guard source.hasPrefix("ProxiedDevice-"), source.range(of: #"^ProxiedDevice-[a-fA-F0-9]+$"#,
-      options: .regularExpression) != nil else { throw CollectorError.failed(MacTransferL10n.text("mt_c_05")) }
+    guard source.hasPrefix("ProxiedDevice-"),
+      source.range(
+        of: #"^ProxiedDevice-[a-fA-F0-9]+$"#,
+        options: .regularExpression) != nil
+    else { throw CollectorError.failed(MacTransferL10n.text("mt_c_05")) }
     let url = base.appendingPathComponent(source, isDirectory: true)
     try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
     return url
@@ -382,16 +432,19 @@ enum Collector {
     let base: URL
     if parts.count == 1 {
       name = parts[0]
-      base = try directory(for: device) // early beta's flat queue
+      base = try directory(for: device)  // early beta's flat queue
     } else if parts.count == 2, let kind = LogKind(rawValue: parts[0]) {
       name = parts[1]
       base = try directory(for: device, kind: kind)
     } else if parts.count == 3, let kind = LogKind(rawValue: parts[0]) {
       name = parts[2]
       base = try directory(for: device, kind: kind, source: parts[1])
-    } else { return nil }
+    } else {
+      return nil
+    }
     guard name == URL(fileURLWithPath: name).lastPathComponent,
-      name.hasPrefix("Analytics-"), name.hasSuffix(".ips.ca.synced") else { return nil }
+      name.hasPrefix("Analytics-"), name.hasSuffix(".ips.ca.synced")
+    else { return nil }
     return base.appendingPathComponent(name)
   }
 
@@ -405,8 +458,11 @@ enum Collector {
     }
     let source = parent.lastPathComponent
     guard let kind = LogKind(rawValue: parent.deletingLastPathComponent().lastPathComponent),
-      parent.standardizedFileURL.path == (try directory(for: device, kind: kind,
-        source: source)).standardizedFileURL.path else {
+      parent.standardizedFileURL.path
+        == (try directory(
+          for: device, kind: kind,
+          source: source)).standardizedFileURL.path
+    else {
       throw CollectorError.failed(MacTransferL10n.text("mt_c_06"))
     }
     return "\(kind.rawValue)::\(source)::\(file.lastPathComponent)"
@@ -414,31 +470,36 @@ enum Collector {
 
   static func pending(for device: PairedDevice) throws -> [URL] {
     let root = try directory(for: device)
-    guard let enumerator = FileManager.default.enumerator(at: root,
-      includingPropertiesForKeys: [.isRegularFileKey]) else { return [] }
+    guard
+      let enumerator = FileManager.default.enumerator(
+        at: root,
+        includingPropertiesForKeys: [.isRegularFileKey])
+    else { return [] }
     let files = enumerator.compactMap { $0 as? URL }
     let standardizedRoot = root.resolvingSymlinksInPath().standardizedFileURL.path
-    let rootPath = standardizedRoot.hasSuffix("/")
+    let rootPath =
+      standardizedRoot.hasSuffix("/")
       ? String(standardizedRoot.dropLast()) : standardizedRoot
     return files.filter { file in
       guard (try? file.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true,
         file.lastPathComponent.hasPrefix("Analytics-"),
-        file.lastPathComponent.hasSuffix(".ips.ca.synced") else { return false }
+        file.lastPathComponent.hasSuffix(".ips.ca.synced")
+      else { return false }
       let path = file.resolvingSymlinksInPath().standardizedFileURL.path
       guard path.hasPrefix(rootPath + "/") else { return false }
       let relative = String(path.dropFirst(rootPath.count + 1))
       let parts = relative.split(separator: "/")
-      return parts.count == 1 ||
-        ((parts.count == 2 || parts.count == 3) &&
-          ["Host", "Watch"].contains(String(parts[0])))
+      return parts.count == 1
+        || ((parts.count == 2 || parts.count == 3) && ["Host", "Watch"].contains(String(parts[0])))
     }
-      .sorted { $0.path < $1.path }
+    .sorted { $0.path < $1.path }
   }
 
   static func delivered(for device: PairedDevice) -> Set<String> {
     let url = root.appendingPathComponent("delivered-\(device.physicalDeviceID.uuidString).json")
     guard let data = try? Data(contentsOf: url),
-      let names = try? JSONDecoder().decode([String].self, from: data) else { return [] }
+      let names = try? JSONDecoder().decode([String].self, from: data)
+    else { return [] }
     return Set(names)
   }
 
@@ -470,8 +531,10 @@ enum Collector {
     return values
   }
 
-  private static func saveObservations(_ values: [String: UnclassifiedObservation],
-    for device: PairedDevice) throws {
+  private static func saveObservations(
+    _ values: [String: UnclassifiedObservation],
+    for device: PairedDevice
+  ) throws {
     let url = observationsURL(for: device)
     try JSONEncoder().encode(values).write(to: url, options: .atomic)
     try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
@@ -480,8 +543,10 @@ enum Collector {
   // Confirm the same complete, small, marker-free payload across separate
   // confirmations at least 30 minutes apart before excluding a plausible daily report.
   // Empty pulls provide no evidence and must never advance the count.
-  static func observeUnclassified(_ url: URL,
-    previous: UnclassifiedObservation?, now: Date = Date()) throws -> UnclassifiedObservation? {
+  static func observeUnclassified(
+    _ url: URL,
+    previous: UnclassifiedObservation?, now: Date = Date()
+  ) throws -> UnclassifiedObservation? {
     let bytes = try Data(contentsOf: url, options: .mappedIfSafe)
     guard !bytes.isEmpty else { return nil }
     let fingerprint = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
@@ -489,14 +554,17 @@ enum Collector {
       // Early retries may recover a report while it is being generated. They
       // must not turn three pulls in ten minutes into permanent exclusion.
       guard let confirmedAt = previous.lastConfirmedAt else {
-        return UnclassifiedObservation(fingerprint: fingerprint,
+        return UnclassifiedObservation(
+          fingerprint: fingerprint,
           confirmations: previous.confirmations, lastConfirmedAt: now)
       }
       if now.timeIntervalSince(confirmedAt) < 30 * 60 { return previous }
-      return UnclassifiedObservation(fingerprint: fingerprint,
+      return UnclassifiedObservation(
+        fingerprint: fingerprint,
         confirmations: min(3, previous.confirmations + 1), lastConfirmedAt: now)
     }
-    return UnclassifiedObservation(fingerprint: fingerprint,
+    return UnclassifiedObservation(
+      fingerprint: fingerprint,
       confirmations: 1, lastConfirmedAt: now)
   }
 
@@ -512,11 +580,14 @@ enum Collector {
   // Permission errors hold only this source during the current collection.
   // Failed reads remain pending for the next outer-scheduler attempt.
   static func readPermissionDenied(_ message: String) -> Bool {
-    message.range(of: #"FILE_OPEN failed with status:\s*10\b|\bPERM_DENIED\b"#,
+    message.range(
+      of: #"FILE_OPEN failed with status:\s*10\b|\bPERM_DENIED\b"#,
       options: [.regularExpression, .caseInsensitive]) != nil
   }
 
-  static func prioritizedCandidates(_ files: [RemoteLog], rechecked: Set<String> = []) -> [RemoteLog] {
+  static func prioritizedCandidates(_ files: [RemoteLog], rechecked: Set<String> = [])
+    -> [RemoteLog]
+  {
     files.sorted {
       // Keep recent days first, but let an untried file in the same day probe
       // the source next time. A permanently unreadable first file cannot starve it.
@@ -535,13 +606,17 @@ enum Collector {
   // report must not hide every other day when no file-level cooldown is used.
   static func readProbeOrder(_ files: [RemoteLog], attempts: [String: Date]) -> [RemoteLog] {
     var sources: [String] = []
-    for file in files where !sources.contains(file.source ?? "host") { sources.append(file.source ?? "host") }
+    for file in files where !sources.contains(file.source ?? "host") {
+      sources.append(file.source ?? "host")
+    }
     var probes: [RemoteLog] = []
     for source in sources {
       let candidates = files.filter { ($0.source ?? "host") == source }
-      let probe = candidates.first { attempts[$0.token] == nil } ?? candidates.min {
-        (attempts[$0.token] ?? .distantPast) < (attempts[$1.token] ?? .distantPast)
-      }
+      let probe =
+        candidates.first { attempts[$0.token] == nil }
+        ?? candidates.min {
+          (attempts[$0.token] ?? .distantPast) < (attempts[$1.token] ?? .distantPast)
+        }
       if let probe { probes.append(probe) }
     }
     let tokens = Set(probes.map(\.token))
@@ -556,28 +631,40 @@ enum Collector {
     formatter.dateFormat = "yyyy-MM-dd"
     let prefix = "Analytics-" + formatter.string(from: Date()) + "-"
     let current = files.filter { $0.name.hasPrefix(prefix) }
-    SupportDiagnostics.record("\(deviceName): current-day candidates observed; count=\(current.count)")
+    SupportDiagnostics.record(
+      "\(deviceName): current-day candidates observed; count=\(current.count)")
     for file in current {
-      SupportDiagnostics.record("\(deviceName): current-day candidate observed; file=\(file.name); source=\(file.source ?? "host"); location=\(file.path.contains("/Retired/") ? "retired" : "current")")
+      SupportDiagnostics.record(
+        "\(deviceName): current-day candidate observed; file=\(file.name); source=\(file.source ?? "host"); location=\(file.path.contains("/Retired/") ? "retired" : "current")"
+      )
     }
   }
 
   static func toolFailureLine(stdout: String, stderr: String) -> String? {
     let clean: (String) -> [String] = { value in
-      value.replacingOccurrences(of: #"\x1B\[[0-9;]*m"#, with: "",
-        options: .regularExpression).components(separatedBy: "\n")
+      value.replacingOccurrences(
+        of: #"\x1B\[[0-9;]*m"#, with: "",
+        options: .regularExpression
+      ).components(separatedBy: "\n")
         .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
     }
-    return clean(stderr).last { $0.range(of: #"\b(?:ERROR|FATAL)\b"#,
-      options: [.regularExpression, .caseInsensitive]) != nil } ??
-      clean(stdout).last { $0.range(of: #"^(?:ERROR|FATAL)\b"#,
-        options: [.regularExpression, .caseInsensitive]) != nil }
+    return clean(stderr).last {
+      $0.range(
+        of: #"\b(?:ERROR|FATAL)\b"#,
+        options: [.regularExpression, .caseInsensitive]) != nil
+    }
+      ?? clean(stdout).last {
+        $0.range(
+          of: #"^(?:ERROR|FATAL)\b"#,
+          options: [.regularExpression, .caseInsensitive]) != nil
+      }
   }
 
   static func stableDiagnostic(_ message: String) -> String {
     // Keep the actual reason, omit the CLI logger's timestamp, hostname and PID.
-    message.replacingOccurrences(of:
-      #"\b\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)? \S+ \S+\[\d+\] (?:ERROR|FATAL) "#,
+    message.replacingOccurrences(
+      of:
+        #"\b\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)? \S+ \S+\[\d+\] (?:ERROR|FATAL) "#,
       with: "", options: .regularExpression)
   }
 
@@ -586,18 +673,25 @@ enum Collector {
   static func shouldRecheckUnclassified(_ url: URL) throws -> Bool {
     let bytes = try Data(contentsOf: url, options: .mappedIfSafe)
     if bytes.count >= 1_000_000 { return true }
-    let markers = ["last_value_CycleCount", "last_value_NominalChargeCapacity",
-      "last_value_AppleRawMaxCapacity"]
+    let markers = [
+      "last_value_CycleCount", "last_value_NominalChargeCapacity",
+      "last_value_AppleRawMaxCapacity",
+    ]
     return markers.contains { bytes.range(of: Data($0.utf8)) != nil }
   }
 
   // A short download can be a truncated daily report when the device changes
   // lock state mid-transfer. Keep likely battery reports eligible for retry.
   static func isLikelyDailyReport(_ remote: RemoteLog) -> Bool {
-    guard remote.name.range(of: #"^Analytics-[0-9]{4}-[0-9]{2}-[0-9]{2}-09[0-1][0-9][0-9][0-9]"#,
-      options: .regularExpression) != nil else { return false }
-    return remote.source != nil || remote.name.range(of: #"\.[0-9]+\.ips\.ca\.synced$"#,
-      options: .regularExpression) != nil
+    guard
+      remote.name.range(
+        of: #"^Analytics-[0-9]{4}-[0-9]{2}-[0-9]{2}-09[0-1][0-9][0-9][0-9]"#,
+        options: .regularExpression) != nil
+    else { return false }
+    return remote.source != nil
+      || remote.name.range(
+        of: #"\.[0-9]+\.ips\.ca\.synced$"#,
+        options: .regularExpression) != nil
   }
 
   static func markDelivered(_ name: String, for device: PairedDevice) throws {
@@ -618,13 +712,16 @@ enum Collector {
       if lines >= 100 { break }
     }
     guard lines >= 100 else { return nil }
-    let required = ["last_value_CycleCount", "last_value_NominalChargeCapacity",
-      "last_value_AppleRawMaxCapacity"]
+    let required = [
+      "last_value_CycleCount", "last_value_NominalChargeCapacity",
+      "last_value_AppleRawMaxCapacity",
+    ]
     guard required.allSatisfy({ bytes.range(of: Data($0.utf8)) != nil }),
       let firstLineEnd = bytes.firstIndex(of: 10),
       let header = try? JSONSerialization.jsonObject(with: bytes.prefix(upTo: firstLineEnd))
         as? [String: Any],
-      let os = header["os_version"] as? String else { return nil }
+      let os = header["os_version"] as? String
+    else { return nil }
     let lower = os.lowercased()
     if lower.contains("watch") { return .watch }
     if lower.contains("iphone") || lower.contains("ipad") || lower.contains("ios") {
@@ -633,14 +730,22 @@ enum Collector {
     return nil
   }
 
-  private static func directListing(device: PairedDevice, candidate: DiagnosticRoutes.Candidate,
-    runCommand: ([String], TimeInterval) throws -> String) throws -> (files: [RemoteLog], failures: Int) {
-    SupportDiagnostics.record("Diagnostic route requested; device=\(device.udid), transport=RemotePairing, address=\(candidate.address), addressSource=\(candidate.source)")
-    let text = try runCommand(["direct-rsd", "scan", "--udid", device.udid,
-      "--host", candidate.address, "--port", "49152"], 120)
+  private static func directListing(
+    device: PairedDevice, candidate: DiagnosticRoutes.Candidate,
+    runCommand: ([String], TimeInterval) throws -> String
+  ) throws -> (files: [RemoteLog], failures: Int) {
+    SupportDiagnostics.record(
+      "Diagnostic route requested; device=\(device.udid), transport=RemotePairing, address=\(candidate.address), addressSource=\(candidate.source)"
+    )
+    let text = try runCommand(
+      [
+        "direct-rsd", "scan", "--udid", device.udid,
+        "--host", candidate.address, "--port", "49152",
+      ], 120)
     guard let data = text.data(using: .utf8),
       let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-      let files = object["files"] as? [[String: Any]] else {
+      let files = object["files"] as? [[String: Any]]
+    else {
       throw CollectorError.failed("Invalid direct diagnostic listing")
     }
     let failures: [[String: Any]]
@@ -649,9 +754,13 @@ enum Collector {
         throw CollectorError.failed("Invalid diagnostic listing failures")
       }
       failures = rows
-    } else { failures = [] } // Older packaged helpers omit the additive field.
+    } else {
+      failures = []
+    }  // Older packaged helpers omit the additive field.
     for failure in failures {
-      SupportDiagnostics.record("\(device.name): diagnostic directory listing incomplete; directory=\(String((failure["directory"] as? String ?? "unknown").prefix(256))); source=\(String((failure["source"] as? String ?? "host").prefix(128))); error=\(stableDiagnostic(String((failure["error"] as? String ?? "Unknown error").prefix(300)))); retry=next collection")
+      SupportDiagnostics.record(
+        "\(device.name): diagnostic directory listing incomplete; directory=\(String((failure["directory"] as? String ?? "unknown").prefix(256))); source=\(String((failure["source"] as? String ?? "host").prefix(128))); error=\(stableDiagnostic(String((failure["error"] as? String ?? "Unknown error").prefix(300)))); retry=next collection"
+      )
     }
     DiagnosticRoutes.rememberVerified(candidate.address, for: device.physicalDeviceID)
     let logs = files.compactMap { item -> RemoteLog? in
@@ -661,38 +770,45 @@ enum Collector {
     return (logs, failures.count)
   }
 
-  static func collect(_ device: PairedDevice,
+  static func collect(
+    _ device: PairedDevice,
     runCommand: ([String], TimeInterval) throws -> String = {
       try Collector.run($0, timeout: $1)
-    }, progress: ((Int, Int) -> Void)? = nil) throws -> CollectionReport {
+    }, progress: ((Int, Int) -> Void)? = nil
+  ) throws -> CollectionReport {
     var remoteFiles: [RemoteLog] = []
     var listingFailures = 0
     var connection: [String] = []
     var directAddress = device.manualAddress
     if let address = device.manualAddress {
-      let listing = try directListing(device: device,
+      let listing = try directListing(
+        device: device,
         candidate: .init(address: address, source: "manual"), runCommand: runCommand)
       remoteFiles = listing.files; listingFailures = listing.failures
     } else {
       do {
-        let (rootListing, chosenConnection) = try remoteRootListing(udid: device.udid,
+        let (rootListing, chosenConnection) = try remoteRootListing(
+          udid: device.udid,
           runCommand: runCommand)
         connection = chosenConnection
         let proxiedSources = rootListing.split(separator: "\n").map(String.init).filter {
-          $0.range(of: #"^/ProxiedDevice-[a-fA-F0-9]+$"#,
+          $0.range(
+            of: #"^/ProxiedDevice-[a-fA-F0-9]+$"#,
             options: .regularExpression) != nil
         }
         func addDirectory(_ path: String, source: String?) -> String? {
           do {
-            let listing = try runCommand(["crash", "ls"] + connection +
-              ["--remote-file", path, "--depth", "1"], 90)
+            let listing = try runCommand(
+              ["crash", "ls"] + connection + ["--remote-file", path, "--depth", "1"], 90)
             remoteFiles += listing.split(separator: "\n").map {
               RemoteLog(path: String($0), source: source)
             }
             return listing
           } catch {
             listingFailures += 1
-            SupportDiagnostics.record("\(device.name): diagnostic directory listing incomplete; directory=\(path); source=\(source ?? "host"); error=\(stableDiagnostic(error.localizedDescription)); retry=next collection")
+            SupportDiagnostics.record(
+              "\(device.name): diagnostic directory listing incomplete; directory=\(path); source=\(source ?? "host"); error=\(stableDiagnostic(error.localizedDescription)); retry=next collection"
+            )
             return nil
           }
         }
@@ -714,13 +830,16 @@ enum Collector {
         var lastFailure = error
         for candidate in DiagnosticRoutes.candidates(for: device) {
           do {
-            let listing = try directListing(device: device, candidate: candidate, runCommand: runCommand)
+            let listing = try directListing(
+              device: device, candidate: candidate, runCommand: runCommand)
             remoteFiles = listing.files; listingFailures = listing.failures
             directAddress = candidate.address
             break
           } catch {
             lastFailure = error
-            SupportDiagnostics.record("Diagnostic route rejected; device=\(device.udid), addressSource=\(candidate.source); error=\(stableDiagnostic(error.localizedDescription))")
+            SupportDiagnostics.record(
+              "Diagnostic route rejected; device=\(device.udid), addressSource=\(candidate.source); error=\(stableDiagnostic(error.localizedDescription))"
+            )
           }
         }
         guard directAddress != nil else { throw lastFailure }
@@ -740,26 +859,33 @@ enum Collector {
     var rechecks = rechecks(for: device)
     var observations = observations(for: device)
     let now = Date()
-    let newFiles = readProbeOrder(prioritizedCandidates(remoteFiles.filter { remote in
-      let name = remote.name
-      guard name.range(of: #"^Analytics-[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{6}.*\.ips\.ca\.synced$"#,
-        options: .regularExpression) != nil else { return false }
-      if delivered.contains(remote.token) { return false }
-      if let retryAt = rechecks[remote.token], retryAt > now { return false }
-      if let source = remote.source, delivered.contains("Host::\(source)::\(name)") {
-        return false
-      }
-      if remote.source == nil && delivered.contains(name) { return false }
-      let host = try? directory(for: device, kind: .host, source: remote.source)
-        .appendingPathComponent(name)
-      let watch = try? directory(for: device, kind: .watch, source: remote.source)
-        .appendingPathComponent(name)
-      return ![host, watch].compactMap { $0 }.contains {
-        FileManager.default.fileExists(atPath: $0.path)
-      }
-    }, rechecked: Set(rechecks.keys)), attempts: rechecks)
+    let newFiles = readProbeOrder(
+      prioritizedCandidates(
+        remoteFiles.filter { remote in
+          let name = remote.name
+          guard
+            name.range(
+              of: #"^Analytics-[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{6}.*\.ips\.ca\.synced$"#,
+              options: .regularExpression) != nil
+          else { return false }
+          if delivered.contains(remote.token) { return false }
+          if let retryAt = rechecks[remote.token], retryAt > now { return false }
+          if let source = remote.source, delivered.contains("Host::\(source)::\(name)") {
+            return false
+          }
+          if remote.source == nil && delivered.contains(name) { return false }
+          let host = try? directory(for: device, kind: .host, source: remote.source)
+            .appendingPathComponent(name)
+          let watch = try? directory(for: device, kind: .watch, source: remote.source)
+            .appendingPathComponent(name)
+          return ![host, watch].compactMap { $0 }.contains {
+            FileManager.default.fileExists(atPath: $0.path)
+          }
+        }, rechecked: Set(rechecks.keys)), attempts: rechecks)
     var retryHeld = remoteFiles.filter { (rechecks[$0.token] ?? .distantPast) > now }.count
-    SupportDiagnostics.record("\(device.name): diagnostic listing ready; hostCandidates=\(remoteFiles.filter { $0.source == nil }.count); proxyCandidates=\(remoteFiles.filter { $0.source != nil }.count); downloadDue=\(newFiles.count); retryHeld=\(retryHeld)")
+    SupportDiagnostics.record(
+      "\(device.name): diagnostic listing ready; hostCandidates=\(remoteFiles.filter { $0.source == nil }.count); proxyCandidates=\(remoteFiles.filter { $0.source != nil }.count); downloadDue=\(newFiles.count); retryHeld=\(retryHeld)"
+    )
     progress?(0, newFiles.count)
     var directStaging: URL?
     var batchFailures: [Int: String] = [:]
@@ -775,16 +901,23 @@ enum Collector {
         let directory = staging.appendingPathComponent("part-\(part)"); part += 1
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let manifest = directory.appendingPathComponent("manifest.json")
-        try JSONSerialization.data(withJSONObject: indices.map { ["path": newFiles[$0].path] }).write(to: manifest)
+        try JSONSerialization.data(withJSONObject: indices.map { ["path": newFiles[$0].path] })
+          .write(to: manifest)
         for index in indices {
-          SupportDiagnostics.record("\(device.name): battery candidate download requested; file=\(newFiles[index].name); source=\(newFiles[index].source ?? "host")")
+          SupportDiagnostics.record(
+            "\(device.name): battery candidate download requested; file=\(newFiles[index].name); source=\(newFiles[index].source ?? "host")"
+          )
         }
-        let result = try runCommand(["direct-rsd", "pull-batch", "--udid", device.udid,
-          "--host", address, "--port", "49152", "--manifest", manifest.path,
-          "--output", directory.path], TimeInterval(min(1800, max(180, indices.count * 180))))
+        let result = try runCommand(
+          [
+            "direct-rsd", "pull-batch", "--udid", device.udid,
+            "--host", address, "--port", "49152", "--manifest", manifest.path,
+            "--output", directory.path,
+          ], TimeInterval(min(1800, max(180, indices.count * 180))))
         guard let data = result.data(using: .utf8),
           let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-          let results = object["results"] as? [[String: Any]] else {
+          let results = object["results"] as? [[String: Any]]
+        else {
           throw CollectorError.failed("Invalid diagnostic batch result")
         }
         for (local, index) in indices.enumerated() {
@@ -800,15 +933,21 @@ enum Collector {
       // A listing can work while every file open in that source is denied.
       // Probe once per host/accessory before starting the rest of its batch.
       var sources: [String] = []
-      for file in newFiles where !sources.contains(file.source ?? "host") { sources.append(file.source ?? "host") }
+      for file in newFiles where !sources.contains(file.source ?? "host") {
+        sources.append(file.source ?? "host")
+      }
       for source in sources {
         let indices = newFiles.indices.filter { (newFiles[$0].source ?? "host") == source }
         guard let first = indices.first else { continue }
         try pull([first])
         if let failure = batchFailures[first], readPermissionDenied(failure) {
           blockedIndices.formUnion(indices.dropFirst())
-          SupportDiagnostics.record("\(device.name): source download suspended; source=\(source); trigger=AFC permission denied; blocked=\(indices.count - 1); retry=next collection; other sources continue")
-        } else if indices.count > 1 { try pull(Array(indices.dropFirst())) }
+          SupportDiagnostics.record(
+            "\(device.name): source download suspended; source=\(source); trigger=AFC permission denied; blocked=\(indices.count - 1); retry=next collection; other sources continue"
+          )
+        } else if indices.count > 1 {
+          try pull(Array(indices.dropFirst()))
+        }
       }
     }
     var saved = 0
@@ -820,11 +959,15 @@ enum Collector {
     var blocked = 0
     for (index, remote) in newFiles.enumerated() {
       let name = remote.name
-      if blockedIndices.contains(index) || (directStaging == nil && deniedSources.contains(remote.source ?? "host")) {
+      if blockedIndices.contains(index)
+        || (directStaging == nil && deniedSources.contains(remote.source ?? "host"))
+      {
         blocked += 1; progress?(index + 1, newFiles.count); continue
       }
       if directStaging == nil {
-        SupportDiagnostics.record("\(device.name): battery candidate download requested; file=\(name); source=\(remote.source ?? "host")")
+        SupportDiagnostics.record(
+          "\(device.name): battery candidate download requested; file=\(name); source=\(remote.source ?? "host")"
+        )
       }
       do {
         if let failure = batchFailures[index] { throw CollectorError.failed(failure) }
@@ -835,8 +978,9 @@ enum Collector {
         var pullError: Error?
         for attempt in 0..<(directStaging == nil ? 2 : 0) {
           do {
-            _ = try runCommand(["crash", "pull", staging.path, "--remote-file", remote.path]
-              + connection, 180)
+            _ = try runCommand(
+              ["crash", "pull", staging.path, "--remote-file", remote.path]
+                + connection, 180)
             pullError = nil
             break
           } catch {
@@ -862,13 +1006,20 @@ enum Collector {
             try saveObservations(observations, for: device)
           }
           saved += 1
-          SupportDiagnostics.record("\(device.name): battery report stored; file=\(name); kind=\(kind.rawValue); source=\(remote.source ?? "host")")
-        } else if try shouldRecheckUnclassified(downloaded) || !remote.path.contains("/Retired/") ||
-          isLikelyDailyReport(remote) {
+          SupportDiagnostics.record(
+            "\(device.name): battery report stored; file=\(name); kind=\(kind.rawValue); source=\(remote.source ?? "host")"
+          )
+        } else if try shouldRecheckUnclassified(downloaded) || !remote.path.contains("/Retired/")
+          || isLikelyDailyReport(remote)
+        {
           let size = (try? downloaded.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
           let uncertain = try shouldRecheckUnclassified(downloaded)
-          let observation = uncertain ? nil : try observeUnclassified(downloaded,
-            previous: observations[remote.token])
+          let observation =
+            uncertain
+            ? nil
+            : try observeUnclassified(
+              downloaded,
+              previous: observations[remote.token])
           if let observation, observation.confirmations >= 3 {
             try markDelivered(remote.token, for: device)
             rechecks.removeValue(forKey: remote.token)
@@ -876,7 +1027,8 @@ enum Collector {
             try saveRechecks(rechecks, for: device)
             try saveObservations(observations, for: device)
             skipped += 1
-            SupportDiagnostics.record("\(device.name): excluded stable non-battery \(name); bytes=\(size); confirmations=3")
+            SupportDiagnostics.record(
+              "\(device.name): excluded stable non-battery \(name); bytes=\(size); confirmations=3")
           } else {
             if let observation { observations[remote.token] = observation }
             try saveObservations(observations, for: device)
@@ -884,7 +1036,9 @@ enum Collector {
             rechecks[remote.token] = retryAt
             try saveRechecks(rechecks, for: device)
             deferred += 1
-            SupportDiagnostics.record("\(device.name): deferred unclassified \(name); bytes=\(size); confirmations=\(observation?.confirmations ?? 0); retry=\(SupportDiagnostics.localTime(retryAt))")
+            SupportDiagnostics.record(
+              "\(device.name): deferred unclassified \(name); bytes=\(size); confirmations=\(observation?.confirmations ?? 0); retry=\(SupportDiagnostics.localTime(retryAt))"
+            )
           }
         } else {
           try markDelivered(remote.token, for: device)
@@ -899,25 +1053,32 @@ enum Collector {
       } catch {
         failed += 1
         lastError = error.localizedDescription
-        if readPermissionDenied(error.localizedDescription) { deniedSources.insert(remote.source ?? "host") }
+        if readPermissionDenied(error.localizedDescription) {
+          deniedSources.insert(remote.source ?? "host")
+        }
         // The outer scheduler already limits automatic collection to five
         // minutes. A second failure cooldown can miss the next timer by seconds.
         // Persist the attempt for probe rotation, without delaying the next poll.
         rechecks[remote.token] = Date()
         try saveRechecks(rechecks, for: device)
-        SupportDiagnostics.record("\(device.name): battery candidate download failed; file=\(name); source=\(remote.source ?? "host"); retry=next collection; fileCooldown=false; error=\(stableDiagnostic(error.localizedDescription))")
+        SupportDiagnostics.record(
+          "\(device.name): battery candidate download failed; file=\(name); source=\(remote.source ?? "host"); retry=next collection; fileCooldown=false; error=\(stableDiagnostic(error.localizedDescription))"
+        )
       }
       progress?(index + 1, newFiles.count)
     }
     if blocked > 0 {
       retryHeld += blocked
-      SupportDiagnostics.record("\(device.name): source read gate held \(blocked) unattempted file(s); trigger=AFC permission denied; files remain pending; retry=next collection")
+      SupportDiagnostics.record(
+        "\(device.name): source read gate held \(blocked) unattempted file(s); trigger=AFC permission denied; files remain pending; retry=next collection"
+      )
     }
     if listingFailures > 0 {
       lastError = [lastError, MacTransferL10n.text("mt_collection_listing_incomplete")]
         .compactMap { $0 }.joined(separator: " ")
     }
-    return CollectionReport(saved: saved, skipped: skipped, failed: failed, deferred: deferred,
+    return CollectionReport(
+      saved: saved, skipped: skipped, failed: failed, deferred: deferred,
       lastError: lastError, newestHostAnalyticsAt: newestHostAnalyticsAt, retryHeld: retryHeld,
       listingFailures: listingFailures)
   }
@@ -926,12 +1087,15 @@ enum Collector {
     var seen = Set<String>()
     return files.filter { remote in
       let base = remote.source.map { "/\($0)/" } ?? "/"
-      let validLocation = remote.path.hasPrefix(base + "Retired/Analytics-") ||
-        remote.path.hasPrefix(base + "Analytics-")
-      return validLocation && !remote.name.hasPrefix("Analytics-Census-") &&
-        !remote.name.localizedCaseInsensitiveContains("session") &&
-        remote.name.range(of: #"^Analytics-[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{6}[A-Za-z0-9._-]*\.ips\.ca\.synced$"#,
-          options: .regularExpression) != nil && seen.insert(remote.token).inserted
+      let validLocation =
+        remote.path.hasPrefix(base + "Retired/Analytics-")
+        || remote.path.hasPrefix(base + "Analytics-")
+      return validLocation && !remote.name.hasPrefix("Analytics-Census-")
+        && !remote.name.localizedCaseInsensitiveContains("session")
+        && remote.name.range(
+          of: #"^Analytics-[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{6}[A-Za-z0-9._-]*\.ips\.ca\.synced$"#,
+          options: .regularExpression) != nil
+        && seen.insert(remote.token).inserted
     }
   }
 }

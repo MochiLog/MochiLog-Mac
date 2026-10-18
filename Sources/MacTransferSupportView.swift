@@ -29,17 +29,22 @@ struct MacTransferSupportView: View {
       TextEditor(text: $message)
         .frame(height: 130)
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(.quaternary))
-      DatePicker(MacTransferL10n.text("mt_log_incident"), selection: $incidentDate,
+      DatePicker(
+        MacTransferL10n.text("mt_log_incident"), selection: $incidentDate,
         displayedComponents: [.date, .hourAndMinute])
       Text(MacTransferL10n.text("mt_log_support_days"))
         .font(.caption).foregroundStyle(.secondary)
-      Label(MacTransferL10n.text("mt_035"),
-        systemImage: "doc.text")
-        .font(.callout).foregroundStyle(.secondary)
+      Label(
+        MacTransferL10n.text("mt_035"),
+        systemImage: "doc.text"
+      )
+      .font(.callout).foregroundStyle(.secondary)
       if CrashDiagnostics.latest() != nil {
-        Label(MacTransferL10n.text("mt_crash_attachment"),
-          systemImage: "waveform.path.ecg")
-          .font(.caption).foregroundStyle(.secondary)
+        Label(
+          MacTransferL10n.text("mt_crash_attachment"),
+          systemImage: "waveform.path.ecg"
+        )
+        .font(.caption).foregroundStyle(.secondary)
       }
       if SupportDiagnostics.phoneReport(for: device) == nil {
         Text(MacTransferL10n.text("mt_036"))
@@ -75,14 +80,14 @@ struct MacTransferSupportView: View {
         service.recipients = ["support@mochilog.ryuya-dev.net"]
         service.subject = "[MochiLog Mac] \(MacTransferL10n.text("mt_040"))"
         let body = """
-        \(MacTransferL10n.text("mt_032")): \(nickname)
-        \(MacTransferL10n.text("mt_033")): \(email)
-        \(MacTransferL10n.text("mt_041")): \(device.model)
-        \(MacTransferL10n.text("mt_log_incident")): \(incidentDate.formatted(date: .abbreviated, time: .shortened))
+          \(MacTransferL10n.text("mt_032")): \(nickname)
+          \(MacTransferL10n.text("mt_033")): \(email)
+          \(MacTransferL10n.text("mt_041")): \(device.model)
+          \(MacTransferL10n.text("mt_log_incident")): \(incidentDate.formatted(date: .abbreviated, time: .shortened))
 
-        \(MacTransferL10n.text("mt_034")):
-        \(message)
-        """
+          \(MacTransferL10n.text("mt_034")):
+          \(message)
+          """
         service.perform(withItems: [body] + attachments)
       } catch { errorMessage = error.localizedDescription }
     }

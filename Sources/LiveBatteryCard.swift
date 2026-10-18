@@ -19,11 +19,15 @@ struct LiveBatteryCard: View {
           Text(MacTransferL10n.text("live_field"))
           Text(MacTransferL10n.text("live_value"))
         }.font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-        ForEach(BatteryPresentation.summary(values: snapshot?.values ?? [:], charging: snapshot?.charging,
-          fields: snapshot?.fields ?? [])) { row in
+        ForEach(
+          BatteryPresentation.summary(
+            values: snapshot?.values ?? [:], charging: snapshot?.charging,
+            fields: snapshot?.fields ?? [])
+        ) { row in
           Divider().gridCellColumns(2)
           GridRow(alignment: .top) {
-            Text(MacTransferL10n.text("live_" + row.key)).frame(maxWidth: .infinity, alignment: .leading)
+            Text(MacTransferL10n.text("live_" + row.key)).frame(
+              maxWidth: .infinity, alignment: .leading)
             Text(row.display(text: MacTransferL10n.text)).monospacedDigit().textSelection(.enabled)
               .fixedSize(horizontal: false, vertical: true)
           }
@@ -37,15 +41,26 @@ struct LiveBatteryCard: View {
       }
       if let snapshot {
         DisclosureGroup {
-          if snapshot.fields.isEmpty { Text(MacTransferL10n.text("live_details_missing")).font(.caption) }
-          else { RawBatteryFieldsView(fields: BatteryPresentation.details(values: snapshot.values,
-            charging: snapshot.charging, fields: snapshot.fields), text: MacTransferL10n.text) }
-        } label: { Label(MacTransferL10n.text("live_details"), systemImage: "list.bullet.rectangle") }
+          if snapshot.fields.isEmpty {
+            Text(MacTransferL10n.text("live_details_missing")).font(.caption)
+          } else {
+            RawBatteryFieldsView(
+              fields: BatteryPresentation.details(
+                values: snapshot.values,
+                charging: snapshot.charging, fields: snapshot.fields), text: MacTransferL10n.text)
+          }
+        } label: {
+          Label(MacTransferL10n.text("live_details"), systemImage: "list.bullet.rectangle")
+        }
       }
-      if failed { Label(MacTransferL10n.text("live_unavailable"), systemImage: "exclamationmark.triangle")
-        .font(.caption).foregroundStyle(.orange) }
+      if failed {
+        Label(MacTransferL10n.text("live_unavailable"), systemImage: "exclamationmark.triangle")
+          .font(.caption).foregroundStyle(.orange)
+      }
       HStack {
-        Button(action: receive) { Label(MacTransferL10n.text("live_receive"), systemImage: "arrow.down.circle") }
+        Button(action: receive) {
+          Label(MacTransferL10n.text("live_receive"), systemImage: "arrow.down.circle")
+        }
         Button(action: send) { Label(MacTransferL10n.text("live_send"), systemImage: "paperplane") }
       }.disabled(busy)
       Text(MacTransferL10n.text("live_network_note")).font(.caption).foregroundStyle(.secondary)
@@ -68,11 +83,14 @@ private struct RawBatteryFieldsView: View {
             ForEach(Array((groups[group] ?? []).enumerated()), id: \.offset) { _, field in
               VStack(alignment: .leading, spacing: 4) {
                 Text(field.label).font(.subheadline.weight(.medium)).textSelection(.enabled)
-                Text(field.kind == "boolean" ? text(field.value == "true" ? "live_true" : "live_false")
-                  : (field.kind == "data" ? "Base64 · " : "") + field.value)
-                  .font(.system(.callout, design: .monospaced)).textSelection(.enabled)
-                  .fixedSize(horizontal: false, vertical: true)
-                  .frame(maxWidth: .infinity, alignment: .leading)
+                Text(
+                  field.kind == "boolean"
+                    ? text(field.value == "true" ? "live_true" : "live_false")
+                    : (field.kind == "data" ? "Base64 · " : "") + field.value
+                )
+                .font(.system(.callout, design: .monospaced)).textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 Divider()
               }
             }

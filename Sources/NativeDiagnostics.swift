@@ -6,7 +6,9 @@ enum BoundedDiagnosticFile {
   static func read(_ url: URL, maximum: Int) -> Data? {
     guard maximum > 0, let handle = try? FileHandle(forReadingFrom: url) else { return nil }
     defer { try? handle.close() }
-    guard let data = try? handle.read(upToCount: maximum + 1), data.count <= maximum else { return nil }
+    guard let data = try? handle.read(upToCount: maximum + 1), data.count <= maximum else {
+      return nil
+    }
     return data
   }
 }
@@ -47,10 +49,13 @@ enum NativeDiagnostics {
   static func resources() -> Resources {
     var usage = rusage()
     getrusage(RUSAGE_SELF, &usage)
-    return Resources(processID: getpid(), residentBytes: GuardedProcess.residentBytes(),
+    return Resources(
+      processID: getpid(), residentBytes: GuardedProcess.residentBytes(),
       peakResidentBytes: UInt64(max(0, usage.ru_maxrss)), activeHelpers: GuardedProcess.activeCount)
   }
-  static func capture(status: String, devices: [Device], events: [String], at date: Date = Date()) -> Snapshot {
+  static func capture(status: String, devices: [Device], events: [String], at date: Date = Date())
+    -> Snapshot
+  {
     let limited = Array(devices.prefix(maxDevices)).map { device -> Device in
       var copy = device
       copy.name = String(copy.name.prefix(128)); copy.model = String(copy.model.prefix(64))
@@ -62,7 +67,8 @@ enum NativeDiagnostics {
       }
       return copy
     }
-    return Snapshot(generatedAt: SupportDiagnostics.localTime(date),
+    return Snapshot(
+      generatedAt: SupportDiagnostics.localTime(date),
       appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown",
       build: Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "unknown",
       osVersion: String(ProcessInfo.processInfo.operatingSystemVersionString.prefix(256)),
@@ -78,9 +84,12 @@ enum NativeDiagnostics {
       snapshot.generatedAt.count <= 64,
       snapshot.devices.count <= maxDevices, snapshot.recentEvents.count <= maxEvents,
       snapshot.recentEvents.allSatisfy({ $0.count <= 512 }),
-      snapshot.devices.allSatisfy({ $0.name.count <= 128 && $0.model.count <= 64
-        && ($0.automaticPauseUntil?.count ?? 0) <= 64 && ($0.collection?.result.count ?? 0) <= 64
-        && $0.routes.isBounded }) else { throw Failure.tooLarge }
+      snapshot.devices.allSatisfy({
+        $0.name.count <= 128 && $0.model.count <= 64
+          && ($0.automaticPauseUntil?.count ?? 0) <= 64 && ($0.collection?.result.count ?? 0) <= 64
+          && $0.routes.isBounded
+      })
+    else { throw Failure.tooLarge }
     let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
     let data = try encoder.encode(snapshot)
     guard data.count <= maxBytes else { throw Failure.tooLarge }
@@ -91,8 +100,12 @@ enum NativeDiagnostics {
 final class DiagnosticSnapshotStore: @unchecked Sendable {
   private let lock = NSLock()
   let directory: URL
-  init(root: URL) { directory = root.appendingPathComponent("NativeDiagnostics", isDirectory: true) }
-  func save(_ snapshot: NativeDiagnostics.Snapshot, retentionDays: Int, at date: Date = Date()) throws {
+  init(root: URL) {
+    directory = root.appendingPathComponent("NativeDiagnostics", isDirectory: true)
+  }
+  func save(_ snapshot: NativeDiagnostics.Snapshot, retentionDays: Int, at date: Date = Date())
+    throws
+  {
     let data = try NativeDiagnostics.encode(snapshot)
     lock.lock(); defer { lock.unlock() }
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -108,13 +121,21 @@ final class DiagnosticSnapshotStore: @unchecked Sendable {
     pruneUnlocked(retentionDays: retentionDays, at: date)
   }
   private func pruneUnlocked(retentionDays: Int, at date: Date) {
-    let cutoff = SupportDiagnostics.dayString(Calendar.current.date(byAdding: .day,
-      value: 1 - min(365, max(7, retentionDays)), to: date) ?? date)
-    for file in (try? FileManager.default.contentsOfDirectory(at: directory,
-      includingPropertiesForKeys: nil)) ?? [] {
+    let cutoff = SupportDiagnostics.dayString(
+      Calendar.current.date(
+        byAdding: .day,
+        value: 1 - min(365, max(7, retentionDays)), to: date) ?? date)
+    for file
+      in (try? FileManager.default.contentsOfDirectory(
+        at: directory,
+        includingPropertiesForKeys: nil)) ?? []
+    {
       let day = file.deletingPathExtension().lastPathComponent
-      if file.pathExtension == "json", day.range(of: #"^[0-9]{4}-[0-9]{2}-[0-9]{2}$"#,
-        options: .regularExpression) != nil, day < cutoff {
+      if file.pathExtension == "json",
+        day.range(
+          of: #"^[0-9]{4}-[0-9]{2}-[0-9]{2}$"#,
+          options: .regularExpression) != nil, day < cutoff
+      {
         try? FileManager.default.removeItem(at: file)
       }
     }

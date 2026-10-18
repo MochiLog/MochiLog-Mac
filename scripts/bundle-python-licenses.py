@@ -9,8 +9,10 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 UPSTREAM_LICENSES = {
-    "loguru": (ROOT / "Resources/PythonLicenses/loguru-LICENSE.txt",
-               "https://github.com/Delgan/loguru/blob/master/LICENSE"),
+    "loguru": (
+        ROOT / "Resources/PythonLicenses/loguru-LICENSE.txt",
+        "https://github.com/Delgan/loguru/blob/master/LICENSE",
+    ),
 }
 
 
@@ -30,11 +32,15 @@ def main(output):
     if individual.exists():
         shutil.rmtree(individual)
     individual.mkdir(parents=True, exist_ok=True)
-    for distribution in sorted(metadata.distributions(), key=lambda item: (item.metadata.get("Name") or "").lower()):
+    for distribution in sorted(
+        metadata.distributions(), key=lambda item: (item.metadata.get("Name") or "").lower()
+    ):
         name = distribution.metadata.get("Name") or "Unknown package"
         version = distribution.version
         entry = [f"{name} {version}\n{'=' * 72}\n"]
-        expression = distribution.metadata.get("License-Expression") or distribution.metadata.get("License")
+        expression = distribution.metadata.get("License-Expression") or distribution.metadata.get(
+            "License"
+        )
         if expression:
             entry.append(f"License metadata: {expression}\n")
         for classifier in distribution.metadata.get_all("Classifier", []):
@@ -56,10 +62,14 @@ def main(output):
             upstream = UPSTREAM_LICENSES.get(name.lower())
             if upstream:
                 source, url = upstream
-                entry.append(f"\n--- LICENSE (upstream: {url}) ---\n"
-                             f"{source.read_text(encoding='utf-8').rstrip()}\n")
+                entry.append(
+                    f"\n--- LICENSE (upstream: {url}) ---\n"
+                    f"{source.read_text(encoding='utf-8').rstrip()}\n"
+                )
             else:
-                entry.append("No license text was included in this package metadata. See the project URL above.\n")
+                entry.append(
+                    "No license text was included in this package metadata. See the project URL above.\n"
+                )
         filename = re.sub(r"[^A-Za-z0-9._-]+", "-", f"{name}-{version}") + ".txt"
         (individual / filename).write_text("".join(entry), encoding="utf-8")
         sections.append(f"\n{'=' * 72}\n{''.join(entry)}")

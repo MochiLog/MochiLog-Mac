@@ -29,12 +29,14 @@ struct MacTransferDebugLogView: View {
       HStack(alignment: .top, spacing: 16) {
         VStack(alignment: .leading, spacing: 8) {
           dayPicker(days, selection: $selectedDay)
-          DiagnosticLogPanel(title: MacTransferL10n.text("mt_044"),
+          DiagnosticLogPanel(
+            title: MacTransferL10n.text("mt_044"),
             day: selectedDay, device: nil, revision: revision)
         }
         VStack(alignment: .leading, spacing: 8) {
           dayPicker(phoneDays, selection: $selectedPhoneDay)
-          DiagnosticLogPanel(title: MacTransferL10n.text("mt_045"),
+          DiagnosticLogPanel(
+            title: MacTransferL10n.text("mt_045"),
             day: selectedPhoneDay, device: device, revision: revision, isPhone: true)
         }
       }
@@ -49,8 +51,10 @@ struct MacTransferDebugLogView: View {
     .task(id: revision) {
       let device = device
       let catalog = await Task.detached(priority: .userInitiated) {
-        (SupportDiagnostics.archiveDays(),
-          device.map { SupportDiagnostics.phoneArchiveDays(for: $0) } ?? [])
+        (
+          SupportDiagnostics.archiveDays(),
+          device.map { SupportDiagnostics.phoneArchiveDays(for: $0) } ?? []
+        )
       }.value
       guard !Task.isCancelled else { return }
       days = catalog.0
@@ -66,8 +70,10 @@ struct MacTransferDebugLogView: View {
         revision += 1
       }
     }
-    .confirmationDialog(MacTransferL10n.text("mt_log_delete_confirm"),
-      isPresented: $showingDeleteConfirmation) {
+    .confirmationDialog(
+      MacTransferL10n.text("mt_log_delete_confirm"),
+      isPresented: $showingDeleteConfirmation
+    ) {
       Button(MacTransferL10n.text("mt_log_delete"), role: .destructive) {
         Task {
           await Task.detached { SupportDiagnostics.deleteLogs() }.value
@@ -142,8 +148,11 @@ private struct DiagnosticLogPanel: View {
         Button(MacTransferL10n.text("mt_log_previous")) { page -= 1 }
           .disabled(loading || page == 0)
         Spacer()
-        Text(String(format: MacTransferL10n.text("mt_log_page"),
-          pages.isEmpty ? 0 : page + 1, pages.count)).font(.caption).foregroundStyle(.secondary)
+        Text(
+          String(
+            format: MacTransferL10n.text("mt_log_page"),
+            pages.isEmpty ? 0 : page + 1, pages.count)
+        ).font(.caption).foregroundStyle(.secondary)
         Spacer()
         Button(MacTransferL10n.text("mt_log_next")) { page += 1 }
           .disabled(loading || page + 1 >= pages.count)
@@ -151,23 +160,35 @@ private struct DiagnosticLogPanel: View {
     }
     .frame(maxWidth: .infinity)
     .onChange(of: day) { category = nil }
-    .task(id: Request(day: day, deviceID: device?.physicalDeviceID,
-      revision: revision, category: category)) {
+    .task(
+      id: Request(
+        day: day, deviceID: device?.physicalDeviceID,
+        revision: revision, category: category)
+    ) {
       loading = true
       let day = day, device = device, isPhone = isPhone, category = category
       let snapshot = await Task.detached(priority: .userInitiated) {
         let raw: String
         if isPhone {
-          if let device, let day { raw = SupportDiagnostics.phoneLogText(for: device, day: day) }
-          else if let device, let url = SupportDiagnostics.phoneReport(for: device),
+          if let device, let day {
+            raw = SupportDiagnostics.phoneLogText(for: device, day: day)
+          } else if let device, let url = SupportDiagnostics.phoneReport(for: device),
             let data = BoundedDiagnosticFile.read(url, maximum: 16_384),
             let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-            let events = object["recentEvents"] as? [String] { raw = events.joined(separator: "\n") }
-          else { raw = "" }
-        } else { raw = day.map { SupportDiagnostics.logText(for: $0) } ?? SupportDiagnostics.macLogText() }
+            let events = object["recentEvents"] as? [String]
+          {
+            raw = events.joined(separator: "\n")
+          } else {
+            raw = ""
+          }
+        } else {
+          raw = day.map { SupportDiagnostics.logText(for: $0) } ?? SupportDiagnostics.macLogText()
+        }
         let filtered = DiagnosticLogViewer.text(raw, category: category)
-        return (DiagnosticLogViewer.categories(in: raw), filtered,
-          DiagnosticLogViewer.pages(filtered))
+        return (
+          DiagnosticLogViewer.categories(in: raw), filtered,
+          DiagnosticLogViewer.pages(filtered)
+        )
       }.value
       guard !Task.isCancelled else { return }
       loadedCategories = snapshot.0

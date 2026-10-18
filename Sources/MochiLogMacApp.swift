@@ -22,9 +22,12 @@ struct MochiLogMacApp: App {
     SingleInstanceGuard.claim()
     CrashDiagnostics.start()
     // A pre-existing Sparkle preference does not imply consent to the new opt-in.
-    UserDefaults.standard.set(UserDefaults.standard.bool(forKey: "automaticUpdateChecks"), forKey: "SUEnableAutomaticChecks")
+    UserDefaults.standard.set(
+      UserDefaults.standard.bool(forKey: "automaticUpdateChecks"), forKey: "SUEnableAutomaticChecks"
+    )
     UserDefaults.standard.set(false, forKey: "SUAutomaticallyUpdate")
-    updaterController = SPUStandardUpdaterController(startingUpdater: true,
+    updaterController = SPUStandardUpdaterController(
+      startingUpdater: true,
       updaterDelegate: nil, userDriverDelegate: nil)
   }
 
@@ -36,24 +39,30 @@ struct MochiLogMacApp: App {
 
   var body: some Scene {
     Window("MochiLog Mac", id: "main") {
-      WindowMemoryContent(manager: windowMemory,
-        checkForUpdates: { updaterController.checkForUpdates(nil) })
-        .environmentObject(model)
-        .frame(minWidth: 780, minHeight: 620)
-        .onAppear {
-          MacAppPreferences.applyDockVisibility()
-          if !UserDefaults.standard.bool(forKey: "updateConsentAnswered") { showingUpdateConsent = true }
+      WindowMemoryContent(
+        manager: windowMemory,
+        checkForUpdates: { updaterController.checkForUpdates(nil) }
+      )
+      .environmentObject(model)
+      .frame(minWidth: 780, minHeight: 620)
+      .onAppear {
+        MacAppPreferences.applyDockVisibility()
+        if !UserDefaults.standard.bool(forKey: "updateConsentAnswered") {
+          showingUpdateConsent = true
         }
-        .onChange(of: automaticUpdateChecks) { _, enabled in
-          updaterController.updater.automaticallyChecksForUpdates = enabled
-        }
-        .alert(MacTransferL10n.text("update_optin_title"), isPresented: $showingUpdateConsent) {
-          Button(MacTransferL10n.text("update_optin_yes")) { setUpdateConsent(true) }
-          Button(MacTransferL10n.text("update_optin_no"), role: .cancel) { setUpdateConsent(false) }
-        } message: { Text(MacTransferL10n.text("update_optin_note")) }
-        .onChange(of: showMenuBar) { _, _ in MacAppPreferences.applyDockVisibility() }
-        .onChange(of: hideDock) { _, _ in MacAppPreferences.applyDockVisibility() }
-        .onChange(of: releaseUi) { _, _ in windowMemory.update() }
+      }
+      .onChange(of: automaticUpdateChecks) { _, enabled in
+        updaterController.updater.automaticallyChecksForUpdates = enabled
+      }
+      .alert(MacTransferL10n.text("update_optin_title"), isPresented: $showingUpdateConsent) {
+        Button(MacTransferL10n.text("update_optin_yes")) { setUpdateConsent(true) }
+        Button(MacTransferL10n.text("update_optin_no"), role: .cancel) { setUpdateConsent(false) }
+      } message: {
+        Text(MacTransferL10n.text("update_optin_note"))
+      }
+      .onChange(of: showMenuBar) { _, _ in MacAppPreferences.applyDockVisibility() }
+      .onChange(of: hideDock) { _, _ in MacAppPreferences.applyDockVisibility() }
+      .onChange(of: releaseUi) { _, _ in windowMemory.update() }
     }
     .windowResizability(.contentSize)
     .commands {
@@ -63,9 +72,12 @@ struct MochiLogMacApp: App {
       }
     }
 
-    MenuBarExtra("MochiLog Mac", systemImage: "battery.100percent",
-      isInserted: $showMenuBar) {
-      MacMenuBarContent(model: model,
+    MenuBarExtra(
+      "MochiLog Mac", systemImage: "battery.100percent",
+      isInserted: $showMenuBar
+    ) {
+      MacMenuBarContent(
+        model: model,
         checkForUpdates: { updaterController.checkForUpdates(nil) })
     }
   }
@@ -77,7 +89,7 @@ private struct WindowMemoryContent: View {
   let checkForUpdates: () -> Void
   var body: some View {
     ScreenMemoryHost(manager: manager, model: model, checkForUpdates: checkForUpdates)
-    .background(WindowMemoryReference(manager: manager).frame(width: 0, height: 0))
+      .background(WindowMemoryReference(manager: manager).frame(width: 0, height: 0))
   }
 }
 
@@ -112,7 +124,9 @@ private struct ScreenMemoryHost: NSViewControllerRepresentable {
         screen.removeFromParent()
         window?.recalculateKeyViewLoop()
         self.screen = nil
-        SupportDiagnostics.record("UI memory: hosting controller detached; childCount=\(children.count); subviewCount=\(view.subviews.count)")
+        SupportDiagnostics.record(
+          "UI memory: hosting controller detached; childCount=\(children.count); subviewCount=\(view.subviews.count)"
+        )
       } else if screen == nil && !creationPending {
         // Build an independent hosting graph outside the representable's
         // SwiftUI update transaction; otherwise its first graph is retained
@@ -124,8 +138,9 @@ private struct ScreenMemoryHost: NSViewControllerRepresentable {
     private func createScreenIfNeeded() {
       creationPending = false
       if wantsScreen && screen == nil, let model, let checkForUpdates {
-        let screen = ScreenController(rootView: AnyView(
-          CompanionView(checkForUpdates: checkForUpdates).environmentObject(model)))
+        let screen = ScreenController(
+          rootView: AnyView(
+            CompanionView(checkForUpdates: checkForUpdates).environmentObject(model)))
         addChild(screen)
         screen.view.frame = view.bounds
         screen.view.autoresizingMask = [.width, .height]
@@ -232,27 +247,36 @@ final class CompanionModel: ObservableObject {
 
   private func finishAutomaticFailures(for device: PairedDevice, outcome: String) {
     guard let failure = automaticFailures.removeValue(forKey: device.physicalDeviceID),
-      failure.count > 1 else { return }
-    SupportDiagnostics.record("\(device.name): automatic collection \(outcome) after \(failure.count) attempts; first=\(SupportDiagnostics.localTime(failure.first)); last error=\(failure.message)")
+      failure.count > 1
+    else { return }
+    SupportDiagnostics.record(
+      "\(device.name): automatic collection \(outcome) after \(failure.count) attempts; first=\(SupportDiagnostics.localTime(failure.first)); last error=\(failure.message)"
+    )
   }
 
-  private func recordCollectionFailure(for device: PairedDevice, trigger: String,
-    error: Error, manual: Bool) {
+  private func recordCollectionFailure(
+    for device: PairedDevice, trigger: String,
+    error: Error, manual: Bool
+  ) {
     let message = Collector.stableDiagnostic(error.localizedDescription)
     if manual {
-      SupportDiagnostics.record("\(device.name): collection failed; trigger=manual request; error=\(message)")
+      SupportDiagnostics.record(
+        "\(device.name): collection failed; trigger=manual request; error=\(message)")
       return
     }
     if var previous = automaticFailures[device.physicalDeviceID], previous.message == message {
       previous.count += 1
       automaticFailures[device.physicalDeviceID] = previous
       if previous.count.isMultiple(of: 12) {
-        SupportDiagnostics.record("\(device.name): automatic collection still waiting; trigger=\(trigger); attempts=\(previous.count); first=\(SupportDiagnostics.localTime(previous.first)); error=\(message)")
+        SupportDiagnostics.record(
+          "\(device.name): automatic collection still waiting; trigger=\(trigger); attempts=\(previous.count); first=\(SupportDiagnostics.localTime(previous.first)); error=\(message)"
+        )
       }
     } else {
       finishAutomaticFailures(for: device, outcome: "failure changed")
       automaticFailures[device.physicalDeviceID] = (message, Date(), 1)
-      SupportDiagnostics.record("\(device.name): collection failed; trigger=\(trigger); error=\(message)")
+      SupportDiagnostics.record(
+        "\(device.name): collection failed; trigger=\(trigger); error=\(message)")
     }
   }
 
@@ -304,8 +328,9 @@ final class CompanionModel: ObservableObject {
         self.activeTransfers[deviceID] = max(0, count + (active ? 1 : -1))
       }
     }
-    do { try server.start() }
-    catch { status = MacTransferL10n.format("mt_m_02", error.localizedDescription) }
+    do { try server.start() } catch {
+      status = MacTransferL10n.format("mt_m_02", error.localizedDescription)
+    }
     Task {
       await sampleDiagnostics()
       await refresh()
@@ -321,9 +346,13 @@ final class CompanionModel: ObservableObject {
       Task { @MainActor in
         guard let self else { return }
         self.presenceClock = Date()
-        for device in self.state.devices where (self.liveBatteryViews.contains(device.physicalDeviceID)
+        for device in self.state.devices
+        where
+          (self.liveBatteryViews.contains(device.physicalDeviceID)
           && NSApp.windows.contains(where: { $0.isVisible }))
-          || Date().timeIntervalSince(self.liveBatteryInterest[device.physicalDeviceID] ?? .distantPast) < 45 {
+          || Date().timeIntervalSince(
+            self.liveBatteryInterest[device.physicalDeviceID] ?? .distantPast) < 45
+        {
           await self.refreshBattery(device.physicalDeviceID)
         }
       }
@@ -344,33 +373,48 @@ final class CompanionModel: ObservableObject {
       }.value
       if diagnosticSamples % 5 == 0 {
         let resources = snapshot.resources
-        SupportDiagnostics.record("Resource snapshot: pid=\(resources.processID), residentBytes=\(resources.residentBytes), peakResidentBytes=\(resources.peakResidentBytes), activeHelpers=\(resources.activeHelpers), nativeDiagnosticSchema=\(snapshot.schema)")
+        SupportDiagnostics.record(
+          "Resource snapshot: pid=\(resources.processID), residentBytes=\(resources.residentBytes), peakResidentBytes=\(resources.peakResidentBytes), activeHelpers=\(resources.activeHelpers), nativeDiagnosticSchema=\(snapshot.schema)"
+        )
       }
       diagnosticSamples += 1
-    } catch { SupportDiagnostics.record("Native diagnostic snapshot failed: \(error.localizedDescription)") }
+    } catch {
+      SupportDiagnostics.record("Native diagnostic snapshot failed: \(error.localizedDescription)")
+    }
   }
 
   func watchBattery(_ id: UUID, visible: Bool) {
-    if visible { liveBatteryViews.insert(id); Task { await refreshBattery(id) } }
-    else { liveBatteryViews.remove(id) }
+    if visible {
+      liveBatteryViews.insert(id); Task { await refreshBattery(id) }
+    } else {
+      liveBatteryViews.remove(id)
+    }
   }
 
   func refreshBattery(_ id: UUID, manual: Bool = false) async {
     guard !liveBatteryBusy.contains(id),
       let device = state.devices.first(where: { $0.physicalDeviceID == id }),
-      manual || Date().timeIntervalSince(lastBatteryAttempt[id] ?? .distantPast) >=
-        (liveBatteryFailures.contains(id) ? 60 : 15) else { return }
+      manual
+        || Date().timeIntervalSince(lastBatteryAttempt[id] ?? .distantPast)
+          >= (liveBatteryFailures.contains(id) ? 60 : 15)
+    else { return }
     lastBatteryAttempt[id] = Date()
     liveBatteryBusy.insert(id)
     let started = ProcessInfo.processInfo.systemUptime
-    SupportDiagnostics.record("Battery snapshot started; device=\(id.uuidString), trigger=\(manual ? "manual" : "automatic"), logCollectionBusy=\(isBusy)")
+    SupportDiagnostics.record(
+      "Battery snapshot started; device=\(id.uuidString), trigger=\(manual ? "manual" : "automatic"), logCollectionBusy=\(isBusy)"
+    )
     defer {
       liveBatteryBusy.remove(id); lastBatteryAttempt[id] = Date()
-      SupportDiagnostics.record("Battery snapshot finished; device=\(id.uuidString), elapsedMs=\(Int((ProcessInfo.processInfo.systemUptime - started) * 1000)), failed=\(liveBatteryFailures.contains(id))")
+      SupportDiagnostics.record(
+        "Battery snapshot finished; device=\(id.uuidString), elapsedMs=\(Int((ProcessInfo.processInfo.systemUptime - started) * 1000)), failed=\(liveBatteryFailures.contains(id))"
+      )
     }
     do {
       let peerAddress = server?.liveBatteryPeerAddress(for: id)
-      let snapshot = try await Task.detached { try Collector.currentBattery(device, peerAddress: peerAddress) }.value
+      let snapshot = try await Task.detached {
+        try Collector.currentBattery(device, peerAddress: peerAddress)
+      }.value
       guard state.devices.contains(where: { $0.physicalDeviceID == id }) else {
         server?.liveBattery.remove(id); liveBatterySnapshots.removeValue(forKey: id); return
       }
@@ -399,7 +443,8 @@ final class CompanionModel: ObservableObject {
   var selectableDevices: [ConnectedDevice] {
     var result = devices
     if let pendingUSBDevice,
-      !result.contains(where: { $0.udid == pendingUSBDevice.udid }) {
+      !result.contains(where: { $0.udid == pendingUSBDevice.udid })
+    {
       result.append(pendingUSBDevice)
     }
     result += state.devices.filter { saved in
@@ -423,11 +468,13 @@ final class CompanionModel: ObservableObject {
 
   func setManualDeviceAddress(_ address: String?) throws {
     guard let udid = selectedUDID,
-      let index = state.devices.firstIndex(where: { $0.udid == udid }) else { return }
+      let index = state.devices.firstIndex(where: { $0.udid == udid })
+    else { return }
     let value = address?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     if !value.isEmpty {
       guard IPv4Address(value) != nil, value != "0.0.0.0",
-        !value.hasPrefix("127.") else {
+        !value.hasPrefix("127.")
+      else {
         throw CollectorError.failed("Enter a valid iPhone or iPad IPv4 address")
       }
     }
@@ -449,7 +496,8 @@ final class CompanionModel: ObservableObject {
     do {
       devices = try await Task.detached(priority: .utility) { try Collector.browse() }.value
       if let pendingUSBDevice,
-        devices.contains(where: { $0.udid == pendingUSBDevice.udid }) {
+        devices.contains(where: { $0.udid == pendingUSBDevice.udid })
+      {
         self.pendingUSBDevice = nil
       }
       status = MacTransferL10n.format("mt_m_03", devices.count)
@@ -503,15 +551,17 @@ final class CompanionModel: ObservableObject {
       .init(name: "session", value: invitation.sessionID.uuidString),
       .init(name: "public", value: invitation.publicKey.base64EncodedString()),
       .init(name: "ipv4", value: invitation.lanAddresses.joined(separator: ",")),
-      .init(name: "port", value: String(invitation.lanPort))
+      .init(name: "port", value: String(invitation.lanPort)),
     ]
     if let existingID = invitation.existingPhysicalDeviceID {
       components.queryItems?.append(.init(name: "device", value: existingID.uuidString))
     }
     if let tailnet = invitation.tailnetAddress {
       components.queryItems?.append(.init(name: "tailnet", value: tailnet))
-      components.queryItems?.append(.init(name: "tailnetPort",
-        value: String(invitation.tailnetPort ?? TransferServer.tailnetPort)))
+      components.queryItems?.append(
+        .init(
+          name: "tailnetPort",
+          value: String(invitation.tailnetPort ?? TransferServer.tailnetPort)))
     }
     return components.url?.absoluteString
   }
@@ -519,7 +569,8 @@ final class CompanionModel: ObservableObject {
   func collectAll(manual: Bool = false, trigger: String = "manual request") async {
     guard !state.devices.isEmpty else { return }
     guard !isBusy else {
-      SupportDiagnostics.record("Collection trigger skipped: \(trigger); another collection is in progress")
+      SupportDiagnostics.record(
+        "Collection trigger skipped: \(trigger); another collection is in progress")
       return
     }
     var japan = Calendar(identifier: .gregorian)
@@ -537,15 +588,19 @@ final class CompanionModel: ObservableObject {
       let resume: Date
       if !collectionOpen {
         reason = "before the daily collection window"
-        resume = japan.nextDate(after: now, matching: DateComponents(hour: 9),
-          matchingPolicy: .nextTime) ?? now.addingTimeInterval(24 * 60 * 60)
+        resume =
+          japan.nextDate(
+            after: now, matching: DateComponents(hour: 9),
+            matchingPolicy: .nextTime) ?? now.addingTimeInterval(24 * 60 * 60)
       } else if let until = device.automaticPauseUntil, until > now {
         reason = "mobile app confirmed all required daily logs"
         resume = until
       } else if BatteryLogStorage.hasRequiredDailyLogs(for: device, on: today) {
         reason = "verified current-day host and known Watch logs are stored"
-        resume = japan.nextDate(after: now, matching: DateComponents(hour: 9),
-          matchingPolicy: .nextTime) ?? now.addingTimeInterval(24 * 60 * 60)
+        resume =
+          japan.nextDate(
+            after: now, matching: DateComponents(hour: 9),
+            matchingPolicy: .nextTime) ?? now.addingTimeInterval(24 * 60 * 60)
       } else {
         reason = nil
         resume = now
@@ -554,13 +609,16 @@ final class CompanionModel: ObservableObject {
         finishAutomaticFailures(for: device, outcome: "paused")
         let key = "\(reason)|\(Int(resume.timeIntervalSince1970))"
         if lastAutomaticDecision[device.physicalDeviceID] != key {
-          SupportDiagnostics.record("\(device.name): automatic collection stopped; trigger=\(reason); resume=\(SupportDiagnostics.localTime(resume))")
+          SupportDiagnostics.record(
+            "\(device.name): automatic collection stopped; trigger=\(reason); resume=\(SupportDiagnostics.localTime(resume))"
+          )
           lastAutomaticDecision[device.physicalDeviceID] = key
         }
         return false
       }
       if lastAutomaticDecision.removeValue(forKey: device.physicalDeviceID) != nil {
-        SupportDiagnostics.record("\(device.name): automatic collection resumed; trigger=\(trigger)")
+        SupportDiagnostics.record(
+          "\(device.name): automatic collection resumed; trigger=\(trigger)")
       }
       return true
     }
@@ -571,48 +629,64 @@ final class CompanionModel: ObservableObject {
     for device in devices {
       let started = ProcessInfo.processInfo.systemUptime
       let attempt = UUID().uuidString
-      SupportDiagnostics.record("\(device.name): collection started; attempt=\(attempt); trigger=\(manual ? "manual request" : trigger)")
+      SupportDiagnostics.record(
+        "\(device.name): collection started; attempt=\(attempt); trigger=\(manual ? "manual request" : trigger)"
+      )
       do {
         collectionDone = 0
         collectionTotal = 0
         let report = try await Task.detached(priority: .utility) { [weak self] in
-          try Collector.collect(device, progress: { done, total in
-            Task { @MainActor [weak self] in
-              self?.collectionDone = done
-              self?.collectionTotal = total
-              self?.status = MacTransferL10n.format("mt_m_07", device.name, done, total)
-            }
-          })
+          try Collector.collect(
+            device,
+            progress: { done, total in
+              Task { @MainActor [weak self] in
+                self?.collectionDone = done
+                self?.collectionTotal = total
+                self?.status = MacTransferL10n.format("mt_m_07", device.name, done, total)
+              }
+            })
         }.value
         if report.acquisitionComplete {
           finishAutomaticFailures(for: device, outcome: "recovered")
         } else if report.failed > 0 || report.listingFailures > 0 {
-          recordCollectionFailure(for: device, trigger: trigger,
-            error: CollectorError.failed(report.lastError ?? "Battery log download failed"), manual: manual)
+          recordCollectionFailure(
+            for: device, trigger: trigger,
+            error: CollectorError.failed(report.lastError ?? "Battery log download failed"),
+            manual: manual)
         }
         SupportDiagnostics.saveCollection(report, error: nil, for: device)
-        let isStale = report.newestHostAnalyticsAt.map {
-          Date().timeIntervalSince($0) >= 48 * 60 * 60
-        } ?? true
+        let isStale =
+          report.newestHostAnalyticsAt.map {
+            Date().timeIntervalSince($0) >= 48 * 60 * 60
+          } ?? true
         if isStale {
           staleAnalyticsDeviceIDs.insert(device.physicalDeviceID)
         } else {
           staleAnalyticsDeviceIDs.remove(device.physicalDeviceID)
         }
         savedAny = savedAny || report.saved > 0
-        SupportDiagnostics.record("\(device.name): collection finished; attempt=\(attempt); saved=\(report.saved), excluded=\(report.skipped), deferred=\(report.deferred), failed=\(report.failed), retryHeld=\(report.retryHeld), listingFailures=\(report.listingFailures), acquisitionComplete=\(report.acquisitionComplete), elapsedMs=\(Int((ProcessInfo.processInfo.systemUptime - started) * 1000))")
+        SupportDiagnostics.record(
+          "\(device.name): collection finished; attempt=\(attempt); saved=\(report.saved), excluded=\(report.skipped), deferred=\(report.deferred), failed=\(report.failed), retryHeld=\(report.retryHeld), listingFailures=\(report.listingFailures), acquisitionComplete=\(report.acquisitionComplete), elapsedMs=\(Int((ProcessInfo.processInfo.systemUptime - started) * 1000))"
+        )
         if selectedUDID == device.udid { osPairingState = .verified }
-        status = report.failed == 0
+        status =
+          report.failed == 0
           ? MacTransferL10n.format("mt_m_08", device.name, report.saved, report.skipped)
-          : MacTransferL10n.format("mt_m_09", device.name, report.saved, report.skipped, report.failed, report.lastError ?? "")
+          : MacTransferL10n.format(
+            "mt_m_09", device.name, report.saved, report.skipped, report.failed,
+            report.lastError ?? "")
         if report.retryHeld + report.deferred > 0 {
-          status += " " + MacTransferL10n.format("mt_collection_retry_wait", report.retryHeld + report.deferred)
+          status +=
+            " "
+            + MacTransferL10n.format("mt_collection_retry_wait", report.retryHeld + report.deferred)
         }
         if report.failed == 0 && report.listingFailures > 0 {
           status += " " + MacTransferL10n.text("mt_collection_listing_incomplete")
         }
       } catch {
-        SupportDiagnostics.record("\(device.name): collection attempt ended; attempt=\(attempt); result=failed; elapsedMs=\(Int((ProcessInfo.processInfo.systemUptime - started) * 1000))")
+        SupportDiagnostics.record(
+          "\(device.name): collection attempt ended; attempt=\(attempt); result=failed; elapsedMs=\(Int((ProcessInfo.processInfo.systemUptime - started) * 1000))"
+        )
         recordCollectionFailure(for: device, trigger: trigger, error: error, manual: manual)
         SupportDiagnostics.saveCollection(nil, error: error, for: device)
         if selectedUDID == device.udid { osPairingState = .failed }
@@ -643,8 +717,11 @@ final class CompanionModel: ObservableObject {
 
   func startSystemPairing() {
     guard !isPairingSystem else { return }
-    guard let helper = Bundle.main.url(forResource: "mochilog-collector", withExtension: nil,
-      subdirectory: "Collector") else {
+    guard
+      let helper = Bundle.main.url(
+        forResource: "mochilog-collector", withExtension: nil,
+        subdirectory: "Collector")
+    else {
       status = MacTransferL10n.text("mt_m_10")
       return
     }
@@ -657,27 +734,33 @@ final class CompanionModel: ObservableObject {
       var succeeded = false
       do {
         var recent = ""
-        let result = try GuardedProcess.run(helper,
+        let result = try GuardedProcess.run(
+          helper,
           arguments: ["remote", "pair-host", "--name", "MochiLog Mac", "--timeout", "180"],
-          environment: ["HOME": NSHomeDirectory(), "PATH": "/usr/bin:/bin",
-            "TERM": "dumb", "NO_COLOR": "1", "PYTHONUNBUFFERED": "1"],
+          environment: [
+            "HOME": NSHomeDirectory(), "PATH": "/usr/bin:/bin",
+            "TERM": "dumb", "NO_COLOR": "1", "PYTHONUNBUFFERED": "1",
+          ],
           timeout: 190, outputLimit: 65_536, errorLimit: 65_536, cancellation: cancellation,
           onOutput: { chunk in
             recent = String((recent + String(decoding: chunk, as: UTF8.self)).suffix(512))
-            if let range = recent.range(of: #"Enter this code on your device: [0-9]{6}"#,
-              options: .regularExpression) {
+            if let range = recent.range(
+              of: #"Enter this code on your device: [0-9]{6}"#,
+              options: .regularExpression)
+            {
               let code = String(recent[range].suffix(6))
               Task { @MainActor [weak self] in self?.pairingCode = code }
             }
           })
         succeeded = result.exitCode == 0
-      } catch { /* The existing pairing result UI handles canceled/failed helpers. */ }
+      } catch { /* The existing pairing result UI handles canceled/failed helpers. */  }
       let success = succeeded
       await MainActor.run { [weak self] in
         self?.isPairingSystem = false
         self?.pairingCode = nil
         self?.pairCancellation = nil
-        self?.status = success
+        self?.status =
+          success
           ? MacTransferL10n.text("mt_m_13")
           : MacTransferL10n.text("mt_m_14")
         Task { [weak self] in await self?.refresh() }
@@ -736,7 +819,8 @@ private struct CompanionView: View {
   let checkForUpdates: () -> Void
   @EnvironmentObject private var model: CompanionModel
   @StateObject private var lifetime = ScreenLifetimeToken()
-  @State private var page: Page? = Page(rawValue: UserDefaults.standard.string(forKey: "MochiLogLastPage") ?? "overview")
+  @State private var page: Page? = Page(
+    rawValue: UserDefaults.standard.string(forKey: "MochiLogLastPage") ?? "overview")
   @State private var showingSupport = false
   @State private var showingDebugLog = false
   @State private var showingLicenses = false
@@ -817,10 +901,13 @@ private struct CompanionView: View {
       if !model.legacyClientIDs.isEmpty {
         GroupBox {
           VStack(alignment: .leading, spacing: 8) {
-            Label(MacTransferL10n.text("mt_mobile_update_needed"),
-              systemImage: "exclamationmark.shield")
-              .foregroundStyle(.orange)
-            Link(MacTransferL10n.text("mt_mobile_update_link"),
+            Label(
+              MacTransferL10n.text("mt_mobile_update_needed"),
+              systemImage: "exclamationmark.shield"
+            )
+            .foregroundStyle(.orange)
+            Link(
+              MacTransferL10n.text("mt_mobile_update_link"),
               destination: URL(string: "https://apps.apple.com/app/mochilog/id6756904240")!)
           }.frame(maxWidth: .infinity, alignment: .leading).padding(8)
         }
@@ -830,11 +917,14 @@ private struct CompanionView: View {
           workflowDiagram
           DisclosureGroup(MacTransferL10n.text("mt_flow_details")) {
             VStack(alignment: .leading, spacing: 14) {
-              guidePoint("mt_guide_collect_title", "mt_guide_collect_detail",
+              guidePoint(
+                "mt_guide_collect_title", "mt_guide_collect_detail",
                 symbol: "macbook.and.iphone")
-              guidePoint("mt_guide_import_title", "mt_guide_import_detail",
+              guidePoint(
+                "mt_guide_import_title", "mt_guide_import_detail",
                 symbol: "arrow.down.doc")
-              guidePoint("mt_guide_without_title", "mt_guide_without_detail",
+              guidePoint(
+                "mt_guide_without_title", "mt_guide_without_detail",
                 symbol: "iphone")
             }.padding(.top, 8)
           }
@@ -850,11 +940,14 @@ private struct CompanionView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
           if model.isBusy {
             if model.collectionTotal > 0 {
-              ProgressView(value: Double(model.collectionDone),
+              ProgressView(
+                value: Double(model.collectionDone),
                 total: Double(model.collectionTotal))
               Text("\(model.collectionDone)/\(model.collectionTotal)")
                 .font(.caption).monospacedDigit().foregroundStyle(.secondary)
-            } else { ProgressView() }
+            } else {
+              ProgressView()
+            }
           }
           Button {
             Task { [model] in await model.collectAll(manual: true) }
@@ -863,7 +956,9 @@ private struct CompanionView: View {
           }
           .buttonStyle(.borderedProminent)
           .disabled(model.isBusy || model.state.devices.isEmpty)
-          Button { model.sendQueuedNow() } label: {
+          Button {
+            model.sendQueuedNow()
+          } label: {
             Label(MacTransferL10n.text("mt_send_now"), systemImage: "paperplane")
           }
           .disabled(model.isBusy || !model.state.devices.contains(where: { $0.confirmedAt != nil }))
@@ -887,14 +982,14 @@ private struct CompanionView: View {
   }
 
   private var pairedDevices: some View {
-      GroupBox(MacTransferL10n.text("mt_nav_connected")) {
-        VStack(alignment: .leading, spacing: 12) {
-          if model.state.devices.isEmpty {
-            Text(MacTransferL10n.text("mt_nav_no_devices"))
-              .foregroundStyle(.secondary)
-          } else {
-            ForEach(model.state.devices) { device in
-              VStack(alignment: .leading, spacing: 12) {
+    GroupBox(MacTransferL10n.text("mt_nav_connected")) {
+      VStack(alignment: .leading, spacing: 12) {
+        if model.state.devices.isEmpty {
+          Text(MacTransferL10n.text("mt_nav_no_devices"))
+            .foregroundStyle(.secondary)
+        } else {
+          ForEach(model.state.devices) { device in
+            VStack(alignment: .leading, spacing: 12) {
               HStack {
                 Image(systemName: "iphone.gen3").foregroundStyle(.green)
                 VStack(alignment: .leading) {
@@ -905,18 +1000,24 @@ private struct CompanionView: View {
                     .font(.caption.weight(.medium))
                     .foregroundStyle(presenceColor(for: presence))
                   if let lastRequest = model.lastAppRequestAt[device.physicalDeviceID] {
-                    Text(MacTransferL10n.format("mt_last_request",
-                      DateFormatter.localizedString(from: lastRequest,
-                        dateStyle: .short, timeStyle: .short)))
-                      .font(.caption).foregroundStyle(.secondary)
+                    Text(
+                      MacTransferL10n.format(
+                        "mt_last_request",
+                        DateFormatter.localizedString(
+                          from: lastRequest,
+                          dateStyle: .short, timeStyle: .short))
+                    )
+                    .font(.caption).foregroundStyle(.secondary)
                   } else {
                     Text(MacTransferL10n.text("mt_no_request"))
                       .font(.caption).foregroundStyle(.secondary)
                   }
                   if model.staleAnalyticsDeviceIDs.contains(device.physicalDeviceID) {
-                    Label(MacTransferL10n.text("mt_analytics_stale_title"),
-                      systemImage: "exclamationmark.triangle")
-                      .font(.caption.weight(.medium)).foregroundStyle(.orange)
+                    Label(
+                      MacTransferL10n.text("mt_analytics_stale_title"),
+                      systemImage: "exclamationmark.triangle"
+                    )
+                    .font(.caption.weight(.medium)).foregroundStyle(.orange)
                     Text(MacTransferL10n.text("mt_analytics_stale_detail"))
                       .font(.caption).foregroundStyle(.secondary)
                       .fixedSize(horizontal: false, vertical: true)
@@ -929,15 +1030,15 @@ private struct CompanionView: View {
                 }
               }
 
-              }
             }
           }
-          Text(MacTransferL10n.text("mt_presence_note"))
-            .font(.caption).foregroundStyle(.secondary)
-          Button(MacTransferL10n.text("mt_nav_manage_devices")) { page = .devices }
-            .buttonStyle(ScreenLinkButtonStyle())
-        }.frame(maxWidth: .infinity, alignment: .leading).padding(12)
-      }
+        }
+        Text(MacTransferL10n.text("mt_presence_note"))
+          .font(.caption).foregroundStyle(.secondary)
+        Button(MacTransferL10n.text("mt_nav_manage_devices")) { page = .devices }
+          .buttonStyle(ScreenLinkButtonStyle())
+      }.frame(maxWidth: .infinity, alignment: .leading).padding(12)
+    }
   }
 
   private var currentBattery: some View {
@@ -951,20 +1052,26 @@ private struct CompanionView: View {
           Label(device.name, systemImage: device.model.hasPrefix("iPad") ? "ipad" : "iphone")
             .font(.title3.weight(.semibold))
           Text(device.model).font(.caption).foregroundStyle(.secondary)
-              LiveBatteryCard(snapshot: model.liveBatterySnapshots[device.physicalDeviceID],
-                failed: model.liveBatteryFailures.contains(device.physicalDeviceID),
-                busy: model.liveBatteryBusy.contains(device.physicalDeviceID),
-                receive: { Task { [model] in await model.refreshBattery(device.physicalDeviceID, manual: true) } },
-                send: { Task { [model] in await model.sendBatteryNow(device.physicalDeviceID) } })
-                .onAppear { model.watchBattery(device.physicalDeviceID, visible: true) }
-                .onDisappear { model.watchBattery(device.physicalDeviceID, visible: false) }
+          LiveBatteryCard(
+            snapshot: model.liveBatterySnapshots[device.physicalDeviceID],
+            failed: model.liveBatteryFailures.contains(device.physicalDeviceID),
+            busy: model.liveBatteryBusy.contains(device.physicalDeviceID),
+            receive: {
+              Task { [model] in await model.refreshBattery(device.physicalDeviceID, manual: true) }
+            },
+            send: { Task { [model] in await model.sendBatteryNow(device.physicalDeviceID) } }
+          )
+          .onAppear { model.watchBattery(device.physicalDeviceID, visible: true) }
+          .onDisappear { model.watchBattery(device.physicalDeviceID, visible: false) }
         }
       }
     }
   }
 
-  private func guidePoint(_ titleKey: String, _ detailKey: String,
-    symbol: String) -> some View {
+  private func guidePoint(
+    _ titleKey: String, _ detailKey: String,
+    symbol: String
+  ) -> some View {
     HStack(alignment: .top, spacing: 12) {
       Image(systemName: symbol)
         .font(.title3.weight(.medium))
@@ -999,12 +1106,15 @@ private struct CompanionView: View {
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .padding(14)
-    .background(Color(nsColor: .controlBackgroundColor),
+    .background(
+      Color(nsColor: .controlBackgroundColor),
       in: RoundedRectangle(cornerRadius: 16))
   }
 
-  private func flowNode(_ symbol: String, _ titleKey: String,
-    tint: Color) -> some View {
+  private func flowNode(
+    _ symbol: String, _ titleKey: String,
+    tint: Color
+  ) -> some View {
     VStack(spacing: 9) {
       Image(systemName: symbol)
         .font(.title2.weight(.medium))
@@ -1028,8 +1138,10 @@ private struct CompanionView: View {
       .accessibilityHidden(true)
   }
 
-  private func compactFlowNode(_ symbol: String, _ titleKey: String,
-    tint: Color) -> some View {
+  private func compactFlowNode(
+    _ symbol: String, _ titleKey: String,
+    tint: Color
+  ) -> some View {
     HStack(spacing: 12) {
       Image(systemName: symbol)
         .font(.title3).foregroundStyle(tint)
@@ -1067,12 +1179,15 @@ private struct CompanionView: View {
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .padding(14)
-    .background(Color(nsColor: .controlBackgroundColor),
+    .background(
+      Color(nsColor: .controlBackgroundColor),
       in: RoundedRectangle(cornerRadius: 16))
   }
 
-  private func pairingStage(_ number: Int, _ symbol: String,
-    _ titleKey: String) -> some View {
+  private func pairingStage(
+    _ number: Int, _ symbol: String,
+    _ titleKey: String
+  ) -> some View {
     VStack(spacing: 8) {
       Image(systemName: symbol)
         .font(.title2).foregroundStyle(.green)
@@ -1094,13 +1209,15 @@ private struct CompanionView: View {
   private var helpDiagram: some View {
     ViewThatFits(in: .horizontal) {
       HStack(alignment: .top, spacing: 8) {
-        helpStage(1, "doc.text.magnifyingglass", "mt_help_missing_title",
+        helpStage(
+          1, "doc.text.magnifyingglass", "mt_help_missing_title",
           "mt_help_missing_detail")
         helpStage(2, "macbook", "mt_help_collect_title", "mt_help_collect_detail")
         helpStage(3, "iphone.gen3", "mt_help_import_title", "mt_help_import_detail")
       }
       VStack(alignment: .leading, spacing: 8) {
-        helpStage(1, "doc.text.magnifyingglass", "mt_help_missing_title",
+        helpStage(
+          1, "doc.text.magnifyingglass", "mt_help_missing_title",
           "mt_help_missing_detail")
         helpStage(2, "macbook", "mt_help_collect_title", "mt_help_collect_detail")
         helpStage(3, "iphone.gen3", "mt_help_import_title", "mt_help_import_detail")
@@ -1109,8 +1226,10 @@ private struct CompanionView: View {
     .frame(maxWidth: .infinity, alignment: .leading)
   }
 
-  private func helpStage(_ number: Int, _ symbol: String,
-    _ titleKey: String, _ detailKey: String) -> some View {
+  private func helpStage(
+    _ number: Int, _ symbol: String,
+    _ titleKey: String, _ detailKey: String
+  ) -> some View {
     DisclosureGroup {
       Text(MacTransferL10n.text(detailKey))
         .font(.caption).foregroundStyle(.secondary)
@@ -1131,7 +1250,8 @@ private struct CompanionView: View {
     }
     .frame(minWidth: 150, alignment: .topLeading)
     .padding(12)
-    .background(Color(nsColor: .controlBackgroundColor),
+    .background(
+      Color(nsColor: .controlBackgroundColor),
       in: RoundedRectangle(cornerRadius: 14))
   }
 
@@ -1180,14 +1300,19 @@ private struct CompanionView: View {
             }.padding(.top, 8)
           }
           Divider()
-          Label(MacTransferL10n.text("mt_usb_wireless_title"),
-            systemImage: "wifi")
-            .font(.headline)
+          Label(
+            MacTransferL10n.text("mt_usb_wireless_title"),
+            systemImage: "wifi"
+          )
+          .font(.headline)
           Text(MacTransferL10n.text("mt_usb_wireless_detail"))
             .foregroundStyle(.secondary)
           HStack {
-            Button(model.isPairingSystem ? MacTransferL10n.text("mt_010")
-              : MacTransferL10n.text("mt_011")) {
+            Button(
+              model.isPairingSystem
+                ? MacTransferL10n.text("mt_010")
+                : MacTransferL10n.text("mt_011")
+            ) {
               model.isPairingSystem ? model.stopSystemPairing() : model.startSystemPairing()
             }
             .disabled(model.isPairingUSB)
@@ -1227,14 +1352,17 @@ private struct CompanionView: View {
             }
             Button {
               Task { [model] in await model.refresh() }
-            } label: { Image(systemName: "arrow.clockwise") }
-              .help(MacTransferL10n.text("mt_015"))
+            } label: {
+              Image(systemName: "arrow.clockwise")
+            }
+            .help(MacTransferL10n.text("mt_015"))
           }
           if model.pairedSelected != nil {
             Button(role: .destructive) {
               showingUnpairConfirmation = true
             } label: {
-              Label(MacTransferL10n.text("mt_unpair_button"),
+              Label(
+                MacTransferL10n.text("mt_unpair_button"),
                 systemImage: "person.crop.circle.badge.xmark")
             }
             Divider()
@@ -1246,8 +1374,9 @@ private struct CompanionView: View {
               TextField("192.168.1.20", text: $manualDeviceAddress)
                 .textFieldStyle(.roundedBorder).frame(maxWidth: 220)
               Button(MacTransferL10n.text("mt_manual_device_ip_save")) {
-                do { try model.setManualDeviceAddress(manualDeviceAddress) }
-                catch { preferencesError = error.localizedDescription }
+                do { try model.setManualDeviceAddress(manualDeviceAddress) } catch {
+                  preferencesError = error.localizedDescription
+                }
               }
               Button(MacTransferL10n.text("mt_manual_device_ip_clear")) {
                 do {
@@ -1259,11 +1388,14 @@ private struct CompanionView: View {
             if let preferencesError { Text(preferencesError).foregroundStyle(.red) }
           }
           if let selected = model.selected, model.isOSPairingVerified {
-            Label(MacTransferL10n.text("mt_os_paired"),
-              systemImage: "checkmark.circle.fill")
-              .foregroundStyle(.green)
+            Label(
+              MacTransferL10n.text("mt_os_paired"),
+              systemImage: "checkmark.circle.fill"
+            )
+            .foregroundStyle(.green)
             if model.showPairingQR, let url = model.pairingURL,
-              let image = QRCode.image(for: url) {
+              let image = QRCode.image(for: url)
+            {
               HStack(alignment: .top, spacing: 20) {
                 Image(nsImage: image).interpolation(.none).resizable()
                   .frame(width: 210, height: 210)
@@ -1287,8 +1419,10 @@ private struct CompanionView: View {
                 .buttonStyle(.borderedProminent)
             } else {
               HStack {
-                Label(MacTransferL10n.text("mt_017"),
-                  systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                Label(
+                  MacTransferL10n.text("mt_017"),
+                  systemImage: "checkmark.circle.fill"
+                ).foregroundStyle(.green)
                 Spacer()
                 Button(MacTransferL10n.text("mt_018")) { model.pairApp() }
               }
@@ -1299,17 +1433,23 @@ private struct CompanionView: View {
               Text(MacTransferL10n.text("mt_os_checking"))
             }
           } else if case .awaitingWireless = model.osPairingState {
-            Label(MacTransferL10n.text("mt_os_awaiting_wireless"),
-              systemImage: "wifi")
-              .foregroundStyle(.orange)
+            Label(
+              MacTransferL10n.text("mt_os_awaiting_wireless"),
+              systemImage: "wifi"
+            )
+            .foregroundStyle(.orange)
           } else if case .failed = model.osPairingState {
-            Label(MacTransferL10n.text("mt_os_unreachable"),
-              systemImage: "wifi.exclamationmark")
-              .foregroundStyle(.orange)
+            Label(
+              MacTransferL10n.text("mt_os_unreachable"),
+              systemImage: "wifi.exclamationmark"
+            )
+            .foregroundStyle(.orange)
           } else {
-            Label(MacTransferL10n.text("mt_os_pair_first"),
-              systemImage: "exclamationmark.circle")
-              .foregroundStyle(.secondary)
+            Label(
+              MacTransferL10n.text("mt_os_pair_first"),
+              systemImage: "exclamationmark.circle"
+            )
+            .foregroundStyle(.secondary)
           }
         }.frame(maxWidth: .infinity, alignment: .leading).padding(12)
       }
@@ -1318,11 +1458,12 @@ private struct CompanionView: View {
       manualDeviceAddress = model.pairedSelected?.manualAddress ?? ""
       Task { [model] in await model.refresh() }
     }
-    .confirmationDialog(MacTransferL10n.text("mt_unpair_title"),
-      isPresented: $showingUnpairConfirmation, titleVisibility: .visible) {
+    .confirmationDialog(
+      MacTransferL10n.text("mt_unpair_title"),
+      isPresented: $showingUnpairConfirmation, titleVisibility: .visible
+    ) {
       Button(MacTransferL10n.text("mt_unpair_button"), role: .destructive) {
-        do { try model.unpairSelected() }
-        catch { preferencesError = error.localizedDescription }
+        do { try model.unpairSelected() } catch { preferencesError = error.localizedDescription }
       }
     } message: {
       Text(MacTransferL10n.text("mt_unpair_detail"))
@@ -1342,18 +1483,24 @@ private struct CompanionView: View {
         Text(MacTransferL10n.text("mt_intro_detail"))
           .font(.subheadline).foregroundStyle(.secondary)
           .fixedSize(horizontal: false, vertical: true)
-        Label(MacTransferL10n.text(model.selectableDevices.isEmpty
-          ? "mt_intro_waiting" : "mt_intro_found"),
+        Label(
+          MacTransferL10n.text(
+            model.selectableDevices.isEmpty
+              ? "mt_intro_waiting" : "mt_intro_found"),
           systemImage: model.selectableDevices.isEmpty
-            ? "cable.connector" : "checkmark.circle")
-          .font(.subheadline.weight(.medium))
-          .foregroundStyle(model.selectableDevices.isEmpty ? .blue : .green)
+            ? "cable.connector" : "checkmark.circle"
+        )
+        .font(.subheadline.weight(.medium))
+        .foregroundStyle(model.selectableDevices.isEmpty ? .blue : .green)
       }
       .frame(maxWidth: .infinity, alignment: .leading)
       VStack(spacing: 0) {
         RoundedRectangle(cornerRadius: 23)
-          .fill(LinearGradient(colors: [.indigo, .blue],
-            startPoint: .topLeading, endPoint: .bottomTrailing))
+          .fill(
+            LinearGradient(
+              colors: [.indigo, .blue],
+              startPoint: .topLeading, endPoint: .bottomTrailing)
+          )
           .frame(width: 126, height: 210)
           .overlay {
             Image(systemName: "battery.100percent")
@@ -1377,7 +1524,8 @@ private struct CompanionView: View {
     }
     .padding(28)
     .frame(maxWidth: .infinity, alignment: .leading)
-    .background(Color(nsColor: .controlBackgroundColor),
+    .background(
+      Color(nsColor: .controlBackgroundColor),
       in: RoundedRectangle(cornerRadius: 22))
   }
 
@@ -1402,9 +1550,11 @@ private struct CompanionView: View {
       GroupBox(MacTransferL10n.text("mt_nav_about")) {
         VStack(alignment: .leading, spacing: 12) {
           Button(MacTransferL10n.text("mt_l_00")) { showingLicenses = true }
-          Link(MacTransferL10n.text("mt_l_07"),
+          Link(
+            MacTransferL10n.text("mt_l_07"),
             destination: URL(string: "https://mochilog.ryuya-dev.net/privacy")!)
-          Link(MacTransferL10n.text("mt_l_08"),
+          Link(
+            MacTransferL10n.text("mt_l_08"),
             destination: URL(string: "https://mochilog.ryuya-dev.net/terms")!)
         }.frame(maxWidth: .infinity, alignment: .leading).padding(12)
       }
@@ -1418,17 +1568,20 @@ private struct CompanionView: View {
     VStack(alignment: .leading, spacing: 22) {
       GroupBox(MacTransferL10n.text("mt_027")) {
         VStack(alignment: .leading, spacing: 14) {
-          Toggle(MacTransferL10n.text("mt_028"),
-            isOn: Binding(get: { launchesAtLogin }, set: { desired in
-              do {
-                try MacAppPreferences.setLaunchAtLogin(desired)
-                launchesAtLogin = MacAppPreferences.launchesAtLogin
-                preferencesError = nil
-              } catch {
-                launchesAtLogin = MacAppPreferences.launchesAtLogin
-                preferencesError = error.localizedDescription
-              }
-            }))
+          Toggle(
+            MacTransferL10n.text("mt_028"),
+            isOn: Binding(
+              get: { launchesAtLogin },
+              set: { desired in
+                do {
+                  try MacAppPreferences.setLaunchAtLogin(desired)
+                  launchesAtLogin = MacAppPreferences.launchesAtLogin
+                  preferencesError = nil
+                } catch {
+                  launchesAtLogin = MacAppPreferences.launchesAtLogin
+                  preferencesError = error.localizedDescription
+                }
+              }))
           Toggle(MacTransferL10n.text("mt_029"), isOn: $showMenuBar)
             .disabled(!quitOnWindowClose)
           Toggle(MacTransferL10n.text("mt_030"), isOn: $hideDock)
@@ -1451,11 +1604,13 @@ private struct CompanionView: View {
       }
       GroupBox(MacTransferL10n.text("mt_nav_updates")) {
         VStack(alignment: .leading, spacing: 12) {
-        Toggle(MacTransferL10n.text("update_optin_title"), isOn: $automaticUpdateChecks)
-          .onChange(of: automaticUpdateChecks) { _, _ in UserDefaults.standard.set(true, forKey: "updateConsentAnswered") }
-        Text(MacTransferL10n.text("update_optin_note")).font(.caption).foregroundStyle(.secondary)
-        Button(MacTransferL10n.text("mt_002")) { checkForUpdates() }
-          .frame(maxWidth: .infinity, alignment: .leading).padding(12)
+          Toggle(MacTransferL10n.text("update_optin_title"), isOn: $automaticUpdateChecks)
+            .onChange(of: automaticUpdateChecks) { _, _ in
+              UserDefaults.standard.set(true, forKey: "updateConsentAnswered")
+            }
+          Text(MacTransferL10n.text("update_optin_note")).font(.caption).foregroundStyle(.secondary)
+          Button(MacTransferL10n.text("mt_002")) { checkForUpdates() }
+            .frame(maxWidth: .infinity, alignment: .leading).padding(12)
         }
       }
     }
@@ -1468,7 +1623,8 @@ private enum QRCode {
     filter.message = Data(text.utf8)
     filter.correctionLevel = "M"
     guard let image = filter.outputImage,
-      let cgImage = CIContext().createCGImage(image, from: image.extent) else { return nil }
+      let cgImage = CIContext().createCGImage(image, from: image.extent)
+    else { return nil }
     return NSImage(cgImage: cgImage, size: NSSize(width: 210, height: 210))
   }
 }

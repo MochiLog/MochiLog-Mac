@@ -1,4 +1,5 @@
 """The Python bridge transports registry data without interpreting it."""
+
 import importlib.util
 from pathlib import Path
 import plistlib

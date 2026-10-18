@@ -12,6 +12,7 @@ Classic mode implements lockdownd, mutual TLS and AFC over TCP.
 No pairing, unlocking, mover, write, erase or security-setting requests exist.
 The optional CrashReporter relay probe drains/discards its diagnostic archive.
 """
+
 import argparse
 import base64
 import contextlib
@@ -51,8 +52,13 @@ class AfcDenied(ProbeError):
 
 
 def emit(stage, **values):
-    print(json.dumps({"time": datetime.now().astimezone().isoformat(),
-                      "stage": stage, **values}, ensure_ascii=False), flush=True)
+    print(
+        json.dumps(
+            {"time": datetime.now().astimezone().isoformat(), "stage": stage, **values},
+            ensure_ascii=False,
+        ),
+        flush=True,
+    )
 
 
 def exact(stream, length):
@@ -90,8 +96,12 @@ class Pipe:
         self.stderr = tempfile.TemporaryFile()
         self.process = subprocess.Popen(
             ["/usr/libexec/remotectl", "netcat", device, REMOTE_SERVICE],
-            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self.stderr,
-            bufsize=0, start_new_session=True)
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=self.stderr,
+            bufsize=0,
+            start_new_session=True,
+        )
 
     def read(self, length):
         if not select.select([self.process.stdout], [], [], self.timeout)[0]:
@@ -145,24 +155,34 @@ class Tcp:
         certificate = record.get("HostCertificate")
         private_key = record.get("HostPrivateKey")
         device_certificate = record.get("DeviceCertificate")
-        if not all(isinstance(value, bytes) and value for value in
-                   (certificate, private_key, device_certificate)):
+        if not all(
+            isinstance(value, bytes) and value
+            for value in (certificate, private_key, device_certificate)
+        ):
             raise ProbeError("Existing paired TLS identity is unavailable")
         with tempfile.TemporaryDirectory(prefix="mochilog-paired-tls-") as folder:
+
             def pem(value, kind):
                 if value.startswith(b"-----BEGIN"):
                     return value
                 if kind == "certificate":
                     return ssl.DER_cert_to_PEM_cert(value).encode()
                 converted = subprocess.run(
-                    ["/usr/bin/openssl", "pkey", "-inform", "DER"], input=value,
-                    stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=5)
+                    ["/usr/bin/openssl", "pkey", "-inform", "DER"],
+                    input=value,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                    timeout=5,
+                )
                 if converted.returncode:
                     raise ProbeError("Could not decode existing host key")
                 return converted.stdout
+
             cert_path, key_path = Path(folder) / "host.pem", Path(folder) / "host-key.pem"
-            for path, value in ((cert_path, pem(certificate, "certificate")),
-                                (key_path, pem(private_key, "key"))):
+            for path, value in (
+                (cert_path, pem(certificate, "certificate")),
+                (key_path, pem(private_key, "key")),
+            ):
                 with path.open("xb") as output:
                     os.chmod(path, 0o600)
                     output.write(value)
@@ -182,15 +202,23 @@ class Tcp:
 
 class TunnelAssertion:
     def __init__(self, executable, udid):
-        self.process = subprocess.Popen([str(executable), udid], stdout=subprocess.PIPE,
-                                        stderr=subprocess.DEVNULL, start_new_session=True)
+        self.process = subprocess.Popen(
+            [str(executable), udid],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
         try:
             if not select.select([self.process.stdout], [], [], 16)[0]:
                 raise ProbeError("Timed out opening existing OS tunnel")
             response = json.loads(self.process.stdout.readline())
             if response.get("stage") != "native_assertion_ready":
                 domain, code = response.get("domain"), response.get("code")
-                if isinstance(domain, str) and re.fullmatch(r"[A-Za-z0-9_.-]{1,120}", domain) and isinstance(code, int):
+                if (
+                    isinstance(domain, str)
+                    and re.fullmatch(r"[A-Za-z0-9_.-]{1,120}", domain)
+                    and isinstance(code, int)
+                ):
                     emit("native_tunnel_rejected", domain=domain, code=code)
                 raise ProbeError("OS did not grant an existing-pairing tunnel assertion")
             self.address = response["address"]
@@ -210,16 +238,26 @@ class TunnelAssertion:
 
 
 def existing_os_remote_key(args):
-    helper = args.tunnel_helper or Path(__file__).resolve().parents[2] / "Build/research/native_tunnel"
-    process = subprocess.Popen([str(helper), "--existing-key-only", args.udid], stdout=subprocess.PIPE,
-                               stderr=subprocess.DEVNULL, start_new_session=True)
+    helper = (
+        args.tunnel_helper or Path(__file__).resolve().parents[2] / "Build/research/native_tunnel"
+    )
+    process = subprocess.Popen(
+        [str(helper), "--existing-key-only", args.udid],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
     try:
         if not select.select([process.stdout], [], [], 16)[0]:
             raise ProbeError("Timed out reading existing OS credential")
         line = process.stdout.readline(1024)
         response = json.loads(line)
         length = response.get("length")
-        if response.get("stage") != "existing_os_key_ready" or not isinstance(length, int) or not 0 < length <= 4096:
+        if (
+            response.get("stage") != "existing_os_key_ready"
+            or not isinstance(length, int)
+            or not 0 < length <= 4096
+        ):
             raise ProbeError("OS paired-device snapshot has no existing remote unlock credential")
         key = process.stdout.read(length)
         if len(key) != length:
@@ -268,21 +306,30 @@ class Plists:
 def validate_checkin_response(response, expected, credential):
     """Inspect only fixed protocol fields; never log a full service response."""
     known = {"Request", "Error", "Status", "EnableServiceSSL"}
-    emit("rsd_checkin_shape", response=expected,
-         fields=sorted(set(response) & known),
-         other_field_count=len(set(response) - known),
-         error_present=response.get("Error") is not None,
-         service_ssl_required=response.get("EnableServiceSSL") is True)
+    emit(
+        "rsd_checkin_shape",
+        response=expected,
+        fields=sorted(set(response) & known),
+        other_field_count=len(set(response) - known),
+        error_present=response.get("Error") is not None,
+        service_ssl_required=response.get("EnableServiceSSL") is True,
+    )
     if response.get("Error") is not None:
         error = response["Error"]
-        safe = error if isinstance(error, str) and re.fullmatch(r"[A-Za-z0-9_.-]{1,100}", error) else "DeviceError"
+        safe = (
+            error
+            if isinstance(error, str) and re.fullmatch(r"[A-Za-z0-9_.-]{1,100}", error)
+            else "DeviceError"
+        )
         raise ProbeError("RSD authentication rejected: " + safe)
     if response.get("Request") != expected:
         raise ProbeError("Unexpected RSD authentication response")
     if response.get("EnableServiceSSL") is True:
         # Do not send plaintext AFC after a peer asks for TLS. An OS remote
         # credential is not the classic pinned TLS certificate identity.
-        raise ProbeError("RSD service requires TLS; this research channel has no matching TLS identity")
+        raise ProbeError(
+            "RSD service requires TLS; this research channel has no matching TLS identity"
+        )
     emit("rsd_checkin", response=expected, credential=credential)
 
 
@@ -295,7 +342,9 @@ class Afc:
         sequence = self.sequence
         self.sequence += 1
         total = 40 + len(payload)
-        self.stream.write(struct.pack("<8sQQQQ", b"CFA6LPAA", total, total, sequence, opcode) + payload)
+        self.stream.write(
+            struct.pack("<8sQQQQ", b"CFA6LPAA", total, total, sequence, opcode) + payload
+        )
         magic, full, header, echoed, operation = struct.unpack("<8sQQQQ", exact(self.stream, 40))
         if magic != b"CFA6LPAA" or not 40 <= header <= full <= MAX_PACKET or echoed != sequence:
             raise ProbeError("Invalid or mismatched AFC response header")
@@ -352,8 +401,13 @@ class Afc:
 
 
 def resolve_remote_device(udid):
-    state = subprocess.run(["/usr/libexec/remotectl", "dumpstate"],
-                           capture_output=True, text=True, timeout=10, check=True).stdout
+    state = subprocess.run(
+        ["/usr/libexec/remotectl", "dumpstate"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=True,
+    ).stdout
     matches = []
     for block in re.split(r"(?=^Found )", state, flags=re.M):
         if re.search(r"UniqueDeviceID => " + re.escape(udid) + r"\s*$", block, re.M):
@@ -376,8 +430,10 @@ def existing_record(args, remote=False):
     if args.pair_record:
         return load_record(args.pair_record)
     name = ("remote_" if remote else "") + args.udid + ".plist"
-    for folder in (Path.home() / ".pymobiledevice3",
-                   Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "pymobiledevice3"):
+    for folder in (
+        Path.home() / ".pymobiledevice3",
+        Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "pymobiledevice3",
+    ):
         if (folder / name).is_file():
             return load_record(folder / name)
     if remote:
@@ -386,12 +442,21 @@ def existing_record(args, remote=False):
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
         connection.settimeout(args.timeout)
         connection.connect("/var/run/usbmuxd")
-        body = plistlib.dumps({"MessageType": "ReadPairRecord", "PairRecordID": args.udid,
-                              "ClientVersionString": LABEL, "ProgName": LABEL, "kLibUSBMuxVersion": 3})
+        body = plistlib.dumps(
+            {
+                "MessageType": "ReadPairRecord",
+                "PairRecordID": args.udid,
+                "ClientVersionString": LABEL,
+                "ProgName": LABEL,
+                "kLibUSBMuxVersion": 3,
+            }
+        )
         connection.sendall(struct.pack("<IIII", len(body) + 16, 1, 8, 1) + body)
+
         class Receiver:
             def read(self, length):
                 return connection.recv(length)
+
         receiver = Receiver()
         length, version, message_type, tag = struct.unpack("<IIII", exact(receiver, 16))
         if version != 1 or message_type != 8 or tag != 1 or length < 16:
@@ -407,20 +472,38 @@ def existing_record(args, remote=False):
 
 
 def read_only_diagnostic_query(stream, probe):
-    request = {"Request": "GasGauge"} if probe == "gas-gauge" else {
-        "Request": "IORegistry", "EntryClass": "IOPMPowerSource"}
+    request = (
+        {"Request": "GasGauge"}
+        if probe == "gas-gauge"
+        else {"Request": "IORegistry", "EntryClass": "IOPMPowerSource"}
+    )
     channel = Plists(stream)
     channel.send(request)
     response = channel.receive()
     status = response.get("Status")
     if status != "Success":
-        safe = status if isinstance(status, str) and re.fullmatch(r"[A-Za-z0-9_.-]{1,100}", status) else "DeviceError"
+        safe = (
+            status
+            if isinstance(status, str) and re.fullmatch(r"[A-Za-z0-9_.-]{1,100}", status)
+            else "DeviceError"
+        )
         raise ProbeError("Diagnostic query rejected: " + safe)
     # Expose only battery metric field names, never identities or entire registry.
     names = set()
-    allowed = {"CycleCount", "DesignCapacity", "FullChargeCapacity", "NominalChargeCapacity",
-               "RawMaxCapacity", "MaximumCapacityPercent", "Temperature", "AppleRawMaxCapacity",
-               "CurrentCapacity", "MaxCapacity", "ChargeCounter"}
+    allowed = {
+        "CycleCount",
+        "DesignCapacity",
+        "FullChargeCapacity",
+        "NominalChargeCapacity",
+        "RawMaxCapacity",
+        "MaximumCapacityPercent",
+        "Temperature",
+        "AppleRawMaxCapacity",
+        "CurrentCapacity",
+        "MaxCapacity",
+        "ChargeCounter",
+    }
+
     def fields(value, depth=0):
         if depth > 32:
             raise ProbeError("Diagnostic response nesting exceeds limit")
@@ -432,14 +515,30 @@ def read_only_diagnostic_query(stream, probe):
         elif isinstance(value, list):
             for item in value:
                 fields(item, depth + 1)
+
     fields(response.get("Diagnostics", {}))
-    emit("live_battery_query", query=probe, status="Success", available_metrics=sorted(names),
-         daily_analytics_acquired=False)
+    emit(
+        "live_battery_query",
+        query=probe,
+        status="Success",
+        available_metrics=sorted(names),
+        daily_analytics_acquired=False,
+    )
 
 
 def run(args):
-    if args.probe in ("analytics-file", "file-relay-archive", "coredevice-file-open") and not args.inventory:
-        if not isinstance(args.file, str) or not re.fullmatch(r"/(?:ProxiedDevice-[a-fA-F0-9]+/)?(?:Retired/)?Analytics-\d{4}-\d{2}-\d{2}-\d{6}[A-Za-z0-9._-]*\.ips\.ca\.synced", args.file) or "session" in args.file.lower():
+    if (
+        args.probe in ("analytics-file", "file-relay-archive", "coredevice-file-open")
+        and not args.inventory
+    ):
+        if (
+            not isinstance(args.file, str)
+            or not re.fullmatch(
+                r"/(?:ProxiedDevice-[a-fA-F0-9]+/)?(?:Retired/)?Analytics-\d{4}-\d{2}-\d{2}-\d{6}[A-Za-z0-9._-]*\.ips\.ca\.synced",
+                args.file,
+            )
+            or "session" in args.file.lower()
+        ):
             raise ProbeError("Select an existing non-session Analytics report")
     resources = []
     if args.probe == "os-key-status":
@@ -466,12 +565,17 @@ def run(args):
     if args.probe == "analytics-transport" and args.mode != "remote":
         raise ProbeError("Alternate RemoteXPC transport requires independent remote mode")
     if args.probe.startswith("coredevice-") and (args.mode != "remote" or args.checkin != "plain"):
-        raise ProbeError("CoreDevice probes use remote mode and the default transport authentication")
+        raise ProbeError(
+            "CoreDevice probes use remote mode and the default transport authentication"
+        )
     if args.probe != "analytics-file" and args.mode == "os-service":
         raise ProbeError("Stock bridge comparison only supports the Analytics file probe")
     try:
         if args.mode in ("remote", "os-service"):
-            helper = args.tunnel_helper or Path(__file__).resolve().parents[2] / "Build/research/native_tunnel"
+            helper = (
+                args.tunnel_helper
+                or Path(__file__).resolve().parents[2] / "Build/research/native_tunnel"
+            )
             assertion = None
             if Path(helper).is_file():
                 assertion = TunnelAssertion(helper, args.udid)
@@ -520,14 +624,26 @@ def run(args):
                 emit("rsd_discovered", implementation="independent_http2_and_xpc")
                 if args.inventory:
                     services = metadata.get("Services", {})
-                    emit("diagnostic_service_inventory", names=sorted(name for name in services
-                         if any(word in name.lower() for word in ("analytics", "log", "crash", "diagnost"))))
+                    emit(
+                        "diagnostic_service_inventory",
+                        names=sorted(
+                            name
+                            for name in services
+                            if any(
+                                word in name.lower()
+                                for word in ("analytics", "log", "crash", "diagnost")
+                            )
+                        ),
+                    )
                     # Whitelist protocol hints; never dump the full service metadata.
                     for name in (REMOTE_SERVICE, "com.apple.osanalytics.logTransfer"):
                         entry = services.get(name, {})
                         properties = entry.get("Properties", {})
-                        emit("service_protocol_hint", service=name,
-                             uses_remote_xpc=properties.get("UsesRemoteXPC") is True)
+                        emit(
+                            "service_protocol_hint",
+                            service=name,
+                            uses_remote_xpc=properties.get("UsesRemoteXPC") is True,
+                        )
                     return
                 if service not in metadata["Services"]:
                     raise ProbeError("Requested alternate service is not advertised")
@@ -536,7 +652,9 @@ def run(args):
                     raise ProbeError("RSD advertised an invalid service port")
                 if args.probe.startswith("coredevice-"):
                     path = Path(__file__).with_name("coredevice_readonly.py")
-                    spec = importlib.util.spec_from_file_location("mochilog_research_coredevice", path)
+                    spec = importlib.util.spec_from_file_location(
+                        "mochilog_research_coredevice", path
+                    )
                     core = importlib.util.module_from_spec(spec)
                     spec.loader.exec_module(core)
                     alternate = wire.Rsd(assertion.address, service_port, args.timeout)
@@ -549,15 +667,32 @@ def run(args):
                     resources.append(alternate)
                     emit("alternate_socket_connected", body_access_tested=False)
                     alternate.bootstrap()
-                    emit("alternate_transport_negotiated", service=service, body_access_tested=False)
+                    emit(
+                        "alternate_transport_negotiated", service=service, body_access_tested=False
+                    )
                     # Only wait for an unsolicited protocol message. No guessed service RPC.
                     alternate.socket.settimeout(2)
                     try:
                         message = alternate.receive()
-                        safe_fields = {"MessageType", "ProtocolVersion", "MessagingProtocolVersion", "Properties",
-                                       "Services", "UUID", "Event", "Request", "Response", "Error", "Status"}
-                        emit("alternate_unsolicited_message", fields=sorted(set(message) & safe_fields),
-                             other_field_count=len(set(message) - safe_fields), body_access_tested=False)
+                        safe_fields = {
+                            "MessageType",
+                            "ProtocolVersion",
+                            "MessagingProtocolVersion",
+                            "Properties",
+                            "Services",
+                            "UUID",
+                            "Event",
+                            "Request",
+                            "Response",
+                            "Error",
+                            "Status",
+                        }
+                        emit(
+                            "alternate_unsolicited_message",
+                            fields=sorted(set(message) & safe_fields),
+                            other_field_count=len(set(message) - safe_fields),
+                            body_access_tested=False,
+                        )
                     except socket.timeout:
                         emit("alternate_no_unsolicited_message", body_access_tested=False)
                     return
@@ -586,7 +721,9 @@ def run(args):
             session = Tcp(args.host, 62078, args.timeout)
             resources.append(session)
             channel = Plists(session)
-            response = channel.request("StartSession", HostID=record["HostID"], SystemBUID=record["SystemBUID"])
+            response = channel.request(
+                "StartSession", HostID=record["HostID"], SystemBUID=record["SystemBUID"]
+            )
             if response.get("EnableSessionSSL"):
                 session.tls(record)
             emit("paired_session", tls=bool(response.get("EnableSessionSSL")))
@@ -621,7 +758,11 @@ def run(args):
             response = channel.receive()
             error = response.get("Error")
             if error is not None:
-                safe = error if isinstance(error, str) and re.fullmatch(r"[A-Za-z0-9_.-]{1,100}", error) else "DeviceError"
+                safe = (
+                    error
+                    if isinstance(error, str) and re.fullmatch(r"[A-Za-z0-9_.-]{1,100}", error)
+                    else "DeviceError"
+                )
                 raise ProbeError("CrashReporter archive request rejected: " + safe)
             if response.get("Status") != "Acknowledged":
                 raise ProbeError("CrashReporter archive was not acknowledged")
@@ -635,8 +776,11 @@ def run(args):
             except archive.ArchiveError as error:
                 raise ProbeError(str(error)) from None
         elif args.probe == "file-relay-availability":
-            emit("file_relay_connection_available", body_access_tested=False,
-                 daily_analytics_acquired=False)
+            emit(
+                "file_relay_connection_available",
+                body_access_tested=False,
+                daily_analytics_acquired=False,
+            )
         elif args.probe in ("gas-gauge", "power-registry"):
             read_only_diagnostic_query(stream, args.probe)
         else:
@@ -649,15 +793,39 @@ def run(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--udid", required=True)
-    parser.add_argument("--file", help="Existing non-session Analytics path, required for the file probe")
+    parser.add_argument(
+        "--file", help="Existing non-session Analytics path, required for the file probe"
+    )
     parser.add_argument("--mode", choices=("remote", "classic", "os-service"), default="remote")
-    parser.add_argument("--probe", choices=("analytics-file", "gas-gauge", "power-registry", "analytics-transport", "os-key-status", "file-relay-availability", "file-relay-archive", "coredevice-lock-state", "coredevice-file-open"),
-                        default="analytics-file", help="Read-only alternate service query; never starts a backup")
-    parser.add_argument("--checkin", choices=("plain", "escrow", "os-escrow", "skip"), default="plain")
+    parser.add_argument(
+        "--probe",
+        choices=(
+            "analytics-file",
+            "gas-gauge",
+            "power-registry",
+            "analytics-transport",
+            "os-key-status",
+            "file-relay-availability",
+            "file-relay-archive",
+            "coredevice-lock-state",
+            "coredevice-file-open",
+        ),
+        default="analytics-file",
+        help="Read-only alternate service query; never starts a backup",
+    )
+    parser.add_argument(
+        "--checkin", choices=("plain", "escrow", "os-escrow", "skip"), default="plain"
+    )
     parser.add_argument("--host")
     parser.add_argument("--pair-record")
-    parser.add_argument("--tunnel-helper", help="Compiled independent C helper for the existing OS tunnel")
-    parser.add_argument("--inventory", action="store_true", help="List diagnostic service names without opening reports (remote mode)")
+    parser.add_argument(
+        "--tunnel-helper", help="Compiled independent C helper for the existing OS tunnel"
+    )
+    parser.add_argument(
+        "--inventory",
+        action="store_true",
+        help="List diagnostic service names without opening reports (remote mode)",
+    )
     parser.add_argument("--output", help="Optional private copy; never overwrite an existing file")
     parser.add_argument("--timeout", type=float, default=10)
     args = parser.parse_args()
@@ -671,8 +839,10 @@ def main():
         parser.error("--output is only supported for an Analytics file read")
     started = time.monotonic()
     if hasattr(signal, "SIGALRM"):
+
         def deadline(_signal, _frame):
             raise ProbeError("Overall research deadline exceeded")
+
         signal.signal(signal.SIGALRM, deadline)
         signal.alarm(120)
     try:
@@ -680,9 +850,14 @@ def main():
         return 0
     except (ProbeError, OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
         # Exception text is only emitted for our sanitized protocol errors.
-        emit("failed", error_type=type(error).__name__,
-             reason=str(error) if isinstance(error, ProbeError) else "Transport or credential input failure",
-             seconds=round(time.monotonic() - started, 2))
+        emit(
+            "failed",
+            error_type=type(error).__name__,
+            reason=str(error)
+            if isinstance(error, ProbeError)
+            else "Transport or credential input failure",
+            seconds=round(time.monotonic() - started, 2),
+        )
         return 1
     finally:
         if hasattr(signal, "SIGALRM"):

@@ -34,10 +34,12 @@ enum GuardedProcess {
       ? info.pti_resident_size : 0
   }
 
-  static func run(_ executable: URL, arguments: [String], environment: [String: String],
+  static func run(
+    _ executable: URL, arguments: [String], environment: [String: String],
     timeout: TimeInterval, outputLimit: Int = 8 * 1024 * 1024,
     errorLimit: Int = 1024 * 1024, residentLimit: UInt64 = 1024 * 1024 * 1024,
-    cancellation: Cancellation? = nil, onOutput: ((Data) -> Void)? = nil) throws -> Result {
+    cancellation: Cancellation? = nil, onOutput: ((Data) -> Void)? = nil
+  ) throws -> Result {
     precondition(timeout > 0 && outputLimit > 0 && errorLimit > 0)
     if cancellation?.isCancelled == true { throw CancellationError() }
     var stdout: [Int32] = [-1, -1], stderr: [Int32] = [-1, -1]
@@ -50,15 +52,18 @@ enum GuardedProcess {
     defer { posix_spawn_file_actions_destroy(&actions) }
     try checked(posix_spawnattr_init(&attributes))
     defer { posix_spawnattr_destroy(&attributes) }
-    try checked(posix_spawnattr_setflags(&attributes,
-      Int16(POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_CLOEXEC_DEFAULT)))
+    try checked(
+      posix_spawnattr_setflags(
+        &attributes,
+        Int16(POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_CLOEXEC_DEFAULT)))
     try checked(posix_spawnattr_setpgroup(&attributes, 0))
     try checked(posix_spawn_file_actions_addopen(&actions, STDIN_FILENO, "/dev/null", O_RDONLY, 0))
     try checked(posix_spawn_file_actions_adddup2(&actions, stdout[1], STDOUT_FILENO))
     try checked(posix_spawn_file_actions_adddup2(&actions, stderr[1], STDERR_FILENO))
     for fd in stdout + stderr { try checked(posix_spawn_file_actions_addclose(&actions, fd)) }
     var argv = ([executable.path] + arguments).map { strdup($0) } + [nil]
-    var envp = environment.sorted(by: { $0.key < $1.key }).map { strdup("\($0.key)=\($0.value)") } + [nil]
+    var envp =
+      environment.sorted(by: { $0.key < $1.key }).map { strdup("\($0.key)=\($0.value)") } + [nil]
     defer { for pointer in argv + envp { free(pointer) } }
     var pid: pid_t = 0
     try checked(posix_spawn(&pid, executable.path, &actions, &attributes, &argv, &envp))
@@ -80,8 +85,10 @@ enum GuardedProcess {
     for fd in [stdout[0], stderr[0]] {
       guard fcntl(fd, F_SETFL, O_NONBLOCK) >= 0 else { throw Failure.system(errno) }
     }
-    var descriptors = [pollfd(fd: stdout[0], events: Int16(POLLIN | POLLHUP), revents: 0),
-      pollfd(fd: stderr[0], events: Int16(POLLIN | POLLHUP), revents: 0)]
+    var descriptors = [
+      pollfd(fd: stdout[0], events: Int16(POLLIN | POLLHUP), revents: 0),
+      pollfd(fd: stderr[0], events: Int16(POLLIN | POLLHUP), revents: 0),
+    ]
     var output = Data(), error = Data(), buffer = [UInt8](repeating: 0, count: 8192)
     let deadline = ProcessInfo.processInfo.systemUptime + timeout
     var nextResourceCheck: TimeInterval = 0
@@ -121,12 +128,15 @@ enum GuardedProcess {
           reaped = true
           // A descendant may still own the pipe after its parent exits.
           Darwin.kill(-pid, SIGKILL)
-        } else if finished < 0 && errno != EINTR { throw Failure.system(errno) }
+        } else if finished < 0 && errno != EINTR {
+          throw Failure.system(errno)
+        }
       }
       if reaped && descriptors.allSatisfy({ $0.fd < 0 }) { break }
     }
     let signal = status & 0x7f
-    return Result(output: output, error: error,
+    return Result(
+      output: output, error: error,
       exitCode: signal == 0 ? (status >> 8) & 0xff : signal,
       signal: signal == 0 ? nil : signal)
   }

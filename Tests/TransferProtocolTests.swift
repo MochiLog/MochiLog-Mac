@@ -32,77 +32,98 @@ private func discover(_ name: String) throws -> NWEndpoint {
   return endpoint
 }
 
-private func request(_ endpoint: NWEndpoint, hostID: UUID, device: PairedDevice,
+private func request(
+  _ endpoint: NWEndpoint, hostID: UUID, device: PairedDevice,
   nonce: UUID = UUID(), ack: String = "", validMAC: Bool = true,
   diagnostics: Data? = nil, presence: String? = nil, version2: Bool = true,
   expectNoResponse: Bool = false, delayedChunks: Bool = false,
   overridePayload: [String: String]? = nil, offerEnabled: Bool = false,
   offer: (token: String, digest: String, decision: String)? = nil,
-  sealed: Bool = false, issuedAt: Int64? = nil, extra: [String: String] = [:]) throws -> Data {
-  let message = presence == "background"
+  sealed: Bool = false, issuedAt: Int64? = nil, extra: [String: String] = [:]
+) throws -> Data {
+  let message =
+    presence == "background"
     ? "v2|background|\(hostID.uuidString)|\(device.physicalDeviceID.uuidString)|\(nonce.uuidString)"
     : "\(version2 ? "v2|" : "")\(hostID.uuidString)|\(device.physicalDeviceID.uuidString)|\(nonce.uuidString)|\(ack)"
-  let mac = HMAC<SHA256>.authenticationCode(for: Data(message.utf8),
-    using: SymmetricKey(data: device.secret))
-    .map { String(format: "%02x", $0) }.joined()
+  let mac = HMAC<SHA256>.authenticationCode(
+    for: Data(message.utf8),
+    using: SymmetricKey(data: device.secret)
+  )
+  .map { String(format: "%02x", $0) }.joined()
   var payload: [String: String] = [
     "hostID": hostID.uuidString,
     "physicalDeviceID": device.physicalDeviceID.uuidString,
     "nonce": nonce.uuidString,
     "ack": ack,
-    "mac": validMAC ? mac : String(repeating: "0", count: 64)
+    "mac": validMAC ? mac : String(repeating: "0", count: 64),
   ]
   if version2 { payload["version"] = "2" }
   if offerEnabled {
     func signed(_ text: String) -> String {
-      HMAC<SHA256>.authenticationCode(for: Data(text.utf8),
-        using: SymmetricKey(data: device.secret))
-        .map { String(format: "%02x", $0) }.joined()
+      HMAC<SHA256>.authenticationCode(
+        for: Data(text.utf8),
+        using: SymmetricKey(data: device.secret)
+      )
+      .map { String(format: "%02x", $0) }.joined()
     }
     payload["offerVersion"] = "1"
     payload["offerMAC"] = signed(
-      "file-offer|v1|\(hostID.uuidString)|\(device.physicalDeviceID.uuidString)|\(nonce.uuidString)")
+      "file-offer|v1|\(hostID.uuidString)|\(device.physicalDeviceID.uuidString)|\(nonce.uuidString)"
+    )
     if let offer {
       payload["offerToken"] = offer.token
       payload["offerDigest"] = offer.digest
       payload["offerDecision"] = offer.decision
       payload["offerDecisionMAC"] = signed(
-        "file-decision|v1|\(hostID.uuidString)|\(device.physicalDeviceID.uuidString)|\(nonce.uuidString)|\(offer.token)|\(offer.digest)|\(offer.decision)")
+        "file-decision|v1|\(hostID.uuidString)|\(device.physicalDeviceID.uuidString)|\(nonce.uuidString)|\(offer.token)|\(offer.digest)|\(offer.decision)"
+      )
     }
   }
   if let presence {
     payload["presence"] = presence
     payload["presenceMAC"] = HMAC<SHA256>.authenticationCode(
       for: Data("presence|\(nonce.uuidString)|\(presence)".utf8),
-      using: SymmetricKey(data: device.secret))
-      .map { String(format: "%02x", $0) }.joined()
+      using: SymmetricKey(data: device.secret)
+    )
+    .map { String(format: "%02x", $0) }.joined()
   }
   if let diagnostics {
     if version2 {
-      let context = Data("v2|diagnostics|\(hostID.uuidString)|\(device.physicalDeviceID.uuidString)|\(nonce.uuidString)".utf8)
-      payload["clientDiagnosticsBox"] = try AES.GCM.seal(diagnostics,
-        using: SymmetricKey(data: device.secret), authenticating: context)
-        .combined!.base64EncodedString()
+      let context = Data(
+        "v2|diagnostics|\(hostID.uuidString)|\(device.physicalDeviceID.uuidString)|\(nonce.uuidString)"
+          .utf8)
+      payload["clientDiagnosticsBox"] = try AES.GCM.seal(
+        diagnostics,
+        using: SymmetricKey(data: device.secret), authenticating: context
+      )
+      .combined!.base64EncodedString()
     } else {
       payload["clientDiagnostics"] = diagnostics.base64EncodedString()
       payload["clientDiagnosticsMAC"] = HMAC<SHA256>.authenticationCode(
         for: Data("diagnostics|\(nonce.uuidString)|".utf8) + diagnostics,
-        using: SymmetricKey(data: device.secret))
-        .map { String(format: "%02x", $0) }.joined()
+        using: SymmetricKey(data: device.secret)
+      )
+      .map { String(format: "%02x", $0) }.joined()
     }
   }
   for (key, value) in extra { payload[key] = value }
   var wirePayload: [String: Any] = overridePayload ?? payload
   if sealed {
     let timestamp = issuedAt ?? Int64(Date().timeIntervalSince1970)
-    let context = Data("v3|request|\(hostID.uuidString)|\(device.physicalDeviceID.uuidString)|\(nonce.uuidString)|\(timestamp)".utf8)
+    let context = Data(
+      "v3|request|\(hostID.uuidString)|\(device.physicalDeviceID.uuidString)|\(nonce.uuidString)|\(timestamp)"
+        .utf8)
     let plain = try JSONSerialization.data(withJSONObject: wirePayload)
-    let box = try AES.GCM.seal(plain, using: SymmetricKey(data: device.secret),
-      authenticating: context).combined!
-    wirePayload = ["version": "3", "hostID": hostID.uuidString,
+    let box = try AES.GCM.seal(
+      plain, using: SymmetricKey(data: device.secret),
+      authenticating: context
+    ).combined!
+    wirePayload = [
+      "version": "3", "hostID": hostID.uuidString,
       "physicalDeviceID": device.physicalDeviceID.uuidString,
       "nonce": nonce.uuidString, "issuedAt": timestamp,
-      "box": box.base64EncodedString()]
+      "box": box.base64EncodedString(),
+    ]
   }
   let data = try JSONSerialization.data(withJSONObject: wirePayload) + Data([10])
   let connection = NWConnection(to: endpoint, using: .tcp)
@@ -127,21 +148,25 @@ private func request(_ endpoint: NWEndpoint, hostID: UUID, device: PairedDevice,
     case .ready:
       if delayedChunks {
         queue.asyncAfter(deadline: .now() + 0.25) {
-          connection.send(content: Data(data.prefix(100)), completion: .contentProcessed { error in
-            if let error { connectionError = error; finished.signal(); return }
-            queue.asyncAfter(deadline: .now() + 0.25) {
-              connection.send(content: Data(data.dropFirst(100)), completion: .contentProcessed { error in
-                if let error { connectionError = error; finished.signal() }
-                else { receive() }
-              })
-            }
-          })
+          connection.send(
+            content: Data(data.prefix(100)),
+            completion: .contentProcessed { error in
+              if let error { connectionError = error; finished.signal(); return }
+              queue.asyncAfter(deadline: .now() + 0.25) {
+                connection.send(
+                  content: Data(data.dropFirst(100)),
+                  completion: .contentProcessed { error in
+                    if let error { connectionError = error; finished.signal() } else { receive() }
+                  })
+              }
+            })
         }
       } else {
-        connection.send(content: data, completion: .contentProcessed { error in
-          if let error { connectionError = error; finished.signal() }
-          else { receive() }
-        })
+        connection.send(
+          content: data,
+          completion: .contentProcessed { error in
+            if let error { connectionError = error; finished.signal() } else { receive() }
+          })
       }
     case .failed(let error):
       connectionError = error
@@ -159,16 +184,20 @@ private func request(_ endpoint: NWEndpoint, hostID: UUID, device: PairedDevice,
   return received
 }
 
-private func opened(_ response: Data, secret: Data,
-  context: (UUID, UUID, UUID)? = nil) throws -> (String, Data) {
+private func opened(
+  _ response: Data, secret: Data,
+  context: (UUID, UUID, UUID)? = nil
+) throws -> (String, Data) {
   try check(response.count >= 4, "Missing response length")
   let length = response.prefix(4).reduce(UInt32(0)) { ($0 << 8) | UInt32($1) }
   try check(Int(length) == response.count - 4, "Incorrect response length")
   let box = try AES.GCM.SealedBox(combined: response.dropFirst(4))
   let plain: Data
   if let (hostID, deviceID, nonce) = context {
-    plain = try AES.GCM.open(box, using: SymmetricKey(data: secret),
-      authenticating: Data("v2|response|\(hostID.uuidString)|\(deviceID.uuidString)|\(nonce.uuidString)".utf8))
+    plain = try AES.GCM.open(
+      box, using: SymmetricKey(data: secret),
+      authenticating: Data(
+        "v2|response|\(hostID.uuidString)|\(deviceID.uuidString)|\(nonce.uuidString)".utf8))
   } else {
     plain = try AES.GCM.open(box, using: SymmetricKey(data: secret))
   }
@@ -184,13 +213,21 @@ struct TransferProtocolTests {
   static func main() throws {
     if NativeDiagnosticTests.fixture() { return }
     try NativeDiagnosticTests.run()
-    let oldCollection = try JSONDecoder().decode(NativeDiagnostics.Collection.self, from: Data(
-      #"{"result":"completed","saved":1,"excluded":0,"deferred":0,"failed":0,"retryHeld":0,"acquisitionComplete":true}"#.utf8))
-    try check(oldCollection.listingFailures == nil && oldCollection.acquisitionComplete,
+    let oldCollection = try JSONDecoder().decode(
+      NativeDiagnostics.Collection.self,
+      from: Data(
+        #"{"result":"completed","saved":1,"excluded":0,"deferred":0,"failed":0,"retryHeld":0,"acquisitionComplete":true}"#
+          .utf8))
+    try check(
+      oldCollection.listingFailures == nil && oldCollection.acquisitionComplete,
       "An older native collection snapshot no longer loads")
-    try check(LocalDiagnosticsPairing.identifier(hostname: "MixedCase-Mac.local") == "A4374A9C-4036-30DE-AD77-D8C2176D6D2F",
+    try check(
+      LocalDiagnosticsPairing.identifier(hostname: "MixedCase-Mac.local")
+        == "A4374A9C-4036-30DE-AD77-D8C2176D6D2F",
       "Existing Python UUIDv3 pairing identity must preserve hostname case")
-    try check(LocalDiagnosticsPairing.identifier(hostname: "MixedCase-Mac.local") != LocalDiagnosticsPairing.identifier(hostname: "mixedcase-mac.local"),
+    try check(
+      LocalDiagnosticsPairing.identifier(hostname: "MixedCase-Mac.local")
+        != LocalDiagnosticsPairing.identifier(hostname: "mixedcase-mac.local"),
       "Hostname normalization must not silently replace a trusted host identity")
     print("Checking device discovery fallback after native timeout")
     let fallback = try Collector.browse { args, _ in
@@ -199,7 +236,8 @@ struct TransferProtocolTests {
       if args.last == "offline" { throw CollectorError.timeout }
       return #"{"ProductType":"iPad16,6","DeviceName":"Test iPad"}"#
     }
-    try check(fallback.count == 1 && fallback[0].udid == "ipad",
+    try check(
+      fallback.count == 1 && fallback[0].udid == "ipad",
       "A native timeout or offline peer must not hide a reachable Wi-Fi device")
     let merged = try Collector.browse { args, _ in
       if args.first == "remote" { return #"[{"udid":"ipad","model":"iPad16,6"}]"# }
@@ -210,7 +248,7 @@ struct TransferProtocolTests {
     do {
       _ = try Collector.browse { _, _ in throw CollectorError.timeout }
       throw TestFailure.failed("Complete discovery failure was hidden")
-    } catch CollectorError.discoveryTimeout { }
+    } catch CollectorError.discoveryTimeout {}
     print("Checking the native diagnostic route takes priority over incomplete Wi-Fi listings")
     let rootListing = try Collector.remoteRootListing(udid: "ipad") { args, _ in
       if args.first == "usbmux" { return #"["ipad"]"# }
@@ -218,7 +256,8 @@ struct TransferProtocolTests {
       if args.contains("--native") { return "/Retired\n/DiagnosticLogs\n" }
       throw TestFailure.failed("Unexpected diagnostic command")
     }
-    try check(rootListing.1.contains("--native") && rootListing.0.contains("/Retired"),
+    try check(
+      rootListing.1.contains("--native") && rootListing.0.contains("/Retired"),
       "An incomplete Wi-Fi lockdown result hid a working native diagnostic route")
     let wifiFallback = try Collector.remoteRootListing(udid: "ipad") { args, _ in
       if args.contains("--native") { throw CollectorError.timeout }
@@ -226,31 +265,35 @@ struct TransferProtocolTests {
       if args.contains("--mobdev2") { return "/Retired\n" }
       throw TestFailure.failed("Unexpected diagnostic command")
     }
-    try check(wifiFallback.1.contains("--mobdev2"),
+    try check(
+      wifiFallback.1.contains("--mobdev2"),
       "A native timeout hid the available Wi-Fi diagnostic route")
     let currentLog = "Analytics-2026-10-01-090003.000.ips.ca.synced"
     let watchSource = "ProxiedDevice-abcdef1234"
     let candidates = Collector.analyticsCandidates([
       RemoteLog(path: "/Retired/\(currentLog)", source: nil),
       RemoteLog(path: "/\(currentLog)", source: nil),
-      RemoteLog(path: "/\(watchSource)/Analytics-2026-10-01-090017.ips.ca.synced",
+      RemoteLog(
+        path: "/\(watchSource)/Analytics-2026-10-01-090017.ips.ca.synced",
         source: watchSource),
-      RemoteLog(path: "/Analytics-2026-10-01-023246.session.ips.ca.synced", source: nil)
+      RemoteLog(path: "/Analytics-2026-10-01-023246.session.ips.ca.synced", source: nil),
     ])
-    try check(candidates.count == 2 && candidates[0].path.hasPrefix("/Retired/") &&
-      candidates[1].source == watchSource,
+    try check(
+      candidates.count == 2 && candidates[0].path.hasPrefix("/Retired/")
+        && candidates[1].source == watchSource,
       "Current diagnostics were hidden or a moved report was counted twice")
-    try check(Collector.isLikelyDailyReport(candidates[0]) &&
-      Collector.isLikelyDailyReport(candidates[1]) &&
-      !Collector.isLikelyDailyReport(RemoteLog(
-        path: "/Retired/Analytics-2026-10-01-090005.ips.ca.synced", source: nil)),
+    try check(
+      Collector.isLikelyDailyReport(candidates[0]) && Collector.isLikelyDailyReport(candidates[1])
+        && !Collector.isLikelyDailyReport(
+          RemoteLog(
+            path: "/Retired/Analytics-2026-10-01-090005.ips.ca.synced", source: nil)),
       "A truncated daily battery report could be permanently excluded")
     do {
       _ = try Collector.remoteRootListing(udid: "ipad") { args, _ in
         args.first == "usbmux" ? #"["ipad"]"# : ""
       }
       throw TestFailure.failed("Empty diagnostic results were reported as a successful collection")
-    } catch CollectorError.failed { }
+    } catch CollectorError.failed {}
 
     setbuf(stdout, nil)
     guard ProcessInfo.processInfo.environment["MOCHILOG_TRANSFER_TEST_ROOT"] != nil else {
@@ -267,112 +310,166 @@ struct TransferProtocolTests {
     defer { try? FileManager.default.removeItem(at: uncertain) }
     try Data(repeating: 0x20, count: 1_000_000).write(to: uncertain)
     let shouldRecheckLarge = try Collector.shouldRecheckUnclassified(uncertain)
-    try check(shouldRecheckLarge,
+    try check(
+      shouldRecheckLarge,
       "A large unclassified Analytics download must remain eligible for retry")
     try Data("short unrelated diagnostic".utf8).write(to: uncertain)
     let shouldRecheckSmall = try Collector.shouldRecheckUnclassified(uncertain)
-    try check(!shouldRecheckSmall,
+    try check(
+      !shouldRecheckSmall,
       "A small unrelated diagnostic should be excluded")
-    let observationClock = Date(timeIntervalSince1970: 1_791_590_400) // 2026-10-10 09:00 JST
-    let firstObservation = try Collector.observeUnclassified(uncertain, previous: nil,
+    let observationClock = Date(timeIntervalSince1970: 1_791_590_400)  // 2026-10-10 09:00 JST
+    let firstObservation = try Collector.observeUnclassified(
+      uncertain, previous: nil,
       now: observationClock)
-    let earlyObservation = try Collector.observeUnclassified(uncertain,
+    let earlyObservation = try Collector.observeUnclassified(
+      uncertain,
       previous: firstObservation, now: observationClock.addingTimeInterval(5 * 60))
-    try check(earlyObservation?.confirmations == 1,
+    try check(
+      earlyObservation?.confirmations == 1,
       "Five-minute retries must not accelerate permanent exclusion")
-    let secondObservation = try Collector.observeUnclassified(uncertain,
+    let secondObservation = try Collector.observeUnclassified(
+      uncertain,
       previous: earlyObservation, now: observationClock.addingTimeInterval(30 * 60))
-    let thirdObservation = try Collector.observeUnclassified(uncertain,
+    let thirdObservation = try Collector.observeUnclassified(
+      uncertain,
       previous: secondObservation, now: observationClock.addingTimeInterval(60 * 60))
-    let oldObservation = try JSONDecoder().decode(UnclassifiedObservation.self,
+    let oldObservation = try JSONDecoder().decode(
+      UnclassifiedObservation.self,
       from: Data(#"{"fingerprint":"old","confirmations":2}"#.utf8))
-    let migratedObservation = try Collector.observeUnclassified(uncertain,
-      previous: UnclassifiedObservation(fingerprint: firstObservation!.fingerprint,
+    let migratedObservation = try Collector.observeUnclassified(
+      uncertain,
+      previous: UnclassifiedObservation(
+        fingerprint: firstObservation!.fingerprint,
         confirmations: oldObservation.confirmations), now: observationClock)
-    try check(migratedObservation?.confirmations == 2 && migratedObservation?.lastConfirmedAt != nil,
+    try check(
+      migratedObservation?.confirmations == 2 && migratedObservation?.lastConfirmedAt != nil,
       "Old state must not immediately become a third exclusion confirmation")
-    let restoredObservation = try JSONDecoder().decode(UnclassifiedObservation.self,
+    let restoredObservation = try JSONDecoder().decode(
+      UnclassifiedObservation.self,
       from: JSONEncoder().encode(secondObservation!))
-    try check(restoredObservation.lastConfirmedAt == secondObservation?.lastConfirmedAt,
+    try check(
+      restoredObservation.lastConfirmedAt == secondObservation?.lastConfirmedAt,
       "Restart lost the spaced confirmation time")
-    try check(Collector.unclassifiedRetryAt(name: "Analytics-2026-10-10-090006.ips.ca.synced",
-      now: observationClock).timeIntervalSince(observationClock) == 300 &&
-      Collector.unclassifiedRetryAt(name: "Analytics-2026-10-09-090006.ips.ca.synced",
-      now: observationClock).timeIntervalSince(observationClock) == 1800,
+    try check(
+      Collector.unclassifiedRetryAt(
+        name: "Analytics-2026-10-10-090006.ips.ca.synced",
+        now: observationClock
+      ).timeIntervalSince(observationClock) == 300
+        && Collector.unclassifiedRetryAt(
+          name: "Analytics-2026-10-09-090006.ips.ca.synced",
+          now: observationClock
+        ).timeIntervalSince(observationClock) == 1800,
       "Current-day and historical retry schedules were mixed")
     let beforeMidnight = observationClock.addingTimeInterval(-9 * 3600 - 60)
-    try check(Collector.unclassifiedRetryAt(name: "Analytics-2026-10-09-090006.ips.ca.synced",
-      now: beforeMidnight).timeIntervalSince(beforeMidnight) == 300,
+    try check(
+      Collector.unclassifiedRetryAt(
+        name: "Analytics-2026-10-09-090006.ips.ca.synced",
+        now: beforeMidnight
+      ).timeIntervalSince(beforeMidnight) == 300,
       "Retry policy did not use the Japanese log day")
-    try check(Collector.toolFailureLine(stdout: #"{"results":[{"ok":false,"error":"FILE_OPEN failed"}]}"#,
-      stderr: "") == nil && Collector.toolFailureLine(stdout: "", stderr: "ERROR Device is not connected") != nil,
-      "A zero-exit CLI error was ignored or a file-level JSON result became a whole-command failure")
-    let diagnosticA = "Collector exited 0: 2026-10-10 09:03:18 host pymobiledevice3.__main__[9212] ERROR Device is not connected"
-    let diagnosticB = "Collector exited 0: 2026-10-10 09:08:18 host pymobiledevice3.__main__[22064] ERROR Device is not connected"
-    try check(Collector.stableDiagnostic(diagnosticA) == Collector.stableDiagnostic(diagnosticB) &&
-      Collector.stableDiagnostic(diagnosticA).contains("Device is not connected") &&
-      Collector.stableDiagnostic("TimeoutError") != Collector.stableDiagnostic("InvalidHostID"),
+    try check(
+      Collector.toolFailureLine(
+        stdout: #"{"results":[{"ok":false,"error":"FILE_OPEN failed"}]}"#,
+        stderr: "") == nil
+        && Collector.toolFailureLine(stdout: "", stderr: "ERROR Device is not connected") != nil,
+      "A zero-exit CLI error was ignored or a file-level JSON result became a whole-command failure"
+    )
+    let diagnosticA =
+      "Collector exited 0: 2026-10-10 09:03:18 host pymobiledevice3.__main__[9212] ERROR Device is not connected"
+    let diagnosticB =
+      "Collector exited 0: 2026-10-10 09:08:18 host pymobiledevice3.__main__[22064] ERROR Device is not connected"
+    try check(
+      Collector.stableDiagnostic(diagnosticA) == Collector.stableDiagnostic(diagnosticB)
+        && Collector.stableDiagnostic(diagnosticA).contains("Device is not connected")
+        && Collector.stableDiagnostic("TimeoutError")
+          != Collector.stableDiagnostic("InvalidHostID"),
       "Collector diagnostics lost their reason or volatile prefixes prevent grouping")
-    try check(firstObservation?.confirmations == 1 &&
-      secondObservation?.confirmations == 2 && thirdObservation?.confirmations == 3,
+    try check(
+      firstObservation?.confirmations == 1 && secondObservation?.confirmations == 2
+        && thirdObservation?.confirmations == 3,
       "Stable non-battery downloads should stop after three separate checks")
     try Data().write(to: uncertain)
-    let emptyObservation = try Collector.observeUnclassified(uncertain,
+    let emptyObservation = try Collector.observeUnclassified(
+      uncertain,
       previous: thirdObservation)
-    try check(emptyObservation == nil,
+    try check(
+      emptyObservation == nil,
       "An empty diagnostic pull must not confirm a non-battery report")
     try Data("changed diagnostic".utf8).write(to: uncertain)
-    let changedObservation = try Collector.observeUnclassified(uncertain,
+    let changedObservation = try Collector.observeUnclassified(
+      uncertain,
       previous: thirdObservation)
-    try check(changedObservation?.confirmations == 1,
+    try check(
+      changedObservation?.confirmations == 1,
       "A changed diagnostic report must start a fresh confirmation count")
-    let device = PairedDevice(udid: "test-iphone", name: "Test iPhone",
+    let device = PairedDevice(
+      udid: "test-iphone", name: "Test iPhone",
       model: "iPhone18,3", physicalDeviceID: UUID(),
       secret: Data((0..<32).map { UInt8($0) }))
     print("Checking daily priority and recovery without a second failure cooldown")
-    let failureDevice = PairedDevice(udid: "failed-file-fixture", name: "Retry fixture",
+    let failureDevice = PairedDevice(
+      udid: "failed-file-fixture", name: "Retry fixture",
       model: "iPhone18,3", physicalDeviceID: UUID(), secret: device.secret)
     let fileDay = DateFormatter()
     fileDay.locale = Locale(identifier: "en_US_POSIX")
     fileDay.timeZone = TimeZone(identifier: "Asia/Tokyo")
     fileDay.dateFormat = "yyyy-MM-dd"
     let todayName = "Analytics-\(fileDay.string(from: Date()))-090007.000.ips.ca.synced"
-    let pastName = "Analytics-\(fileDay.string(from: Date().addingTimeInterval(-86400)))-090006.ips.ca.synced"
-    let fixtureBody = Data(("{\"os_version\":\"iPhone OS 27.2\"}\n" + String(repeating:
-      "last_value_CycleCount last_value_NominalChargeCapacity last_value_AppleRawMaxCapacity\n", count: 120)).utf8)
+    let pastName =
+      "Analytics-\(fileDay.string(from: Date().addingTimeInterval(-86400)))-090006.ips.ca.synced"
+    let fixtureBody = Data(
+      ("{\"os_version\":\"iPhone OS 27.2\"}\n"
+        + String(
+          repeating:
+            "last_value_CycleCount last_value_NominalChargeCapacity last_value_AppleRawMaxCapacity\n",
+          count: 120)).utf8)
     var pullNames: [String] = []
     var recover = false
     let mockPull: ([String], TimeInterval) throws -> String = { args, _ in
       if args.prefix(2) == ["crash", "ls"] {
-        return args.contains("/Retired") ? "/Retired/\(pastName)\n/Retired/\(todayName)" : "/Retired"
+        return args.contains("/Retired")
+          ? "/Retired/\(pastName)\n/Retired/\(todayName)" : "/Retired"
       }
       guard args.prefix(2) == ["crash", "pull"],
-        let pathFlag = args.firstIndex(of: "--remote-file") else {
+        let pathFlag = args.firstIndex(of: "--remote-file")
+      else {
         throw TestFailure.failed("Unexpected failed-file fixture command")
       }
       let name = URL(fileURLWithPath: args[pathFlag + 1]).lastPathComponent
       pullNames.append(name)
-      if name == pastName && !recover { throw CollectorError.failed("FILE_OPEN failed with status: 10") }
+      if name == pastName && !recover {
+        throw CollectorError.failed("FILE_OPEN failed with status: 10")
+      }
       try fixtureBody.write(to: URL(fileURLWithPath: args[2]).appendingPathComponent(name))
       return ""
     }
     let firstRetryReport = try Collector.collect(failureDevice, runCommand: mockPull)
-    try check(firstRetryReport.saved == 1 && firstRetryReport.failed == 1 && pullNames.first == todayName,
+    try check(
+      firstRetryReport.saved == 1 && firstRetryReport.failed == 1 && pullNames.first == todayName,
       "An inaccessible older file delayed or prevented the current report")
-    try check(!firstRetryReport.acquisitionComplete && pullNames.filter { $0 == pastName }.count == 1,
+    try check(
+      !firstRetryReport.acquisitionComplete && pullNames.filter { $0 == pastName }.count == 1,
       "A permission failure was reported as complete or retried immediately")
-    let retryURL = Collector.root.appendingPathComponent("recheck-\(failureDevice.physicalDeviceID.uuidString).json")
-    var restoredRetries = try JSONDecoder().decode([String: Date].self, from: Data(contentsOf: retryURL))
+    let retryURL = Collector.root.appendingPathComponent(
+      "recheck-\(failureDevice.physicalDeviceID.uuidString).json")
+    var restoredRetries = try JSONDecoder().decode(
+      [String: Date].self, from: Data(contentsOf: retryURL))
     let pastRetryToken = "Host::\(pastName)"
-    try check(restoredRetries[pastRetryToken]!.timeIntervalSinceNow <= 0 &&
-      !Collector.delivered(for: failureDevice).contains(pastRetryToken),
+    try check(
+      restoredRetries[pastRetryToken]!.timeIntervalSinceNow <= 0
+        && !Collector.delivered(for: failureDevice).contains(pastRetryToken),
       "Failed download added another cooldown or was marked delivered")
     recover = true
     let recoveredReport = try Collector.collect(failureDevice, runCommand: mockPull)
-    restoredRetries = try JSONDecoder().decode([String: Date].self, from: Data(contentsOf: retryURL))
-    try check(recoveredReport.saved == 1 && recoveredReport.acquisitionComplete && restoredRetries[pastRetryToken] == nil,
+    restoredRetries = try JSONDecoder().decode(
+      [String: Date].self, from: Data(contentsOf: retryURL))
+    try check(
+      recoveredReport.saved == 1 && recoveredReport.acquisitionComplete
+        && restoredRetries[pastRetryToken] == nil,
       "Recovered source missed the next collection while waiting for a file timer")
-    let contentFixture = PairedDevice(udid: "content-wait", name: "Content wait", model: "iPad16,6",
+    let contentFixture = PairedDevice(
+      udid: "content-wait", name: "Content wait", model: "iPad16,6",
       physicalDeviceID: UUID(), secret: device.secret)
     var contentPulls = 0
     let contentMock: ([String], TimeInterval) throws -> String = { args, _ in
@@ -386,72 +483,121 @@ struct TransferProtocolTests {
     }
     let contentFirst = try Collector.collect(contentFixture, runCommand: contentMock)
     let contentHeld = try Collector.collect(contentFixture, runCommand: contentMock)
-    try check(contentFirst.deferred == 1 && contentHeld.retryHeld == 1 && contentPulls == 1,
+    try check(
+      contentFirst.deferred == 1 && contentHeld.retryHeld == 1 && contentPulls == 1,
       "Failure recovery disabled content recheck protection")
     SupportDiagnostics.saveCollection(contentHeld, error: nil, for: contentFixture)
-    let heldSupport = try JSONSerialization.jsonObject(with: Data(contentsOf:
-      Collector.root.appendingPathComponent("support-\(contentFixture.physicalDeviceID.uuidString)-collection.json"))) as! [String: Any]
-    try check(heldSupport["result"] as? String == "partial_failure" && heldSupport["retryHeld"] as? Int == 1,
+    let heldSupport =
+      try JSONSerialization.jsonObject(
+        with: Data(
+          contentsOf:
+            Collector.root.appendingPathComponent(
+              "support-\(contentFixture.physicalDeviceID.uuidString)-collection.json")))
+      as! [String: Any]
+    try check(
+      heldSupport["result"] as? String == "partial_failure"
+        && heldSupport["retryHeld"] as? Int == 1,
       "The support report described a held content recheck as completed")
     let probeFiles = Collector.prioritizedCandidates([
       RemoteLog(path: "/Retired/" + todayName, source: nil),
-      RemoteLog(path: "/Retired/" + pastName, source: nil)])
-    let rotatedProbe = Collector.readProbeOrder(probeFiles, attempts: ["Host::" + todayName: Date()])
-    try check(rotatedProbe.map(\.name) == [pastName, todayName],
+      RemoteLog(path: "/Retired/" + pastName, source: nil),
+    ])
+    let rotatedProbe = Collector.readProbeOrder(
+      probeFiles, attempts: ["Host::" + todayName: Date()])
+    try check(
+      rotatedProbe.map(\.name) == [pastName, todayName],
       "A permanently denied current file starved an untried previous day")
     print("Checking independent diagnostic routes, address changes and expired hints")
-    let routeDevice = PairedDevice(udid: "route-fixture", name: "Route fixture", model: "iPad16,6",
+    let routeDevice = PairedDevice(
+      udid: "route-fixture", name: "Route fixture", model: "iPad16,6",
       physicalDeviceID: UUID(), secret: device.secret)
     let routeNow = Date()
     DiagnosticRoutes.rememberPeer("192.168.3.31", for: routeDevice.physicalDeviceID, at: routeNow)
-    DiagnosticRoutes.rememberVerified("192.168.40.20", for: routeDevice.physicalDeviceID, at: routeNow)
-    try check(DiagnosticRoutes.receiveHints(#"["192.168.40.21","192.168.40.21"]"#,
-      for: routeDevice.physicalDeviceID, at: routeNow), "Fresh address hints were not accepted")
-    try check(DiagnosticRoutes.candidates(for: routeDevice, at: routeNow).map(\.address) ==
-      ["192.168.40.21", "192.168.40.20", "192.168.3.31"], "A transfer peer hid the mobile LAN endpoint")
-    for invalid in [#"["203.0.113.2"]"#, #"["127.0.0.1"]"#, #"["100.64.0.2"]"#,
-      #"["192.168.40.021"]"#, #"["192.168.40.21",null]"#, String(repeating: "x", count: 513)] {
-      try check(!DiagnosticRoutes.receiveHints(invalid, for: routeDevice.physicalDeviceID, at: routeNow),
+    DiagnosticRoutes.rememberVerified(
+      "192.168.40.20", for: routeDevice.physicalDeviceID, at: routeNow)
+    try check(
+      DiagnosticRoutes.receiveHints(
+        #"["192.168.40.21","192.168.40.21"]"#,
+        for: routeDevice.physicalDeviceID, at: routeNow), "Fresh address hints were not accepted")
+    try check(
+      DiagnosticRoutes.candidates(for: routeDevice, at: routeNow).map(\.address) == [
+        "192.168.40.21", "192.168.40.20", "192.168.3.31",
+      ], "A transfer peer hid the mobile LAN endpoint")
+    for invalid in [
+      #"["203.0.113.2"]"#, #"["127.0.0.1"]"#, #"["100.64.0.2"]"#,
+      #"["192.168.40.021"]"#, #"["192.168.40.21",null]"#, String(repeating: "x", count: 513),
+    ] {
+      try check(
+        !DiagnosticRoutes.receiveHints(invalid, for: routeDevice.physicalDeviceID, at: routeNow),
         "An invalid diagnostic hint was accepted")
     }
-    try check(DiagnosticRoutes.candidates(for: routeDevice, at: routeNow.addingTimeInterval(3601)).map(\.address) ==
-      ["192.168.40.20", "192.168.40.21", "192.168.3.31"], "Recent hint fallback displaced an OS-authenticated endpoint")
-    try check(DiagnosticRoutes.candidates(for: routeDevice, at: routeNow.addingTimeInterval(86401)).map(\.address) ==
-      ["192.168.40.20"], "An older-than-one-day hint or transfer peer stayed active")
-    try check(DiagnosticRoutes.candidates(for: failureDevice, at: routeNow).isEmpty,
+    try check(
+      DiagnosticRoutes.candidates(for: routeDevice, at: routeNow.addingTimeInterval(3601)).map(
+        \.address) == ["192.168.40.20", "192.168.40.21", "192.168.3.31"],
+      "Recent hint fallback displaced an OS-authenticated endpoint")
+    try check(
+      DiagnosticRoutes.candidates(for: routeDevice, at: routeNow.addingTimeInterval(86401)).map(
+        \.address) == ["192.168.40.20"], "An older-than-one-day hint or transfer peer stayed active"
+    )
+    try check(
+      DiagnosticRoutes.candidates(for: failureDevice, at: routeNow).isEmpty,
       "A route cache leaked across physical devices")
     var directAttempts: [String] = []
-    _ = try Collector.collect(routeDevice, runCommand: { args, _ in
-      guard args.prefix(2) == ["direct-rsd", "scan"], let index = args.firstIndex(of: "--host") else {
-        throw CollectorError.failed("Synthetic native route unavailable")
-      }
-      directAttempts.append(args[index + 1])
-      if args[index + 1] == "192.168.40.21" { throw CollectorError.failed("Synthetic stale hint") }
-      return #"{"files":[]}"#
-    })
-    try check(directAttempts == ["192.168.40.21", "192.168.40.20"],
+    _ = try Collector.collect(
+      routeDevice,
+      runCommand: { args, _ in
+        guard args.prefix(2) == ["direct-rsd", "scan"], let index = args.firstIndex(of: "--host")
+        else {
+          throw CollectorError.failed("Synthetic native route unavailable")
+        }
+        directAttempts.append(args[index + 1])
+        if args[index + 1] == "192.168.40.21" {
+          throw CollectorError.failed("Synthetic stale hint")
+        }
+        return #"{"files":[]}"#
+      })
+    try check(
+      directAttempts == ["192.168.40.21", "192.168.40.20"],
       "A failed hint prevented the next OS-authenticated candidate")
-    let directFixture = PairedDevice(udid: failureDevice.udid, name: failureDevice.name,
-      model: failureDevice.model, physicalDeviceID: UUID(), secret: device.secret, manualAddress: "127.0.0.1")
-    let batchReport = try Collector.collect(directFixture, runCommand: { args, _ in
-      if args.prefix(2) == ["direct-rsd", "scan"] {
-        return String(data: try JSONSerialization.data(withJSONObject: ["files": [
-          ["path": "/Retired/\(pastName)"], ["path": "/Retired/\(todayName)"]]]), encoding: .utf8)!
-      }
-      return #"{"results":[{"index":0,"ok":false,"error":"FILE_OPEN failed with status: 10"},{"index":1,"ok":false,"error":"FILE_OPEN failed with status: 10"}]}"#
-    })
-    let batchRetries = try JSONDecoder().decode([String: Date].self, from: Data(contentsOf:
-      Collector.root.appendingPathComponent("recheck-\(directFixture.physicalDeviceID.uuidString).json")))
-    try check(batchReport.failed == 1 && batchReport.retryHeld == 1 && !batchReport.acquisitionComplete &&
-      batchReport.lastError?.contains("status: 10") == true &&
-      batchRetries["Host::\(todayName)"]!.timeIntervalSinceNow <= 0 && batchRetries[pastRetryToken] == nil &&
-      Collector.delivered(for: directFixture).isEmpty,
+    let directFixture = PairedDevice(
+      udid: failureDevice.udid, name: failureDevice.name,
+      model: failureDevice.model, physicalDeviceID: UUID(), secret: device.secret,
+      manualAddress: "127.0.0.1")
+    let batchReport = try Collector.collect(
+      directFixture,
+      runCommand: { args, _ in
+        if args.prefix(2) == ["direct-rsd", "scan"] {
+          return String(
+            data: try JSONSerialization.data(withJSONObject: [
+              "files": [
+                ["path": "/Retired/\(pastName)"], ["path": "/Retired/\(todayName)"],
+              ]
+            ]), encoding: .utf8)!
+        }
+        return
+          #"{"results":[{"index":0,"ok":false,"error":"FILE_OPEN failed with status: 10"},{"index":1,"ok":false,"error":"FILE_OPEN failed with status: 10"}]}"#
+      })
+    let batchRetries = try JSONDecoder().decode(
+      [String: Date].self,
+      from: Data(
+        contentsOf:
+          Collector.root.appendingPathComponent(
+            "recheck-\(directFixture.physicalDeviceID.uuidString).json")))
+    try check(
+      batchReport.failed == 1 && batchReport.retryHeld == 1 && !batchReport.acquisitionComplete
+        && batchReport.lastError?.contains("status: 10") == true
+        && batchRetries["Host::\(todayName)"]!.timeIntervalSinceNow <= 0
+        && batchRetries[pastRetryToken] == nil && Collector.delivered(for: directFixture).isEmpty,
       "A denied source retried all files, lost its cause or excluded an unattempted file")
-    try check(Collector.readPermissionDenied("FILE_OPEN failed with status: 10: None") &&
-      Collector.readPermissionDenied("PERM_DENIED") && !Collector.readPermissionDenied("FILE_OPEN failed with status: 100") &&
-      !Collector.readPermissionDenied("TimeoutError 10 seconds"), "Read denial classification is too broad")
+    try check(
+      Collector.readPermissionDenied("FILE_OPEN failed with status: 10: None")
+        && Collector.readPermissionDenied("PERM_DENIED")
+        && !Collector.readPermissionDenied("FILE_OPEN failed with status: 100")
+        && !Collector.readPermissionDenied("TimeoutError 10 seconds"),
+      "Read denial classification is too broad")
     print("Checking independent current/archive listings and partial-list recovery")
-    let partialFixture = PairedDevice(udid: "partial-list", name: "Partial list", model: "iPhone18,3",
+    let partialFixture = PairedDevice(
+      udid: "partial-list", name: "Partial list", model: "iPhone18,3",
       physicalDeviceID: UUID(), secret: device.secret)
     let partialSource = "ProxiedDevice-ac12"
     var listingRecovered = false
@@ -464,31 +610,48 @@ struct TransferProtocolTests {
         if listingRecovered { return "" }
         throw CollectorError.failed("Accessory archive temporarily unavailable")
       }
-      let data = path.contains(partialSource) ? Data(("{\"os_version\":\"watchOS 27.2\"}\n" + String(repeating:
-        "last_value_CycleCount last_value_NominalChargeCapacity last_value_AppleRawMaxCapacity\n", count: 120)).utf8) : fixtureBody
-      try data.write(to: URL(fileURLWithPath: args[2]).appendingPathComponent(URL(fileURLWithPath: path).lastPathComponent))
+      let data =
+        path.contains(partialSource)
+        ? Data(
+          ("{\"os_version\":\"watchOS 27.2\"}\n"
+            + String(
+              repeating:
+                "last_value_CycleCount last_value_NominalChargeCapacity last_value_AppleRawMaxCapacity\n",
+              count: 120)).utf8) : fixtureBody
+      try data.write(
+        to: URL(fileURLWithPath: args[2]).appendingPathComponent(
+          URL(fileURLWithPath: path).lastPathComponent))
       return ""
     }
     let partialReport = try Collector.collect(partialFixture, runCommand: partialMock)
-    try check(partialReport.saved == 2 && partialReport.failed == 0 && partialReport.listingFailures == 1 &&
-      !partialReport.acquisitionComplete && partialReport.lastError != nil,
+    try check(
+      partialReport.saved == 2 && partialReport.failed == 0 && partialReport.listingFailures == 1
+        && !partialReport.acquisitionComplete && partialReport.lastError != nil,
       "An unreadable archive hid the current Watch report or falsely completed acquisition")
     let stillPartial = try Collector.collect(partialFixture, runCommand: partialMock)
-    try check(stillPartial.saved == 0 && stillPartial.listingFailures == 1 && !stillPartial.acquisitionComplete,
+    try check(
+      stillPartial.saved == 0 && stillPartial.listingFailures == 1
+        && !stillPartial.acquisitionComplete,
       "An empty pending queue hid an incomplete listing")
     listingRecovered = true
     let listingRestored = try Collector.collect(partialFixture, runCommand: partialMock)
-    try check(listingRestored.acquisitionComplete && listingRestored.listingFailures == 0,
+    try check(
+      listingRestored.acquisitionComplete && listingRestored.listingFailures == 0,
       "A transient listing error persisted after recovery")
-    let incompleteDirect = PairedDevice(udid: "partial-direct", name: "Partial direct", model: "iPhone18,3",
+    let incompleteDirect = PairedDevice(
+      udid: "partial-direct", name: "Partial direct", model: "iPhone18,3",
       physicalDeviceID: UUID(), secret: device.secret, manualAddress: "127.0.0.1")
-    let directPartial = try Collector.collect(incompleteDirect, runCommand: { _, _ in
-      #"{"files":[],"listingFailures":[{"directory":"/ProxiedDevice-ac12","source":"ProxiedDevice-ac12","error":"TimeoutError"}]}"#
-    })
-    try check(directPartial.listingFailures == 1 && !directPartial.acquisitionComplete,
+    let directPartial = try Collector.collect(
+      incompleteDirect,
+      runCommand: { _, _ in
+        #"{"files":[],"listingFailures":[{"directory":"/ProxiedDevice-ac12","source":"ProxiedDevice-ac12","error":"TimeoutError"}]}"#
+      })
+    try check(
+      directPartial.listingFailures == 1 && !directPartial.acquisitionComplete,
       "Direct helper listing failures were discarded")
     print("Checking source-scoped permission gate, Watch isolation and probe rotation")
-    let sourceFixture = PairedDevice(udid: "source-gate", name: "Source gate", model: "iPhone18,3",
+    let sourceFixture = PairedDevice(
+      udid: "source-gate", name: "Source gate", model: "iPhone18,3",
       physicalDeviceID: UUID(), secret: device.secret)
     let anotherToday = todayName.replacingOccurrences(of: "090007", with: "090006")
     let gateWatchSource = "ProxiedDevice-ab12"
@@ -504,66 +667,102 @@ struct TransferProtocolTests {
       }
       let remote = args[args.firstIndex(of: "--remote-file")! + 1]
       sourcePulls.append(remote)
-      if remote == "/Retired/" + todayName { throw CollectorError.failed("FILE_OPEN failed with status: 10") }
-      let data = remote.contains(gateWatchSource) ? Data(("{\"os_version\":\"watchOS 27.2\"}\n" + String(repeating:
-        "last_value_CycleCount last_value_NominalChargeCapacity last_value_AppleRawMaxCapacity\n", count: 120)).utf8) : fixtureBody
-      try data.write(to: URL(fileURLWithPath: args[2]).appendingPathComponent(URL(fileURLWithPath: remote).lastPathComponent))
+      if remote == "/Retired/" + todayName {
+        throw CollectorError.failed("FILE_OPEN failed with status: 10")
+      }
+      let data =
+        remote.contains(gateWatchSource)
+        ? Data(
+          ("{\"os_version\":\"watchOS 27.2\"}\n"
+            + String(
+              repeating:
+                "last_value_CycleCount last_value_NominalChargeCapacity last_value_AppleRawMaxCapacity\n",
+              count: 120)).utf8) : fixtureBody
+      try data.write(
+        to: URL(fileURLWithPath: args[2]).appendingPathComponent(
+          URL(fileURLWithPath: remote).lastPathComponent))
       return ""
     }
     let gated = try Collector.collect(sourceFixture, runCommand: sourceMock)
-    try check(gated.failed == 1 && gated.retryHeld == 1 && gated.saved == 1 &&
-      sourcePulls.count == 2 && sourcePulls.contains("/\(gateWatchSource)/Retired/\(todayName)"),
+    try check(
+      gated.failed == 1 && gated.retryHeld == 1 && gated.saved == 1 && sourcePulls.count == 2
+        && sourcePulls.contains("/\(gateWatchSource)/Retired/\(todayName)"),
       "Host permission denial blocked Watch or tried the same source again")
     sourcePulls.removeAll()
     let nextProbe = try Collector.collect(sourceFixture, runCommand: sourceMock)
-    try check(nextProbe.saved == 1 && sourcePulls.first == "/Retired/" + anotherToday,
+    try check(
+      nextProbe.saved == 1 && sourcePulls.first == "/Retired/" + anotherToday,
       "A permanently unreadable first file starved other files on subsequent polls")
-    let mappedFixture = PairedDevice(udid: "batch-map", name: "Batch map", model: "iPad16,6",
+    let mappedFixture = PairedDevice(
+      udid: "batch-map", name: "Batch map", model: "iPad16,6",
       physicalDeviceID: UUID(), secret: device.secret, manualAddress: "127.0.0.1")
     var batchSizes: [Int] = []
-    let mappingReport = try Collector.collect(mappedFixture, runCommand: { args, _ in
-      if args.prefix(2) == ["direct-rsd", "scan"] {
-        return String(data: try JSONSerialization.data(withJSONObject: ["files": [todayName, anotherToday, pastName].map {
-          ["path": "/Retired/" + $0] }]), encoding: .utf8)!
-      }
-      let manifest = URL(fileURLWithPath: args[args.firstIndex(of: "--manifest")! + 1])
-      let items = try JSONSerialization.jsonObject(with: Data(contentsOf: manifest)) as! [[String: String]]
-      let output = URL(fileURLWithPath: args[args.firstIndex(of: "--output")! + 1])
-      batchSizes.append(items.count)
-      for (index, item) in items.enumerated() {
-        let folder = output.appendingPathComponent(String(index))
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        try fixtureBody.write(to: folder.appendingPathComponent(URL(fileURLWithPath: item["path"]!).lastPathComponent))
-      }
-      return String(data: try JSONSerialization.data(withJSONObject: ["results": items.indices.map {
-        ["index": $0, "ok": true] as [String: Any] }]), encoding: .utf8)!
-    })
-    try check(mappingReport.saved == 3 && mappingReport.acquisitionComplete && batchSizes == [1, 2],
+    let mappingReport = try Collector.collect(
+      mappedFixture,
+      runCommand: { args, _ in
+        if args.prefix(2) == ["direct-rsd", "scan"] {
+          return String(
+            data: try JSONSerialization.data(withJSONObject: [
+              "files": [todayName, anotherToday, pastName].map {
+                ["path": "/Retired/" + $0]
+              }
+            ]), encoding: .utf8)!
+        }
+        let manifest = URL(fileURLWithPath: args[args.firstIndex(of: "--manifest")! + 1])
+        let items =
+          try JSONSerialization.jsonObject(with: Data(contentsOf: manifest)) as! [[String: String]]
+        let output = URL(fileURLWithPath: args[args.firstIndex(of: "--output")! + 1])
+        batchSizes.append(items.count)
+        for (index, item) in items.enumerated() {
+          let folder = output.appendingPathComponent(String(index))
+          try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+          try fixtureBody.write(
+            to: folder.appendingPathComponent(URL(fileURLWithPath: item["path"]!).lastPathComponent)
+          )
+        }
+        return String(
+          data: try JSONSerialization.data(withJSONObject: [
+            "results": items.indices.map {
+              ["index": $0, "ok": true] as [String: Any]
+            }
+          ]), encoding: .utf8)!
+      })
+    try check(
+      mappingReport.saved == 3 && mappingReport.acquisitionComplete && batchSizes == [1, 2],
       "Splitting a direct batch lost its local/global result mapping")
     let hostID = UUID()
     let state = CompanionState(hostID: hostID, devices: [device])
     print("Checking plaintext-key migration to Keychain")
-    var legacy = try JSONSerialization.jsonObject(with: JSONEncoder().encode(state))
+    var legacy =
+      try JSONSerialization.jsonObject(with: JSONEncoder().encode(state))
       as! [String: Any]
     var legacyDevices = legacy["devices"] as! [[String: Any]]
     legacyDevices[0]["secret"] = device.secret.base64EncodedString()
     legacy["devices"] = legacyDevices
     try JSONSerialization.data(withJSONObject: legacy).write(to: Collector.stateURL)
     let migrated = Collector.loadState()
-    try check(migrated.devices.first?.secret == device.secret,
+    try check(
+      migrated.devices.first?.secret == device.secret,
       "Legacy pairing key was not recovered")
     let savedState = try String(contentsOf: Collector.stateURL, encoding: .utf8)
-    try check(!savedState.contains("\"secret\""),
+    try check(
+      !savedState.contains("\"secret\""),
       "Plaintext pairing key remained in the metadata file")
-    try hostContent.write(to: Collector.directory(for: device, kind: .host)
-      .appendingPathComponent(filename))
-    try watchContent.write(to: Collector.directory(for: device, kind: .watch,
-      source: source).appendingPathComponent(filename))
+    try hostContent.write(
+      to: Collector.directory(for: device, kind: .host)
+        .appendingPathComponent(filename))
+    try watchContent.write(
+      to: Collector.directory(
+        for: device, kind: .watch,
+        source: source
+      ).appendingPathComponent(filename))
     let unfinished = try Collector.directory(for: device)
       .appendingPathComponent(".staging-test", isDirectory: true)
     try FileManager.default.createDirectory(at: unfinished, withIntermediateDirectories: true)
-    try Data("unfinished diagnostic".utf8).write(to: unfinished
-      .appendingPathComponent("Analytics-2026-09-01-000000.ips.ca.synced"))
+    try Data("unfinished diagnostic".utf8).write(
+      to:
+        unfinished
+        .appendingPathComponent("Analytics-2026-09-01-000000.ips.ca.synced"))
     let server = TransferServer(state: state)
     var authenticatedRequests = 0
     var presenceEvents: [Bool] = []
@@ -586,23 +785,30 @@ struct TransferProtocolTests {
       if results.contains(where: { result in
         guard case .service(let name, _, _, _) = result.endpoint,
           name == hostID.uuidString,
-          case .bonjour(let record) = result.metadata else { return false }
+          case .bonjour(let record) = result.metadata
+        else { return false }
         return record["revision"] == "1"
-      }) { announcement.signal() }
+      }) {
+        announcement.signal()
+      }
     }
     announcementBrowser.start(queue: DispatchQueue(label: "mochilog.transfer.test.announcement"))
-    try check(browserReady.wait(timeout: .now() + 5) == .success,
+    try check(
+      browserReady.wait(timeout: .now() + 5) == .success,
       "Announcement browser did not start")
     server.announceQueuedFiles()
-    try check(announcement.wait(timeout: .now() + 10) == .success,
+    try check(
+      announcement.wait(timeout: .now() + 10) == .success,
       "Send-now did not notify the Bonjour browser")
     announcementBrowser.cancel()
 
     print("Checking legacy protocol rejection and invalid MAC")
-    let legacyReply = try request(endpoint, hostID: hostID, device: device,
+    let legacyReply = try request(
+      endpoint, hostID: hostID, device: device,
       version2: false, expectNoResponse: true)
     try check(legacyReply.isEmpty, "Legacy request bypassed nonce-bound response protection")
-    let rejected = try request(endpoint, hostID: hostID, device: device,
+    let rejected = try request(
+      endpoint, hostID: hostID, device: device,
       validMAC: false, expectNoResponse: true)
     try check(rejected.isEmpty, "Invalid MAC was accepted")
     try check(authenticatedRequests == 0, "Invalid MAC appeared as a connected app")
@@ -613,64 +819,83 @@ struct TransferProtocolTests {
     let firstNonce = UUID()
     let phoneReport = Data(#"{"schema":1,"platform":"iOS","recentEvents":["synthetic"]}"#.utf8)
     print("Checking first authenticated transfer")
-    let first = try opened(request(endpoint, hostID: hostID, device: device,
-      nonce: firstNonce, diagnostics: phoneReport), secret: device.secret,
+    let first = try opened(
+      request(
+        endpoint, hostID: hostID, device: device,
+        nonce: firstNonce, diagnostics: phoneReport), secret: device.secret,
       context: (hostID, device.physicalDeviceID, firstNonce))
-    try check(first.0 == hostToken && first.1 == hostContent,
+    try check(
+      first.0 == hostToken && first.1 == hostContent,
       "Host payload or token was incorrect")
     try check(authenticatedRequests == 1, "Authenticated app contact was not recorded")
     try check(presenceEvents == [true], "Client request did not register as foreground")
     try check(transferEvents == [true, false], "Transfer activity did not close cleanly")
-    try check(Collector.loadState().devices.first?.confirmedAt != nil,
+    try check(
+      Collector.loadState().devices.first?.confirmedAt != nil,
       "First valid request did not confirm pairing")
-    try check(SupportDiagnostics.phoneReport(for: device) != nil,
+    try check(
+      SupportDiagnostics.phoneReport(for: device) != nil,
       "Authenticated phone diagnostics were not stored")
 
     print("Checking replay rejection")
-    let replay = try request(endpoint, hostID: hostID, device: device,
+    let replay = try request(
+      endpoint, hostID: hostID, device: device,
       nonce: firstNonce, expectNoResponse: true)
     try check(replay.isEmpty, "Replayed nonce was accepted")
     try check(authenticatedRequests == 1, "Replay appeared as a new app contact")
     print("Checking authenticated background notice")
     let backgroundNonce = UUID()
-    let backgroundReply = try request(endpoint, hostID: hostID, device: device,
+    let backgroundReply = try request(
+      endpoint, hostID: hostID, device: device,
       nonce: backgroundNonce, presence: "background", expectNoResponse: true)
     try check(backgroundReply.isEmpty, "Background notice started a log transfer")
     try check(presenceEvents.last == false, "Background notice was not recorded")
     try check(transferEvents == [true, false], "Background notice appeared as a file transfer")
     let afterNoticeCount = presenceEvents.count
-    _ = try request(endpoint, hostID: hostID, device: device,
+    _ = try request(
+      endpoint, hostID: hostID, device: device,
       nonce: backgroundNonce, presence: "background", expectNoResponse: true)
-    try check(presenceEvents.count == afterNoticeCount, "Replayed background notice changed presence")
+    try check(
+      presenceEvents.count == afterNoticeCount, "Replayed background notice changed presence")
     let afterBackground = try Collector.pending(for: device)
-    try check(afterBackground.count == 2,
+    try check(
+      afterBackground.count == 2,
       "Background notice changed the delivery queue")
     BatteryLogStorage.retainsAfterDelivery = true
     print("Checking host ACK and Watch transfer")
     let secondNonce = UUID()
-    let second = try opened(request(endpoint, hostID: hostID, device: device,
-      nonce: secondNonce, ack: hostToken), secret: device.secret,
+    let second = try opened(
+      request(
+        endpoint, hostID: hostID, device: device,
+        nonce: secondNonce, ack: hostToken), secret: device.secret,
       context: (hostID, device.physicalDeviceID, secondNonce))
-    try check(second.0 == watchToken && second.1 == watchContent,
+    try check(
+      second.0 == watchToken && second.1 == watchContent,
       "Watch payload collided with same-named host file")
     let afterHostACK = try Collector.pending(for: device)
-    try check(afterHostACK.count == 1,
+    try check(
+      afterHostACK.count == 1,
       "Acknowledged host payload was not removed")
     print("Checking Watch ACK and terminal reply")
     let terminalNonce = UUID()
-    let terminal = try opened(request(endpoint, hostID: hostID, device: device,
-      nonce: terminalNonce, ack: watchToken), secret: device.secret,
+    let terminal = try opened(
+      request(
+        endpoint, hostID: hostID, device: device,
+        nonce: terminalNonce, ack: watchToken), secret: device.secret,
       context: (hostID, device.physicalDeviceID, terminalNonce))
     try check(terminal.0.isEmpty, "Final reply was not terminal")
     let report = try JSONSerialization.jsonObject(with: terminal.1) as? [String: Any]
     try check(report?["platform"] as? String == "macOS", "Mac diagnostics missing")
     let afterWatchACK = try Collector.pending(for: device)
     try check(afterWatchACK.isEmpty, "Acknowledged Watch payload remained")
-    try check(Collector.delivered(for: device) == Set([hostToken, watchToken]),
+    try check(
+      Collector.delivered(for: device) == Set([hostToken, watchToken]),
       "Delivered token ledger is incorrect")
     let repeatNonce = UUID()
-    let repeatPull = try opened(request(endpoint, hostID: hostID, device: device,
-      nonce: repeatNonce), secret: device.secret,
+    let repeatPull = try opened(
+      request(
+        endpoint, hostID: hostID, device: device,
+        nonce: repeatNonce), secret: device.secret,
       context: (hostID, device.physicalDeviceID, repeatNonce))
     try check(repeatPull.0.isEmpty, "Delivered payload appeared again")
     print("Checking archived log manual resend over encrypted transport")
@@ -678,20 +903,27 @@ struct TransferProtocolTests {
       !$0.pending && $0.kind == "Host" && $0.name == filename
     }
     let requeuedHost = try BatteryLogStorage.requeue(archivedHost, devices: [device])
-    try check(archivedHost.count == 1 && requeuedHost == 1,
+    try check(
+      archivedHost.count == 1 && requeuedHost == 1,
       "Acknowledged host log was not available for manual resend")
     let resendNonce = UUID()
-    let resent = try opened(request(endpoint, hostID: hostID, device: device,
-      nonce: resendNonce), secret: device.secret,
+    let resent = try opened(
+      request(
+        endpoint, hostID: hostID, device: device,
+        nonce: resendNonce), secret: device.secret,
       context: (hostID, device.physicalDeviceID, resendNonce))
-    try check(resent.0 == hostToken && resent.1 == hostContent,
+    try check(
+      resent.0 == hostToken && resent.1 == hostContent,
       "Manual resend did not deliver the selected raw log")
     let resendACKNonce = UUID()
-    let resendEnd = try opened(request(endpoint, hostID: hostID, device: device,
-      nonce: resendACKNonce, ack: resent.0), secret: device.secret,
+    let resendEnd = try opened(
+      request(
+        endpoint, hostID: hostID, device: device,
+        nonce: resendACKNonce, ack: resent.0), secret: device.secret,
       context: (hostID, device.physicalDeviceID, resendACKNonce))
     let afterResendACK = try Collector.pending(for: device)
-    try check(resendEnd.0.isEmpty && afterResendACK.isEmpty,
+    try check(
+      resendEnd.0.isEmpty && afterResendACK.isEmpty,
       "Repeated acknowledgement left the resend pending")
     try BatteryLogStorage.delete(BatteryLogStorage.list(devices: [device]).filter { !$0.pending })
     BatteryLogStorage.retainsAfterDelivery = false
@@ -701,153 +933,214 @@ struct TransferProtocolTests {
       .appendingPathComponent(duplicateName)
     try hostContent.write(to: duplicateFile)
     let offerNonce = UUID()
-    let offered = try opened(request(endpoint, hostID: hostID, device: device,
-      nonce: offerNonce, offerEnabled: true), secret: device.secret,
+    let offered = try opened(
+      request(
+        endpoint, hostID: hostID, device: device,
+        nonce: offerNonce, offerEnabled: true), secret: device.secret,
       context: (hostID, device.physicalDeviceID, offerNonce))
     let offerJSON = try JSONSerialization.jsonObject(with: offered.1) as? [String: String]
     let digest = SHA256.hash(data: hostContent).map { String(format: "%02x", $0) }.joined()
-    try check(offered.0.isEmpty && offerJSON?["type"] == "file-offer" &&
-      offerJSON?["sha256"] == digest && offerJSON?["token"] == "Host::\(duplicateName)",
+    try check(
+      offered.0.isEmpty && offerJSON?["type"] == "file-offer" && offerJSON?["sha256"] == digest
+        && offerJSON?["token"] == "Host::\(duplicateName)",
       "Preflight sent log bytes or incorrect digest")
     let badDecisionNonce = UUID()
-    let rejectedDecision = try opened(request(endpoint, hostID: hostID, device: device,
-      nonce: badDecisionNonce, offerEnabled: true,
-      offer: ("Host::\(duplicateName)", String(repeating: "0", count: 64), "have")),
+    let rejectedDecision = try opened(
+      request(
+        endpoint, hostID: hostID, device: device,
+        nonce: badDecisionNonce, offerEnabled: true,
+        offer: ("Host::\(duplicateName)", String(repeating: "0", count: 64), "have")),
       secret: device.secret, context: (hostID, device.physicalDeviceID, badDecisionNonce))
-    try check(rejectedDecision.0.isEmpty && FileManager.default.fileExists(atPath: duplicateFile.path),
+    try check(
+      rejectedDecision.0.isEmpty && FileManager.default.fileExists(atPath: duplicateFile.path),
       "Mismatched digest removed a queued log")
     let skipNonce = UUID()
-    let skipped = try opened(request(endpoint, hostID: hostID, device: device,
-      nonce: skipNonce, offerEnabled: true,
-      offer: ("Host::\(duplicateName)", digest, "have")),
+    let skipped = try opened(
+      request(
+        endpoint, hostID: hostID, device: device,
+        nonce: skipNonce, offerEnabled: true,
+        offer: ("Host::\(duplicateName)", digest, "have")),
       secret: device.secret, context: (hostID, device.physicalDeviceID, skipNonce))
-    try check(skipped.0.isEmpty && !FileManager.default.fileExists(atPath: duplicateFile.path),
+    try check(
+      skipped.0.isEmpty && !FileManager.default.fileExists(atPath: duplicateFile.path),
       "Matching mobile receipt did not suppress duplicate transfer")
     let preflightLog = SupportDiagnostics.macLogText()
-    try check(preflightLog.contains("preflight offer Host::\(duplicateName)") &&
-      preflightLog.contains("preflight decision=have, action=skip Host::\(duplicateName)") &&
-      preflightLog.contains("digest changed"),
+    try check(
+      preflightLog.contains("preflight offer Host::\(duplicateName)")
+        && preflightLog.contains("preflight decision=have, action=skip Host::\(duplicateName)")
+        && preflightLog.contains("digest changed"),
       "Preflight offer, duplicate decision, or rejection was missing from the debug log")
     try hostContent.write(to: duplicateFile)
     try Data().write(to: URL(fileURLWithPath: duplicateFile.path + ".force-resend"))
     let forcedNonce = UUID()
-    let forcedOffer = try opened(request(endpoint, hostID: hostID, device: device,
-      nonce: forcedNonce, offerEnabled: true), secret: device.secret,
+    let forcedOffer = try opened(
+      request(
+        endpoint, hostID: hostID, device: device,
+        nonce: forcedNonce, offerEnabled: true), secret: device.secret,
       context: (hostID, device.physicalDeviceID, forcedNonce))
     let forcedJSON = try JSONSerialization.jsonObject(with: forcedOffer.1) as? [String: String]
     try check(forcedJSON?["force"] == "true", "Manual resend was not identified")
     let refusedNonce = UUID()
-    _ = try request(endpoint, hostID: hostID, device: device,
+    _ = try request(
+      endpoint, hostID: hostID, device: device,
       nonce: refusedNonce, offerEnabled: true,
       offer: ("Host::\(duplicateName)", digest, "have"))
-    try check(FileManager.default.fileExists(atPath: duplicateFile.path),
+    try check(
+      FileManager.default.fileExists(atPath: duplicateFile.path),
       "A mobile duplicate decision cancelled an explicit manual resend")
     let sendNonce = UUID()
-    let forcedContent = try opened(request(endpoint, hostID: hostID, device: device,
-      nonce: sendNonce, offerEnabled: true,
-      offer: ("Host::\(duplicateName)", digest, "send")),
+    let forcedContent = try opened(
+      request(
+        endpoint, hostID: hostID, device: device,
+        nonce: sendNonce, offerEnabled: true,
+        offer: ("Host::\(duplicateName)", digest, "send")),
       secret: device.secret, context: (hostID, device.physicalDeviceID, sendNonce))
-    try check(forcedContent.0 == "Host::\(duplicateName)" && forcedContent.1 == hostContent,
+    try check(
+      forcedContent.0 == "Host::\(duplicateName)" && forcedContent.1 == hostContent,
       "Approved preflight did not deliver a manual resend")
     let forcedAckNonce = UUID()
-    _ = try request(endpoint, hostID: hostID, device: device,
+    _ = try request(
+      endpoint, hostID: hostID, device: device,
       nonce: forcedAckNonce, ack: forcedContent.0, offerEnabled: true)
-    try check(!FileManager.default.fileExists(atPath: duplicateFile.path + ".force-resend"),
+    try check(
+      !FileManager.default.fileExists(atPath: duplicateFile.path + ".force-resend"),
       "Manual resend marker remained after acknowledgement")
     print("Checking authenticated automatic-collection pause")
     let pauseUntil = String(Int(Date().addingTimeInterval(3600).timeIntervalSince1970))
     let pauseNonce = UUID()
-    let pauseMessage = "daily-pause|v1|\(hostID.uuidString)|\(device.physicalDeviceID.uuidString)|\(pauseNonce.uuidString)|\(pauseUntil)"
-    let pauseMAC = HMAC<SHA256>.authenticationCode(for: Data(pauseMessage.utf8),
-      using: SymmetricKey(data: device.secret))
-      .map { String(format: "%02x", $0) }.joined()
-    let baseMAC = HMAC<SHA256>.authenticationCode(for: Data(
-      "v2|\(hostID.uuidString)|\(device.physicalDeviceID.uuidString)|\(pauseNonce.uuidString)|".utf8),
-      using: SymmetricKey(data: device.secret))
-      .map { String(format: "%02x", $0) }.joined()
-    var pausePayload = ["version": "2", "hostID": hostID.uuidString,
+    let pauseMessage =
+      "daily-pause|v1|\(hostID.uuidString)|\(device.physicalDeviceID.uuidString)|\(pauseNonce.uuidString)|\(pauseUntil)"
+    let pauseMAC = HMAC<SHA256>.authenticationCode(
+      for: Data(pauseMessage.utf8),
+      using: SymmetricKey(data: device.secret)
+    )
+    .map { String(format: "%02x", $0) }.joined()
+    let baseMAC = HMAC<SHA256>.authenticationCode(
+      for: Data(
+        "v2|\(hostID.uuidString)|\(device.physicalDeviceID.uuidString)|\(pauseNonce.uuidString)|"
+          .utf8),
+      using: SymmetricKey(data: device.secret)
+    )
+    .map { String(format: "%02x", $0) }.joined()
+    var pausePayload = [
+      "version": "2", "hostID": hostID.uuidString,
       "physicalDeviceID": device.physicalDeviceID.uuidString,
       "nonce": pauseNonce.uuidString, "ack": "", "mac": baseMAC,
-      "dailyPauseUntil": pauseUntil, "dailyPauseMAC": String(repeating: "0", count: 64)]
-    let invalidPause = try opened(request(endpoint, hostID: hostID, device: device,
-      nonce: pauseNonce, overridePayload: pausePayload), secret: device.secret,
+      "dailyPauseUntil": pauseUntil, "dailyPauseMAC": String(repeating: "0", count: 64),
+    ]
+    let invalidPause = try opened(
+      request(
+        endpoint, hostID: hostID, device: device,
+        nonce: pauseNonce, overridePayload: pausePayload), secret: device.secret,
       context: (hostID, device.physicalDeviceID, pauseNonce))
-    try check(invalidPause.0.isEmpty &&
-      Collector.loadState().devices.first?.automaticPauseUntil == nil,
+    try check(
+      invalidPause.0.isEmpty && Collector.loadState().devices.first?.automaticPauseUntil == nil,
       "Invalid daily pause proof changed the saved state")
     pausePayload["dailyPauseMAC"] = pauseMAC
     let acceptedNonce = UUID()
     pausePayload["nonce"] = acceptedNonce.uuidString
-    pausePayload["mac"] = HMAC<SHA256>.authenticationCode(for: Data(
-      "v2|\(hostID.uuidString)|\(device.physicalDeviceID.uuidString)|\(acceptedNonce.uuidString)|".utf8),
-      using: SymmetricKey(data: device.secret))
-      .map { String(format: "%02x", $0) }.joined()
-    pausePayload["dailyPauseMAC"] = HMAC<SHA256>.authenticationCode(for: Data(
-      "daily-pause|v1|\(hostID.uuidString)|\(device.physicalDeviceID.uuidString)|\(acceptedNonce.uuidString)|\(pauseUntil)".utf8),
-      using: SymmetricKey(data: device.secret))
-      .map { String(format: "%02x", $0) }.joined()
-    let acceptedPause = try opened(request(endpoint, hostID: hostID, device: device,
-      nonce: acceptedNonce, overridePayload: pausePayload), secret: device.secret,
+    pausePayload["mac"] = HMAC<SHA256>.authenticationCode(
+      for: Data(
+        "v2|\(hostID.uuidString)|\(device.physicalDeviceID.uuidString)|\(acceptedNonce.uuidString)|"
+          .utf8),
+      using: SymmetricKey(data: device.secret)
+    )
+    .map { String(format: "%02x", $0) }.joined()
+    pausePayload["dailyPauseMAC"] = HMAC<SHA256>.authenticationCode(
+      for: Data(
+        "daily-pause|v1|\(hostID.uuidString)|\(device.physicalDeviceID.uuidString)|\(acceptedNonce.uuidString)|\(pauseUntil)"
+          .utf8),
+      using: SymmetricKey(data: device.secret)
+    )
+    .map { String(format: "%02x", $0) }.joined()
+    let acceptedPause = try opened(
+      request(
+        endpoint, hostID: hostID, device: device,
+        nonce: acceptedNonce, overridePayload: pausePayload), secret: device.secret,
       context: (hostID, device.physicalDeviceID, acceptedNonce))
     let pauseAck = try JSONSerialization.jsonObject(with: acceptedPause.1) as? [String: String]
-    try check(acceptedPause.0.isEmpty && pauseAck?["type"] == "daily-pause-ack" &&
-      pauseAck?["until"] == pauseUntil &&
-      Collector.loadState().devices.first?.automaticPauseUntil != nil,
+    try check(
+      acceptedPause.0.isEmpty && pauseAck?["type"] == "daily-pause-ack"
+        && pauseAck?["until"] == pauseUntil
+        && Collector.loadState().devices.first?.automaticPauseUntil != nil,
       "Authenticated pause was not acknowledged and persisted")
-    let pauseReplay = try request(endpoint, hostID: hostID, device: device,
+    let pauseReplay = try request(
+      endpoint, hostID: hostID, device: device,
       nonce: acceptedNonce, expectNoResponse: true)
-    try check(pauseReplay.isEmpty,
+    try check(
+      pauseReplay.isEmpty,
       "A pause nonce was accepted twice")
     let resumeNonce = UUID()
-    let resumePayload = ["version": "2", "hostID": hostID.uuidString,
+    let resumePayload = [
+      "version": "2", "hostID": hostID.uuidString,
       "physicalDeviceID": device.physicalDeviceID.uuidString,
       "nonce": resumeNonce.uuidString, "ack": "",
-      "mac": HMAC<SHA256>.authenticationCode(for: Data(
-        "v2|\(hostID.uuidString)|\(device.physicalDeviceID.uuidString)|\(resumeNonce.uuidString)|".utf8),
-        using: SymmetricKey(data: device.secret))
-        .map { String(format: "%02x", $0) }.joined(),
-      "dailyResumeMAC": HMAC<SHA256>.authenticationCode(for: Data(
-        "daily-resume|v1|\(hostID.uuidString)|\(device.physicalDeviceID.uuidString)|\(resumeNonce.uuidString)".utf8),
-        using: SymmetricKey(data: device.secret))
-        .map { String(format: "%02x", $0) }.joined()]
-    let resumeReply = try opened(request(endpoint, hostID: hostID, device: device,
-      nonce: resumeNonce, overridePayload: resumePayload), secret: device.secret,
+      "mac": HMAC<SHA256>.authenticationCode(
+        for: Data(
+          "v2|\(hostID.uuidString)|\(device.physicalDeviceID.uuidString)|\(resumeNonce.uuidString)|"
+            .utf8),
+        using: SymmetricKey(data: device.secret)
+      )
+      .map { String(format: "%02x", $0) }.joined(),
+      "dailyResumeMAC": HMAC<SHA256>.authenticationCode(
+        for: Data(
+          "daily-resume|v1|\(hostID.uuidString)|\(device.physicalDeviceID.uuidString)|\(resumeNonce.uuidString)"
+            .utf8),
+        using: SymmetricKey(data: device.secret)
+      )
+      .map { String(format: "%02x", $0) }.joined(),
+    ]
+    let resumeReply = try opened(
+      request(
+        endpoint, hostID: hostID, device: device,
+        nonce: resumeNonce, overridePayload: resumePayload), secret: device.secret,
       context: (hostID, device.physicalDeviceID, resumeNonce))
     let resumeAck = try JSONSerialization.jsonObject(with: resumeReply.1) as? [String: String]
-    try check(resumeAck?["type"] == "daily-resume-ack" &&
-      Collector.loadState().devices.first?.automaticPauseUntil == nil,
+    try check(
+      resumeAck?["type"] == "daily-resume-ack"
+        && Collector.loadState().devices.first?.automaticPauseUntil == nil,
       "Authenticated resume did not clear the saved pause")
     print("Checking v2 encrypted diagnostics and nonce-bound response")
     let v2Name = "Analytics-2026-09-26-130000.ips.ca.synced"
     let v2Content = Data("v2 battery payload".utf8)
-    try v2Content.write(to: Collector.directory(for: device, kind: .host)
-      .appendingPathComponent(v2Name))
+    try v2Content.write(
+      to: Collector.directory(for: device, kind: .host)
+        .appendingPathComponent(v2Name))
     if let oldReport = SupportDiagnostics.phoneReport(for: device) {
       try FileManager.default.removeItem(at: oldReport)
     }
     let v2Nonce = UUID()
-    let v2Response = try request(endpoint, hostID: hostID, device: device,
+    let v2Response = try request(
+      endpoint, hostID: hostID, device: device,
       nonce: v2Nonce, diagnostics: phoneReport, version2: true,
       extra: ["diagnosticAddressVersion": "1", "diagnosticAddresses": #"["192.168.40.22"]"#])
-    try check(DiagnosticRoutes.candidates(for: device).allSatisfy { $0.address != "192.168.40.22" },
+    try check(
+      DiagnosticRoutes.candidates(for: device).allSatisfy { $0.address != "192.168.40.22" },
       "Unsigned v2 extra fields installed a diagnostic endpoint")
-    let v2Opened = try opened(v2Response, secret: device.secret,
+    let v2Opened = try opened(
+      v2Response, secret: device.secret,
       context: (hostID, device.physicalDeviceID, v2Nonce))
-    try check(v2Opened.0 == "Host::\(v2Name)" && v2Opened.1 == v2Content,
+    try check(
+      v2Opened.0 == "Host::\(v2Name)" && v2Opened.1 == v2Content,
       "V2 encrypted response did not contain the expected log")
-    try check(SupportDiagnostics.phoneReport(for: device) != nil,
+    try check(
+      SupportDiagnostics.phoneReport(for: device) != nil,
       "V2 encrypted diagnostics were not accepted")
     do {
-      _ = try opened(v2Response, secret: device.secret,
+      _ = try opened(
+        v2Response, secret: device.secret,
         context: (hostID, device.physicalDeviceID, UUID()))
       throw TestFailure.failed("A captured response was accepted for a new request")
-    } catch CryptoKitError.authenticationFailure { }
-    let v2Replay = try request(endpoint, hostID: hostID, device: device,
+    } catch CryptoKitError.authenticationFailure {}
+    let v2Replay = try request(
+      endpoint, hostID: hostID, device: device,
       nonce: v2Nonce, version2: true, expectNoResponse: true)
     try check(v2Replay.isEmpty, "A repeated v2 request was accepted")
     let v2FinalNonce = UUID()
-    let v2Final = try opened(request(endpoint, hostID: hostID, device: device,
-      nonce: v2FinalNonce, ack: "Host::\(v2Name)", version2: true),
+    let v2Final = try opened(
+      request(
+        endpoint, hostID: hostID, device: device,
+        nonce: v2FinalNonce, ack: "Host::\(v2Name)", version2: true),
       secret: device.secret,
       context: (hostID, device.physicalDeviceID, v2FinalNonce))
     try check(v2Final.0.isEmpty, "V2 acknowledgement did not finish the transfer")
@@ -859,143 +1152,196 @@ struct TransferProtocolTests {
     let archiveDay = SupportDiagnostics.dayString(Date())
     let compactDay = archiveDay.replacingOccurrences(of: "-", with: "")
     let phoneLine = Data("phone archive line\n".utf8)
-    let archiveReport = try JSONSerialization.data(withJSONObject: [
-      "schema": 1, "platform": "iOS", "archiveRefresh": true,
-      "archiveManifest": [compactDay: phoneLine.count],
-      "archiveChunk": ["day": compactDay, "offset": 0,
-        "data": phoneLine.base64EncodedString()],
-      "archiveRequest": ["day": compactDay, "offset": 0]
-    ] as [String: Any])
+    let archiveReport = try JSONSerialization.data(
+      withJSONObject: [
+        "schema": 1, "platform": "iOS", "archiveRefresh": true,
+        "archiveManifest": [compactDay: phoneLine.count],
+        "archiveChunk": [
+          "day": compactDay, "offset": 0,
+          "data": phoneLine.base64EncodedString(),
+        ],
+        "archiveRequest": ["day": compactDay, "offset": 0],
+      ] as [String: Any])
     let archiveNonce = UUID()
-    let archiveReply = try opened(request(endpoint, hostID: hostID, device: device,
-      nonce: archiveNonce, diagnostics: archiveReport), secret: device.secret,
+    let archiveReply = try opened(
+      request(
+        endpoint, hostID: hostID, device: device,
+        nonce: archiveNonce, diagnostics: archiveReport), secret: device.secret,
       context: (hostID, device.physicalDeviceID, archiveNonce))
     try check(archiveReply.0.isEmpty, "Archive exchange did not return a terminal report")
-    try check(SupportDiagnostics.phoneLogText(for: device, day: archiveDay) ==
-      String(data: phoneLine, encoding: .utf8), "Phone archive chunk was not saved")
-    let archiveObject = try JSONSerialization.jsonObject(with: archiveReply.1)
+    try check(
+      SupportDiagnostics.phoneLogText(for: device, day: archiveDay)
+        == String(data: phoneLine, encoding: .utf8), "Phone archive chunk was not saved")
+    let archiveObject =
+      try JSONSerialization.jsonObject(with: archiveReply.1)
       as? [String: Any]
     let computerChunk = archiveObject?["archiveChunk"] as? [String: Any]
     let computerBytes = Data(base64Encoded: computerChunk?["data"] as? String ?? "")
-    try check(computerChunk?["day"] as? String == compactDay &&
-      computerBytes?.count == 8_192,
+    try check(
+      computerChunk?["day"] as? String == compactDay && computerBytes?.count == 8_192,
       "Computer archive chunk was not returned")
     // A live archive may grow while a stable manifest is being exchanged.
     // Previous clients omit end and retain their original chunk behavior.
-    let boundedReport = try JSONSerialization.data(withJSONObject: [
-      "schema": 1, "archiveRequest": ["day": compactDay, "offset": 0, "end": 127]
-    ] as [String: Any])
+    let boundedReport = try JSONSerialization.data(
+      withJSONObject: [
+        "schema": 1, "archiveRequest": ["day": compactDay, "offset": 0, "end": 127],
+      ] as [String: Any])
     try SupportDiagnostics.savePhoneReport(boundedReport, for: device)
-    let boundedReply = try JSONSerialization.jsonObject(with: SupportDiagnostics.macReport(for: device)) as! [String: Any]
+    let boundedReply =
+      try JSONSerialization.jsonObject(with: SupportDiagnostics.macReport(for: device))
+      as! [String: Any]
     let boundedChunk = boundedReply["archiveChunk"] as! [String: Any]
-    try check(Data(base64Encoded: boundedChunk["data"] as! String)?.count == 127,
+    try check(
+      Data(base64Encoded: boundedChunk["data"] as! String)?.count == 127,
       "A growing archive exceeded the advertised snapshot end")
-    let invalidEnd = try JSONSerialization.data(withJSONObject: [
-      "schema": 1, "archiveRequest": ["day": compactDay, "offset": 127, "end": 127]
-    ] as [String: Any])
+    let invalidEnd = try JSONSerialization.data(
+      withJSONObject: [
+        "schema": 1, "archiveRequest": ["day": compactDay, "offset": 127, "end": 127],
+      ] as [String: Any])
     try SupportDiagnostics.savePhoneReport(invalidEnd, for: device)
-    let invalidReply = try JSONSerialization.jsonObject(with: SupportDiagnostics.macReport(for: device)) as! [String: Any]
-    try check(invalidReply["archiveChunk"] == nil,
+    let invalidReply =
+      try JSONSerialization.jsonObject(with: SupportDiagnostics.macReport(for: device))
+      as! [String: Any]
+    try check(
+      invalidReply["archiveChunk"] == nil,
       "An invalid archive end was accepted")
     let duplicateNonce = UUID()
-    _ = try request(endpoint, hostID: hostID, device: device,
+    _ = try request(
+      endpoint, hostID: hostID, device: device,
       nonce: duplicateNonce, diagnostics: archiveReport)
-    try check(SupportDiagnostics.phoneLogText(for: device, day: archiveDay) ==
-      String(data: phoneLine, encoding: .utf8), "Retried archive chunk was duplicated")
-    try check(SupportDiagnostics.logText(for: archiveDay).contains("phone chunk stored") &&
-      SupportDiagnostics.logText(for: archiveDay).contains("phone chunk skipped"),
+    try check(
+      SupportDiagnostics.phoneLogText(for: device, day: archiveDay)
+        == String(data: phoneLine, encoding: .utf8), "Retried archive chunk was duplicated")
+    try check(
+      SupportDiagnostics.logText(for: archiveDay).contains("phone chunk stored")
+        && SupportDiagnostics.logText(for: archiveDay).contains("phone chunk skipped"),
       "Stored and rejected diagnostic chunks have no progress audit")
     for offset in 1...4 {
-      guard let date = Calendar.current.date(byAdding: .day, value: -offset,
-        to: Date()) else { continue }
+      guard
+        let date = Calendar.current.date(
+          byAdding: .day, value: -offset,
+          to: Date())
+      else { continue }
       let day = SupportDiagnostics.dayString(date)
       let compact = day.replacingOccurrences(of: "-", with: "")
-      let historical = try JSONSerialization.data(withJSONObject: [
-        "schema": 1,
-        "archiveChunk": ["day": compact, "offset": 0,
-          "data": phoneLine.base64EncodedString()]
-      ] as [String: Any])
+      let historical = try JSONSerialization.data(
+        withJSONObject: [
+          "schema": 1,
+          "archiveChunk": [
+            "day": compact, "offset": 0,
+            "data": phoneLine.base64EncodedString(),
+          ],
+        ] as [String: Any])
       try SupportDiagnostics.savePhoneReport(historical, for: device)
     }
-    try check(SupportDiagnostics.phoneArchiveDays(for: device).count >= 5,
+    try check(
+      SupportDiagnostics.phoneArchiveDays(for: device).count >= 5,
       "Five incident dates were not retained for support")
     print("Checking delayed fragmented requests on the VPN receiver")
     server.startTestTailnetReceiver()
-    let vpnEndpoint = NWEndpoint.hostPort(host: "127.0.0.1",
+    let vpnEndpoint = NWEndpoint.hostPort(
+      host: "127.0.0.1",
       port: NWEndpoint.Port(rawValue: TransferServer.tailnetPort)!)
     let vpnNonce = UUID()
-    let vpnReply = try opened(request(vpnEndpoint, hostID: hostID, device: device,
-      nonce: vpnNonce, delayedChunks: true), secret: device.secret,
+    let vpnReply = try opened(
+      request(
+        vpnEndpoint, hostID: hostID, device: device,
+        nonce: vpnNonce, delayedChunks: true), secret: device.secret,
       context: (hostID, device.physicalDeviceID, vpnNonce))
     try check(vpnReply.0.isEmpty, "Delayed VPN request did not receive terminal response")
     print("Checking public-key QR pairing and six-digit keyed confirmation")
-    let selected = ConnectedDevice(udid: "secure-iphone", name: "Secure iPhone",
+    let selected = ConnectedDevice(
+      udid: "secure-iphone", name: "Secure iPhone",
       model: "iPhone18,3")
     let invitation = server.beginPairing(for: selected, existing: nil)
-    try check(invitation.publicKey.count == 32 && invitation.code.count == 6,
+    try check(
+      invitation.publicKey.count == 32 && invitation.code.count == 6,
       "Secure pairing invitation is incomplete")
     let clientPrivate = Curve25519.KeyAgreement.PrivateKey()
     let clientPublic = clientPrivate.publicKey.rawRepresentation
     let macPublic = try Curve25519.KeyAgreement.PublicKey(
       rawRepresentation: invitation.publicKey)
     let shared = try clientPrivate.sharedSecretFromKeyAgreement(with: macPublic)
-    let derived = shared.hkdfDerivedSymmetricKey(using: SHA256.self,
+    let derived = shared.hkdfDerivedSymmetricKey(
+      using: SHA256.self,
       salt: Data(invitation.sessionID.uuidString.utf8),
-      sharedInfo: Data("MochiLog pair v2|\(hostID.uuidString)|\(invitation.physicalDeviceID.uuidString)".utf8),
+      sharedInfo: Data(
+        "MochiLog pair v2|\(hostID.uuidString)|\(invitation.physicalDeviceID.uuidString)".utf8),
       outputByteCount: 32)
     let pairingKey = derived.withUnsafeBytes { Data($0) }
-    let initPayload = ["type": "pair-init", "sessionID": invitation.sessionID.uuidString,
-      "clientPublicKey": clientPublic.base64EncodedString()]
-    let challenge = try request(endpoint, hostID: hostID, device: device,
+    let initPayload = [
+      "type": "pair-init", "sessionID": invitation.sessionID.uuidString,
+      "clientPublicKey": clientPublic.base64EncodedString(),
+    ]
+    let challenge = try request(
+      endpoint, hostID: hostID, device: device,
       overridePayload: initPayload)
     let challengeObject = try JSONSerialization.jsonObject(with: challenge) as! [String: String]
-    try check(challengeObject["type"] == "pair-challenge",
+    try check(
+      challengeObject["type"] == "pair-challenge",
       "Mac did not answer public-key initiation")
     let expectedChallenge = HMAC<SHA256>.authenticationCode(
       for: Data("pair-challenge|\(invitation.sessionID.uuidString)".utf8),
-      using: SymmetricKey(data: pairingKey))
-      .map { String(format: "%02x", $0) }.joined()
-    try check(challengeObject["proof"] == expectedChallenge,
+      using: SymmetricKey(data: pairingKey)
+    )
+    .map { String(format: "%02x", $0) }.joined()
+    try check(
+      challengeObject["proof"] == expectedChallenge,
       "Mac did not prove possession of its QR private key")
     let wrongCode = invitation.code == "000000" ? "000001" : "000000"
     let badMAC = HMAC<SHA256>.authenticationCode(
       for: Data("pair-confirm|\(invitation.sessionID.uuidString)|\(wrongCode)".utf8),
-      using: SymmetricKey(data: pairingKey))
-      .map { String(format: "%02x", $0) }.joined()
-    let badConfirmation = try request(endpoint, hostID: hostID, device: device,
-      expectNoResponse: true, overridePayload: ["type": "pair-confirm",
+      using: SymmetricKey(data: pairingKey)
+    )
+    .map { String(format: "%02x", $0) }.joined()
+    let badConfirmation = try request(
+      endpoint, hostID: hostID, device: device,
+      expectNoResponse: true,
+      overridePayload: [
+        "type": "pair-confirm",
         "sessionID": invitation.sessionID.uuidString,
         "clientPublicKey": clientPublic.base64EncodedString(),
-        "confirmationMAC": badMAC])
-    try check(badConfirmation.isEmpty &&
-      !Collector.loadState().devices.contains(where: { $0.udid == selected.udid }),
+        "confirmationMAC": badMAC,
+      ])
+    try check(
+      badConfirmation.isEmpty
+        && !Collector.loadState().devices.contains(where: { $0.udid == selected.udid }),
       "Wrong pairing code registered a device")
     let correctMAC = HMAC<SHA256>.authenticationCode(
       for: Data("pair-confirm|\(invitation.sessionID.uuidString)|\(invitation.code)".utf8),
-      using: SymmetricKey(data: pairingKey))
-      .map { String(format: "%02x", $0) }.joined()
-    let completion = try request(endpoint, hostID: hostID, device: device,
-      overridePayload: ["type": "pair-confirm",
+      using: SymmetricKey(data: pairingKey)
+    )
+    .map { String(format: "%02x", $0) }.joined()
+    let completion = try request(
+      endpoint, hostID: hostID, device: device,
+      overridePayload: [
+        "type": "pair-confirm",
         "sessionID": invitation.sessionID.uuidString,
         "clientPublicKey": clientPublic.base64EncodedString(),
-        "confirmationMAC": correctMAC])
+        "confirmationMAC": correctMAC,
+      ])
     let completionObject = try JSONSerialization.jsonObject(with: completion) as! [String: String]
     let expectedCompletion = HMAC<SHA256>.authenticationCode(
       for: Data("pair-complete|\(invitation.sessionID.uuidString)".utf8),
-      using: SymmetricKey(data: pairingKey))
-      .map { String(format: "%02x", $0) }.joined()
-    try check(completionObject["proof"] == expectedCompletion,
+      using: SymmetricKey(data: pairingKey)
+    )
+    .map { String(format: "%02x", $0) }.joined()
+    try check(
+      completionObject["proof"] == expectedCompletion,
       "Pairing completion proof was invalid")
     let newlyPaired = try checkPairedDevice(selected.udid, key: pairingKey)
     let pairedNonce = UUID()
-    let pairedReply = try opened(request(endpoint, hostID: hostID,
-      device: newlyPaired, nonce: pairedNonce, version2: true),
+    let pairedReply = try opened(
+      request(
+        endpoint, hostID: hostID,
+        device: newlyPaired, nonce: pairedNonce, version2: true),
       secret: pairingKey,
       context: (hostID, invitation.physicalDeviceID, pairedNonce))
     try check(pairedReply.0.isEmpty, "Newly paired client could not pull securely")
     print("Checking v3 pairing preserves the mobile device's existing physical ID")
     let mobilePhysicalID = UUID()
-    let secondPhone = ConnectedDevice(udid: "v3-iphone", name: "Existing iPhone",
+    let secondPhone = ConnectedDevice(
+      udid: "v3-iphone", name: "Existing iPhone",
       model: "iPhone18,3")
     let v3Invitation = server.beginPairing(for: secondPhone, existing: nil)
     let v3Private = Curve25519.KeyAgreement.PrivateKey()
@@ -1003,79 +1349,133 @@ struct TransferProtocolTests {
     let v3MacPublic = try Curve25519.KeyAgreement.PublicKey(
       rawRepresentation: v3Invitation.publicKey)
     let v3Shared = try v3Private.sharedSecretFromKeyAgreement(with: v3MacPublic)
-    let v3Key = v3Shared.hkdfDerivedSymmetricKey(using: SHA256.self,
+    let v3Key = v3Shared.hkdfDerivedSymmetricKey(
+      using: SHA256.self,
       salt: Data(v3Invitation.sessionID.uuidString.utf8),
       sharedInfo: Data("MochiLog pair v3|\(hostID.uuidString)|\(mobilePhysicalID.uuidString)".utf8),
-      outputByteCount: 32).withUnsafeBytes { Data($0) }
-    let v3Base = ["sessionID": v3Invitation.sessionID.uuidString,
+      outputByteCount: 32
+    ).withUnsafeBytes { Data($0) }
+    let v3Base = [
+      "sessionID": v3Invitation.sessionID.uuidString,
       "version": "3", "physicalDeviceID": mobilePhysicalID.uuidString,
-      "clientPublicKey": v3Public.base64EncodedString()]
-    let v3Init = try request(endpoint, hostID: hostID, device: device,
+      "clientPublicKey": v3Public.base64EncodedString(),
+    ]
+    let v3Init = try request(
+      endpoint, hostID: hostID, device: device,
       overridePayload: v3Base.merging(["type": "pair-init"]) { _, new in new })
     let v3Challenge = try JSONSerialization.jsonObject(with: v3Init) as! [String: String]
     let v3Proof = HMAC<SHA256>.authenticationCode(
       for: Data("pair-challenge|\(v3Invitation.sessionID.uuidString)".utf8),
-      using: SymmetricKey(data: v3Key)).map { String(format: "%02x", $0) }.joined()
+      using: SymmetricKey(data: v3Key)
+    ).map { String(format: "%02x", $0) }.joined()
     try check(v3Challenge["proof"] == v3Proof, "V3 challenge failed")
     let v3CodeMAC = HMAC<SHA256>.authenticationCode(
       for: Data("pair-confirm|\(v3Invitation.sessionID.uuidString)|\(v3Invitation.code)".utf8),
-      using: SymmetricKey(data: v3Key)).map { String(format: "%02x", $0) }.joined()
-    let v3Complete = try request(endpoint, hostID: hostID, device: device,
-      overridePayload: v3Base.merging(["type": "pair-confirm",
-        "confirmationMAC": v3CodeMAC]) { _, new in new })
+      using: SymmetricKey(data: v3Key)
+    ).map { String(format: "%02x", $0) }.joined()
+    let v3Complete = try request(
+      endpoint, hostID: hostID, device: device,
+      overridePayload: v3Base.merging([
+        "type": "pair-confirm",
+        "confirmationMAC": v3CodeMAC,
+      ]) { _, new in new })
     try check(!v3Complete.isEmpty, "V3 pairing was not confirmed")
     let v3Paired = try checkPairedDevice(secondPhone.udid, key: v3Key)
-    try check(v3Paired.physicalDeviceID == mobilePhysicalID,
+    try check(
+      v3Paired.physicalDeviceID == mobilePhysicalID,
       "V3 pairing replaced the mobile device's physical ID")
     print("Checking sealed transfer and protocol upgrade")
     let secureNonce = UUID()
-    _ = try opened(request(endpoint, hostID: hostID, device: v3Paired,
-      nonce: secureNonce, sealed: true,
-      extra: ["diagnosticAddressVersion": "1", "diagnosticAddresses": #"["192.168.40.23"]"#]), secret: v3Key,
+    _ = try opened(
+      request(
+        endpoint, hostID: hostID, device: v3Paired,
+        nonce: secureNonce, sealed: true,
+        extra: ["diagnosticAddressVersion": "1", "diagnosticAddresses": #"["192.168.40.23"]"#]),
+      secret: v3Key,
       context: (hostID, mobilePhysicalID, secureNonce))
-    try check(DiagnosticRoutes.candidates(for: v3Paired).first?.address == "192.168.40.23",
+    try check(
+      DiagnosticRoutes.candidates(for: v3Paired).first?.address == "192.168.40.23",
       "Sealed v3 request did not advertise the diagnostic LAN endpoint")
     print("Checking session-only live battery responses, unchanged values and replay")
-    let registryData = try Data(contentsOf: URL(fileURLWithPath: "Tests/Fixtures/battery-registry.xml"))
+    let registryData = try Data(
+      contentsOf: URL(fileURLWithPath: "Tests/Fixtures/battery-registry.xml"))
     let native = try LiveBatterySnapshot.decode(registryData)
-    try check(native.values == ["CycleCount": 245, "DesignCapacity": 3000,
-      "FullChargeCapacity": 3100, "CurrentCapacity": 67] && native.charging == true,
-      "Native plist validation lost precedence, accepted a boolean capacity or guessed unknown values")
-    try check(native.fields.contains { $0.path == ["BatteryData", "Huge"] && $0.value == "18446744073709551615" },
+    try check(
+      native.values == [
+        "CycleCount": 245, "DesignCapacity": 3000,
+        "FullChargeCapacity": 3100, "CurrentCapacity": 67,
+      ] && native.charging == true,
+      "Native plist validation lost precedence, accepted a boolean capacity or guessed unknown values"
+    )
+    try check(
+      native.fields.contains {
+        $0.path == ["BatteryData", "Huge"] && $0.value == "18446744073709551615"
+      },
       "Native plist lost UInt64 precision")
-    try check(native.fields.contains { $0.path == ["Binary"] && $0.kind == "data" && $0.value == "AQI=" } &&
-      native.fields.contains { $0.path == ["Date"] && $0.kind == "date" } &&
-      native.fields.contains { $0.path == ["EmptyDictionary"] && $0.kind == "dictionary" } &&
-      native.fields.contains { $0.path == ["EmptyArray"] && $0.kind == "array" }, "Native plist lost typed leaves")
-    let table = BatteryPresentation.summary(values: native.values, charging: native.charging, fields: native.fields)
-    let optional = BatteryPresentation.details(values: native.values, charging: native.charging, fields: native.fields)
-    try check(table.contains { $0.key == "DesignCapacity" && $0.value == 4000.formatted() } &&
-      table.contains { $0.key == "Voltage" && $0.value == "4010" && $0.unit == " mV" } &&
-      table.contains { $0.key == "ExternalConnected" && $0.kind == "boolean" } &&
-      !table.contains { ["UnknownCode", "Huge", "NominalChargeCapacity", "AppleRawMaxCapacity", "FullChargeCapacity", "CurrentCapacity"].contains($0.key) }, "Summary guessed an unknown field")
-    try check(optional.contains { $0.path == ["BatteryData", "CurrentCapacity"] } &&
-      optional.contains { $0.path == ["BatteryData", "DesignCapacity"] && $0.value == "3000" } &&
-      optional.contains { $0.path.first == "IOReportLegend" } &&
-      !optional.contains { $0.path == ["Voltage"] }, "Details lost ambiguous fields or repeated verified rows")
+    try check(
+      native.fields.contains { $0.path == ["Binary"] && $0.kind == "data" && $0.value == "AQI=" }
+        && native.fields.contains { $0.path == ["Date"] && $0.kind == "date" }
+        && native.fields.contains { $0.path == ["EmptyDictionary"] && $0.kind == "dictionary" }
+        && native.fields.contains { $0.path == ["EmptyArray"] && $0.kind == "array" },
+      "Native plist lost typed leaves")
+    let table = BatteryPresentation.summary(
+      values: native.values, charging: native.charging, fields: native.fields)
+    let optional = BatteryPresentation.details(
+      values: native.values, charging: native.charging, fields: native.fields)
+    try check(
+      table.contains { $0.key == "DesignCapacity" && $0.value == 4000.formatted() }
+        && table.contains { $0.key == "Voltage" && $0.value == "4010" && $0.unit == " mV" }
+        && table.contains { $0.key == "ExternalConnected" && $0.kind == "boolean" }
+        && !table.contains {
+          [
+            "UnknownCode", "Huge", "NominalChargeCapacity", "AppleRawMaxCapacity",
+            "FullChargeCapacity", "CurrentCapacity",
+          ].contains($0.key)
+        }, "Summary guessed an unknown field")
+    try check(
+      optional.contains { $0.path == ["BatteryData", "CurrentCapacity"] }
+        && optional.contains { $0.path == ["BatteryData", "DesignCapacity"] && $0.value == "3000" }
+        && optional.contains { $0.path.first == "IOReportLegend" }
+        && !optional.contains { $0.path == ["Voltage"] },
+      "Details lost ambiguous fields or repeated verified rows")
     let contradictory = RawBatteryField(path: ["IsCharging"], kind: "boolean", value: "false")
     let invalidVoltage = RawBatteryField(path: ["Voltage"], kind: "string", value: "4010")
-    try check(BatteryPresentation.details(values: [:], charging: true,
-      fields: [contradictory, invalidVoltage]).count == 2, "Invalid or contradictory raw values disappeared")
-    var changedRegistry = try PropertyListSerialization.propertyList(from: registryData, options: [], format: nil) as! [String: Any]
+    try check(
+      BatteryPresentation.details(
+        values: [:], charging: true,
+        fields: [contradictory, invalidVoltage]
+      ).count == 2, "Invalid or contradictory raw values disappeared")
+    var changedRegistry =
+      try PropertyListSerialization.propertyList(from: registryData, options: [], format: nil)
+      as! [String: Any]
     changedRegistry["UnknownCode"] = 8
-    let changedNative = try LiveBatterySnapshot.fromRegistry(PropertyListSerialization.data(
-      fromPropertyList: changedRegistry, format: .xml, options: 0))
-    try check(native.revision == changedNative.revision && native.detailsRevision != changedNative.detailsRevision,
+    let changedNative = try LiveBatterySnapshot.fromRegistry(
+      PropertyListSerialization.data(
+        fromPropertyList: changedRegistry, format: .xml, options: 0))
+    try check(
+      native.revision == changedNative.revision
+        && native.detailsRevision != changedNative.detailsRevision,
       "Native detail changes altered the core revision")
-    do { _ = try LiveBatterySnapshot.fromRegistry(Data(repeating: 65, count: 1048577)); fatalError("Oversized plist accepted") }
-    catch { }
+    do {
+      _ = try LiveBatterySnapshot.fromRegistry(Data(repeating: 65, count: 1048577));
+      fatalError("Oversized plist accepted")
+    } catch {}
     changedRegistry["Voltage"] = String(repeating: "a", count: 131073)
-    do { _ = try LiveBatterySnapshot.fromRegistry(PropertyListSerialization.data(fromPropertyList: changedRegistry,
-      format: .xml, options: 0)); fatalError("Oversized leaf accepted") } catch { }
-    let fixture: [String: Any] = ["version": 1, "values": ["CycleCount": 245, "DesignCapacity": 4000],
-      "revision": String(repeating: "a", count: 64), "acquiredAt": "2026-10-07T12:00:00Z"]
-    let details = "[{\"path\":[\"BatteryData\",\"Huge\"],\"kind\":\"number\",\"value\":\"18446744073709551615\"}]"
-    let detailDigest = SHA256.hash(data: Data(details.utf8)).map { String(format: "%02x", $0) }.joined()
+    do {
+      _ = try LiveBatterySnapshot.fromRegistry(
+        PropertyListSerialization.data(
+          fromPropertyList: changedRegistry,
+          format: .xml, options: 0));
+      fatalError("Oversized leaf accepted")
+    } catch {}
+    let fixture: [String: Any] = [
+      "version": 1, "values": ["CycleCount": 245, "DesignCapacity": 4000],
+      "revision": String(repeating: "a", count: 64), "acquiredAt": "2026-10-07T12:00:00Z",
+    ]
+    let details =
+      "[{\"path\":[\"BatteryData\",\"Huge\"],\"kind\":\"number\",\"value\":\"18446744073709551615\"}]"
+    let detailDigest = SHA256.hash(data: Data(details.utf8)).map { String(format: "%02x", $0) }
+      .joined()
     var fullFixture = fixture
     fullFixture["detailsJSON"] = details; fullFixture["detailsRevision"] = detailDigest
     let live = try LiveBatterySnapshot.decode(JSONSerialization.data(withJSONObject: fullFixture))
@@ -1086,15 +1486,26 @@ struct TransferProtocolTests {
       try check(message == "battery_unavailable", "Unavailable snapshot lost its stable reason")
     }
     server.liveBattery.set(live, for: mobilePhysicalID)
-    func liveRequest(_ revision: String = "", nonce: UUID = UUID(), sealed: Bool = true, detailsRevision: String? = nil) throws -> [String: Any] {
-      var payload = ["version": "2", "hostID": hostID.uuidString,
+    func liveRequest(
+      _ revision: String = "", nonce: UUID = UUID(), sealed: Bool = true,
+      detailsRevision: String? = nil
+    ) throws -> [String: Any] {
+      var payload = [
+        "version": "2", "hostID": hostID.uuidString,
         "physicalDeviceID": mobilePhysicalID.uuidString, "nonce": nonce.uuidString, "ack": "",
-        "mac": HMAC<SHA256>.authenticationCode(for: Data(
-          "v2|\(hostID.uuidString)|\(mobilePhysicalID.uuidString)|\(nonce.uuidString)|".utf8),
-          using: SymmetricKey(data: v3Key)).map { String(format: "%02x", $0) }.joined(),
-        "liveBatteryVersion": "1", "liveBatteryRevision": revision]
-      if let detailsRevision { payload["liveBatteryDetailsVersion"] = "1"; payload["liveBatteryDetailsRevision"] = detailsRevision }
-      let wire = try request(endpoint, hostID: hostID, device: v3Paired, nonce: nonce,
+        "mac": HMAC<SHA256>.authenticationCode(
+          for: Data(
+            "v2|\(hostID.uuidString)|\(mobilePhysicalID.uuidString)|\(nonce.uuidString)|".utf8),
+          using: SymmetricKey(data: v3Key)
+        ).map { String(format: "%02x", $0) }.joined(),
+        "liveBatteryVersion": "1", "liveBatteryRevision": revision,
+      ]
+      if let detailsRevision {
+        payload["liveBatteryDetailsVersion"] = "1";
+        payload["liveBatteryDetailsRevision"] = detailsRevision
+      }
+      let wire = try request(
+        endpoint, hostID: hostID, device: v3Paired, nonce: nonce,
         expectNoResponse: !sealed, overridePayload: payload, sealed: sealed)
       if !sealed { try check(wire.isEmpty, "Live fields accepted without v3"); return [:] }
       let plain = try opened(wire, secret: v3Key, context: (hostID, mobilePhysicalID, nonce))
@@ -1102,109 +1513,150 @@ struct TransferProtocolTests {
       return try JSONSerialization.jsonObject(with: plain.1) as! [String: Any]
     }
     let firstLive = try liveRequest()
-    try check(firstLive["type"] as? String == "live-battery" && firstLive["values"] != nil,
+    try check(
+      firstLive["type"] as? String == "live-battery" && firstLive["values"] != nil,
       "First snapshot omitted values")
     try check(firstLive["detailsJSON"] == nil, "Legacy client received opt-in details")
     let fullLive = try liveRequest(live.revision, detailsRevision: "")
-    try check(fullLive["detailsJSON"] as? String == details && fullLive["values"] == nil,
+    try check(
+      fullLive["detailsJSON"] as? String == details && fullLive["values"] == nil,
       "Full details change was coupled to core revision")
     let sameDetails = try liveRequest(live.revision, detailsRevision: detailDigest)
-    try check(sameDetails["detailsJSON"] == nil && sameDetails["detailsRevision"] as? String == detailDigest,
+    try check(
+      sameDetails["detailsJSON"] == nil
+        && sameDetails["detailsRevision"] as? String == detailDigest,
       "Unchanged details were resent")
     try check(live.fields.first?.value == "18446744073709551615", "Large integer lost precision")
-    do { _ = try RawBatteryField.decode(details + " ", revision: detailDigest); fatalError("Tampered details accepted") }
-    catch { }
+    do {
+      _ = try RawBatteryField.decode(details + " ", revision: detailDigest);
+      fatalError("Tampered details accepted")
+    } catch {}
     let unchangedLive = try liveRequest(live.revision)
-    try check(unchangedLive["values"] == nil && unchangedLive["acquiredAt"] != nil,
+    try check(
+      unchangedLive["values"] == nil && unchangedLive["acquiredAt"] != nil,
       "Unchanged snapshot resent values or lost acquisition time")
     server.liveBattery.set(nil, for: mobilePhysicalID)
     let staleLive = try liveRequest(live.revision)
-    try check(staleLive["state"] as? String == "stale" && staleLive["values"] == nil,
+    try check(
+      staleLive["state"] as? String == "stale" && staleLive["values"] == nil,
       "Acquisition failure appeared as a new current value")
     _ = try liveRequest(sealed: false)
     let savedCompanion = try Data(contentsOf: Collector.stateURL)
-    try check(!String(decoding: savedCompanion, as: UTF8.self)
-      .contains("DesignCapacity"), "Live values entered persisted companion state")
+    try check(
+      !String(decoding: savedCompanion, as: UTF8.self)
+        .contains("DesignCapacity"), "Live values entered persisted companion state")
     let replayFile = Collector.root.appendingPathComponent("transfer-replay.json")
     let persistedReplay = try Data(contentsOf: replayFile)
-    try check(String(decoding: persistedReplay, as: UTF8.self).contains(secureNonce.uuidString) &&
-      String(decoding: persistedReplay, as: UTF8.self).contains(mobilePhysicalID.uuidString),
+    try check(
+      String(decoding: persistedReplay, as: UTF8.self).contains(secureNonce.uuidString)
+        && String(decoding: persistedReplay, as: UTF8.self).contains(mobilePhysicalID.uuidString),
       "Sealed transfer replay state was not persisted")
-    let secureReplay = try request(endpoint, hostID: hostID, device: v3Paired,
+    let secureReplay = try request(
+      endpoint, hostID: hostID, device: v3Paired,
       nonce: secureNonce, expectNoResponse: true, sealed: true)
     try check(secureReplay.isEmpty, "Sealed request replay was accepted")
-    let stale = try request(endpoint, hostID: hostID, device: v3Paired,
+    let stale = try request(
+      endpoint, hostID: hostID, device: v3Paired,
       expectNoResponse: true, sealed: true,
       issuedAt: Int64(Date().timeIntervalSince1970) - 3600)
     try check(stale.isEmpty, "Expired sealed request was accepted")
-    let downgraded = try request(endpoint, hostID: hostID, device: v3Paired,
+    let downgraded = try request(
+      endpoint, hostID: hostID, device: v3Paired,
       expectNoResponse: true)
     try check(downgraded.isEmpty, "Upgraded pairing accepted plaintext transfer")
     try server.revoke(device.physicalDeviceID)
     let afterRevocation = Collector.loadState()
-    try check(afterRevocation.devices.contains(where: { $0.physicalDeviceID == mobilePhysicalID }) &&
-      afterRevocation.revokedDevices.contains(where: {
-        $0.physicalDeviceID == device.physicalDeviceID
-      }), "Removing one pairing affected another device")
+    try check(
+      afterRevocation.devices.contains(where: { $0.physicalDeviceID == mobilePhysicalID })
+        && afterRevocation.revokedDevices.contains(where: {
+          $0.physicalDeviceID == device.physicalDeviceID
+        }), "Removing one pairing affected another device")
     let revokedNonce = UUID()
-    let removal = try opened(request(endpoint, hostID: hostID, device: device,
-      nonce: revokedNonce), secret: device.secret,
+    let removal = try opened(
+      request(
+        endpoint, hostID: hostID, device: device,
+        nonce: revokedNonce), secret: device.secret,
       context: (hostID, device.physicalDeviceID, revokedNonce))
     let removalControl = try JSONSerialization.jsonObject(with: removal.1) as! [String: String]
-    try check(removal.0.isEmpty && removalControl["type"] == "unpair",
+    try check(
+      removal.0.isEmpty && removalControl["type"] == "unpair",
       "Revoked phone did not receive an encrypted removal command")
-    let replayedRemoval = try request(endpoint, hostID: hostID, device: device,
+    let replayedRemoval = try request(
+      endpoint, hostID: hostID, device: device,
       nonce: revokedNonce, expectNoResponse: true)
     try check(replayedRemoval.isEmpty, "Revocation command accepted a replayed pull nonce")
     let unpairNonce = UUID()
-    let identity = "\(hostID.uuidString)|\(device.physicalDeviceID.uuidString)|\(unpairNonce.uuidString)"
+    let identity =
+      "\(hostID.uuidString)|\(device.physicalDeviceID.uuidString)|\(unpairNonce.uuidString)"
     let proof = HMAC<SHA256>.authenticationCode(
       for: Data("unpair|v1|\(identity)".utf8),
-      using: SymmetricKey(data: device.secret))
-      .map { String(format: "%02x", $0) }.joined()
-    let acknowledgment = try request(endpoint, hostID: hostID, device: device,
-      overridePayload: ["type": "unpair", "version": "1",
+      using: SymmetricKey(data: device.secret)
+    )
+    .map { String(format: "%02x", $0) }.joined()
+    let acknowledgment = try request(
+      endpoint, hostID: hostID, device: device,
+      overridePayload: [
+        "type": "unpair", "version": "1",
         "hostID": hostID.uuidString,
         "physicalDeviceID": device.physicalDeviceID.uuidString,
-        "nonce": unpairNonce.uuidString, "proof": proof])
-    let acknowledgmentObject = try JSONSerialization.jsonObject(with: acknowledgment)
+        "nonce": unpairNonce.uuidString, "proof": proof,
+      ])
+    let acknowledgmentObject =
+      try JSONSerialization.jsonObject(with: acknowledgment)
       as! [String: String]
     let expectedAck = HMAC<SHA256>.authenticationCode(
       for: Data("unpair-ack|v1|\(identity)".utf8),
-      using: SymmetricKey(data: device.secret))
-      .map { String(format: "%02x", $0) }.joined()
-    try check(acknowledgmentObject["proof"] == expectedAck,
+      using: SymmetricKey(data: device.secret)
+    )
+    .map { String(format: "%02x", $0) }.joined()
+    try check(
+      acknowledgmentObject["proof"] == expectedAck,
       "Idempotent revocation acknowledgement was not authenticated")
-    let badRevocation = try request(endpoint, hostID: hostID, device: v3Paired,
-      expectNoResponse: true, overridePayload: ["type": "unpair", "version": "1",
+    let badRevocation = try request(
+      endpoint, hostID: hostID, device: v3Paired,
+      expectNoResponse: true,
+      overridePayload: [
+        "type": "unpair", "version": "1",
         "hostID": hostID.uuidString,
         "physicalDeviceID": mobilePhysicalID.uuidString,
-        "nonce": UUID().uuidString, "proof": String(repeating: "0", count: 64)])
-    try check(badRevocation.isEmpty && Collector.loadState().devices.contains(where: {
-      $0.physicalDeviceID == mobilePhysicalID
-    }), "Invalid removal proof affected another pairing")
+        "nonce": UUID().uuidString, "proof": String(repeating: "0", count: 64),
+      ])
+    try check(
+      badRevocation.isEmpty
+        && Collector.loadState().devices.contains(where: {
+          $0.physicalDeviceID == mobilePhysicalID
+        }), "Invalid removal proof affected another pairing")
     let mobileNonce = UUID()
-    let mobileIdentity = "\(hostID.uuidString)|\(mobilePhysicalID.uuidString)|\(mobileNonce.uuidString)"
+    let mobileIdentity =
+      "\(hostID.uuidString)|\(mobilePhysicalID.uuidString)|\(mobileNonce.uuidString)"
     let mobileProof = HMAC<SHA256>.authenticationCode(
       for: Data("unpair|v1|\(mobileIdentity)".utf8),
-      using: SymmetricKey(data: v3Key))
-      .map { String(format: "%02x", $0) }.joined()
-    let mobileRemoval = try request(endpoint, hostID: hostID, device: v3Paired,
-      overridePayload: ["type": "unpair", "version": "1",
+      using: SymmetricKey(data: v3Key)
+    )
+    .map { String(format: "%02x", $0) }.joined()
+    let mobileRemoval = try request(
+      endpoint, hostID: hostID, device: v3Paired,
+      overridePayload: [
+        "type": "unpair", "version": "1",
         "hostID": hostID.uuidString,
         "physicalDeviceID": mobilePhysicalID.uuidString,
-        "nonce": mobileNonce.uuidString, "proof": mobileProof])
+        "nonce": mobileNonce.uuidString, "proof": mobileProof,
+      ])
     let mobileAnswer = try JSONSerialization.jsonObject(with: mobileRemoval) as! [String: String]
-    try check(mobileAnswer["type"] == "unpair-ack",
+    try check(
+      mobileAnswer["type"] == "unpair-ack",
       "Phone-initiated removal was not acknowledged")
-    try check(!Collector.loadState().devices.contains(where: {
-      $0.physicalDeviceID == mobilePhysicalID
-    }) && Collector.loadState().revokedDevices.contains(where: {
-      $0.physicalDeviceID == mobilePhysicalID
-    }),
+    try check(
+      !Collector.loadState().devices.contains(where: {
+        $0.physicalDeviceID == mobilePhysicalID
+      })
+        && Collector.loadState().revokedDevices.contains(where: {
+          $0.physicalDeviceID == mobilePhysicalID
+        }),
       "Phone-initiated removal did not persist on the Mac")
     print("Checking battery log retention, export, and manual resend")
-    let storageDevice = PairedDevice(udid: "storage-test", name: "Storage Test",
+    let storageDevice = PairedDevice(
+      udid: "storage-test", name: "Storage Test",
       model: "iPhone18,3", physicalDeviceID: UUID(),
       secret: Data(repeating: 1, count: 32))
     let storageFile = try Collector.directory(for: storageDevice, kind: .host)
@@ -1212,35 +1664,44 @@ struct TransferProtocolTests {
     try Data("raw diagnostic bytes".utf8).write(to: storageFile)
     BatteryLogStorage.retainsAfterDelivery = false
     try BatteryLogStorage.archiveAcknowledged(storageFile, device: storageDevice)
-    try check(!FileManager.default.fileExists(atPath: storageFile.path) &&
-      BatteryLogStorage.list(devices: [storageDevice]).isEmpty,
+    try check(
+      !FileManager.default.fileExists(atPath: storageFile.path)
+        && BatteryLogStorage.list(devices: [storageDevice]).isEmpty,
       "Immediate-delete mode retained an acknowledged log")
     try Data("raw diagnostic bytes".utf8).write(to: storageFile)
     BatteryLogStorage.retainsAfterDelivery = true
     try BatteryLogStorage.archiveAcknowledged(storageFile, device: storageDevice)
     var stored = BatteryLogStorage.list(devices: [storageDevice])
-    try check(stored.count == 1 && !stored[0].pending,
+    try check(
+      stored.count == 1 && !stored[0].pending,
       "Keep mode did not archive the acknowledged log")
     let exportFolder = Collector.root.appendingPathComponent("test-export")
     try BatteryLogStorage.export(stored, to: exportFolder)
-    try check(FileManager.default.fileExists(atPath: exportFolder
-      .appendingPathComponent(storageDevice.physicalDeviceID.uuidString)
-      .appendingPathComponent("Host").appendingPathComponent(storageFile.lastPathComponent).path),
+    try check(
+      FileManager.default.fileExists(
+        atPath:
+          exportFolder
+          .appendingPathComponent(storageDevice.physicalDeviceID.uuidString)
+          .appendingPathComponent("Host").appendingPathComponent(storageFile.lastPathComponent).path
+      ),
       "Battery log export did not preserve the raw file")
     let requeued = try BatteryLogStorage.requeue(stored, devices: [storageDevice])
-    try check(requeued == 1 && FileManager.default.fileExists(atPath: storageFile.path),
+    try check(
+      requeued == 1 && FileManager.default.fileExists(atPath: storageFile.path),
       "Manual resend did not restore the pending queue file")
     stored = BatteryLogStorage.list(devices: [storageDevice])
     try check(stored.count == 2, "Pending and archived copies were not both listed")
     try BatteryLogStorage.archiveAcknowledged(storageFile, device: storageDevice)
     try BatteryLogStorage.delete(stored.filter { !$0.pending })
-    try check(BatteryLogStorage.list(devices: [storageDevice]).isEmpty,
+    try check(
+      BatteryLogStorage.list(devices: [storageDevice]).isEmpty,
       "Deleting the archived log left a stored copy")
     BatteryLogStorage.retainsAfterDelivery = false
     print("Checking daily collection stops only after required verified logs exist")
     func dailyRow(_ kind: String, _ source: String?, _ day: String) -> StoredBatteryLog {
       let name = "Analytics-\(day)-090000.ips.ca.synced"
-      return StoredBatteryLog(id: UUID().uuidString,
+      return StoredBatteryLog(
+        id: UUID().uuidString,
         url: URL(fileURLWithPath: "/tmp/\(name)"), deviceID: storageDevice.physicalDeviceID,
         deviceName: storageDevice.name, kind: kind, source: source,
         size: 100_000, storedAt: Date(), pending: true)
@@ -1248,144 +1709,220 @@ struct TransferProtocolTests {
     let host = dailyRow("Host", nil, "2026-10-03")
     let firstWatch = dailyRow("Watch", "ProxiedDevice-a1", "2026-10-03")
     let secondWatch = dailyRow("Watch", "ProxiedDevice-b2", "2026-10-02")
-    try check(BatteryLogStorage.hasRequiredDailyLogs(model: "iPad16,6",
-      rows: [host], on: "2026-10-03"), "iPad host log did not stop collection")
-    try check(!BatteryLogStorage.hasRequiredDailyLogs(model: "iPhone18,3",
-      rows: [host], on: "2026-10-03"), "Unknown Watch state stopped iPhone collection")
-    try check(!BatteryLogStorage.hasRequiredDailyLogs(model: "iPhone18,3",
-      rows: [host, firstWatch, secondWatch], on: "2026-10-03"),
+    try check(
+      BatteryLogStorage.hasRequiredDailyLogs(
+        model: "iPad16,6",
+        rows: [host], on: "2026-10-03"), "iPad host log did not stop collection")
+    try check(
+      !BatteryLogStorage.hasRequiredDailyLogs(
+        model: "iPhone18,3",
+        rows: [host], on: "2026-10-03"), "Unknown Watch state stopped iPhone collection")
+    try check(
+      !BatteryLogStorage.hasRequiredDailyLogs(
+        model: "iPhone18,3",
+        rows: [host, firstWatch, secondWatch], on: "2026-10-03"),
       "A second known Watch was ignored")
-    try check(BatteryLogStorage.hasRequiredDailyLogs(model: "iPhone18,3",
-      rows: [host, firstWatch, secondWatch,
-        dailyRow("Watch", "ProxiedDevice-b2", "2026-10-03")], on: "2026-10-03"),
+    try check(
+      BatteryLogStorage.hasRequiredDailyLogs(
+        model: "iPhone18,3",
+        rows: [
+          host, firstWatch, secondWatch,
+          dailyRow("Watch", "ProxiedDevice-b2", "2026-10-03"),
+        ], on: "2026-10-03"),
       "Complete iPhone and Watch logs did not stop collection")
-    let receipts = [VerifiedBatteryReceipt(kind: "Host", source: nil, day: "2026-10-03"),
-      VerifiedBatteryReceipt(kind: "Watch", source: "ProxiedDevice-a1", day: "2026-10-03")]
-    try check(BatteryLogStorage.hasRequiredDailyLogs(model: "iPhone18,3", rows: [],
-      on: "2026-10-03", receipts: receipts),
+    let receipts = [
+      VerifiedBatteryReceipt(kind: "Host", source: nil, day: "2026-10-03"),
+      VerifiedBatteryReceipt(kind: "Watch", source: "ProxiedDevice-a1", day: "2026-10-03"),
+    ]
+    try check(
+      BatteryLogStorage.hasRequiredDailyLogs(
+        model: "iPhone18,3", rows: [],
+        on: "2026-10-03", receipts: receipts),
       "Deleting acknowledged raw files restarted daily collection")
-    try check(!BatteryLogStorage.hasRequiredDailyLogs(model: "iPhone18,3", rows: [],
-      on: "2026-10-04", receipts: receipts),
+    try check(
+      !BatteryLogStorage.hasRequiredDailyLogs(
+        model: "iPhone18,3", rows: [],
+        on: "2026-10-04", receipts: receipts),
       "Yesterday's acknowledged logs stopped today's collection")
     print("Checking cloud-sharing consent, four recipients, protected source ACK and revocation")
-    let peers = (0..<4).map { i in PairedDevice(udid: "cloud-test-\(i)", name: "Cloud peer \(i)",
-      model: i == 1 ? "iPad16,6" : "iPhone18,3", physicalDeviceID: UUID(),
-      secret: Data(repeating: UInt8(30 + i), count: 32), confirmedAt: Date()) }
+    let peers = (0..<4).map { i in
+      PairedDevice(
+        udid: "cloud-test-\(i)", name: "Cloud peer \(i)",
+        model: i == 1 ? "iPad16,6" : "iPhone18,3", physicalDeviceID: UUID(),
+        secret: Data(repeating: UInt8(30 + i), count: 32), confirmedAt: Date())
+    }
     let cloudHost = UUID()
     let cloudServer = TransferServer(state: CompanionState(hostID: cloudHost, devices: peers))
     try cloudServer.start()
     let cloudEndpoint = try discover(cloudHost.uuidString)
     let scope = String(repeating: "a", count: 64)
     let foreignName = "Analytics-2026-10-08-090000.ips.ca.synced"
-    let sourceFile = try Collector.directory(for: peers[1]).appendingPathComponent("Host/" + foreignName)
-    try FileManager.default.createDirectory(at: sourceFile.deletingLastPathComponent(), withIntermediateDirectories: true)
+    let sourceFile = try Collector.directory(for: peers[1]).appendingPathComponent(
+      "Host/" + foreignName)
+    try FileManager.default.createDirectory(
+      at: sourceFile.deletingLastPathComponent(), withIntermediateDirectories: true)
     let foreignBytes = Data("cloud-origin-iPad-only".utf8)
     try foreignBytes.write(to: sourceFile)
-    func cloudRequest(_ i: Int, scope: String?, policy: Bool = false, ack: String = "",
-      offer: (token: String, digest: String, decision: String)? = nil, sourceIdentity: Bool = true) throws -> (String, Data) {
+    func cloudRequest(
+      _ i: Int, scope: String?, policy: Bool = false, ack: String = "",
+      offer: (token: String, digest: String, decision: String)? = nil, sourceIdentity: Bool = true
+    ) throws -> (String, Data) {
       let nonce = UUID()
       var extra = ["cloudSharingVersion": "1", "cloudSharingScope": scope ?? ""]
       if sourceIdentity { extra["logSourceIdentityVersion"] = "1" }
       if policy { extra["cloudSharingOnly"] = "1" }
-      return try opened(request(cloudEndpoint, hostID: cloudHost, device: peers[i], nonce: nonce,
-        ack: ack, offerEnabled: !policy, offer: offer, sealed: true, extra: extra),
+      return try opened(
+        request(
+          cloudEndpoint, hostID: cloudHost, device: peers[i], nonce: nonce,
+          ack: ack, offerEnabled: !policy, offer: offer, sealed: true, extra: extra),
         secret: peers[i].secret, context: (cloudHost, peers[i].physicalDeviceID, nonce))
     }
     _ = try cloudRequest(0, scope: scope, policy: true)
     let beforeSource = try cloudRequest(0, scope: scope)
-    try check(beforeSource.0.isEmpty &&
-      (try JSONSerialization.jsonObject(with: beforeSource.1) as? [String: String])?["type"] != "file-offer",
+    try check(
+      beforeSource.0.isEmpty
+        && (try JSONSerialization.jsonObject(with: beforeSource.1) as? [String: String])?["type"]
+          != "file-offer",
       "Source without consent was shared")
     _ = try cloudRequest(1, scope: scope, policy: true)
     let identityPolicy = try cloudRequest(0, scope: scope, policy: true)
     let identityControl = try JSONDecoder().decode([String: String].self, from: identityPolicy.1)
-    let sourceModels = try JSONDecoder().decode([String: String].self,
+    let sourceModels = try JSONDecoder().decode(
+      [String: String].self,
       from: Data(identityControl["sourceModels"]!.utf8))
-    try check(sourceModels[peers[1].physicalDeviceID.uuidString] == peers[1].model,
+    try check(
+      sourceModels[peers[1].physicalDeviceID.uuidString] == peers[1].model,
       "Previously delivered logs cannot discover their authenticated originating model")
-    try check(sourceModels[peers[2].physicalDeviceID.uuidString] == nil,
+    try check(
+      sourceModels[peers[2].physicalDeviceID.uuidString] == nil,
       "Unconsented source model leaked in identity policy")
     let legacyRecipient = try cloudRequest(0, scope: scope, sourceIdentity: false)
-    try check((try JSONSerialization.jsonObject(with: legacyRecipient.1) as? [String: String])?["type"] != "file-offer",
+    try check(
+      (try JSONSerialization.jsonObject(with: legacyRecipient.1) as? [String: String])?["type"]
+        != "file-offer",
       "Old recipient received foreign logs without source identity support")
     let foreignOffer = try cloudRequest(0, scope: scope)
     let offeredJSON = try JSONSerialization.jsonObject(with: foreignOffer.1) as! [String: String]
     try check(offeredJSON["sourceModel"] == peers[1].model, "Shared offer used the recipient model")
     let foreignToken = offeredJSON["token"]!, foreignDigest = offeredJSON["sha256"]!
-    try check(CloudSharedLogToken.parse(foreignToken)?.origin == peers[1].physicalDeviceID,
+    try check(
+      CloudSharedLogToken.parse(foreignToken)?.origin == peers[1].physicalDeviceID,
       "Foreign offer lost the original device identity")
     let body = try cloudRequest(0, scope: scope, offer: (foreignToken, foreignDigest, "send"))
     try check(body.0 == foreignToken && body.1 == foreignBytes, "Foreign body was not delivered")
     _ = try cloudRequest(0, scope: scope, ack: foreignToken)
-    try check(FileManager.default.fileExists(atPath: sourceFile.path) &&
-      !Collector.delivered(for: peers[1]).contains("Host::" + foreignName),
+    try check(
+      FileManager.default.fileExists(atPath: sourceFile.path)
+        && !Collector.delivered(for: peers[1]).contains("Host::" + foreignName),
       "Foreign ACK consumed the source queue")
     _ = try cloudRequest(2, scope: scope, policy: true)
     let thirdOffer = try cloudRequest(2, scope: scope)
-    try check((try JSONSerialization.jsonObject(with: thirdOffer.1) as? [String: String])?["token"] == foreignToken,
+    try check(
+      (try JSONSerialization.jsonObject(with: thirdOffer.1) as? [String: String])?["token"]
+        == foreignToken,
       "One recipient ACK suppressed another recipient")
     _ = try cloudRequest(2, scope: scope, offer: (foreignToken, foreignDigest, "have"))
-    try check(FileManager.default.fileExists(atPath: sourceFile.path), "Foreign preflight-have deleted source")
+    try check(
+      FileManager.default.fileExists(atPath: sourceFile.path),
+      "Foreign preflight-have deleted source")
     let fourth = try cloudRequest(3, scope: String(repeating: "b", count: 64))
-    try check((try JSONSerialization.jsonObject(with: fourth.1) as? [String: String])?["type"] != "file-offer",
+    try check(
+      (try JSONSerialization.jsonObject(with: fourth.1) as? [String: String])?["type"]
+        != "file-offer",
       "Different Apple Account received a source log")
     _ = try cloudRequest(1, scope: nil, policy: true)
     let revoked = try cloudRequest(3, scope: scope, offer: (foreignToken, foreignDigest, "send"))
-    try check(revoked.0.isEmpty && revoked.1 != foreignBytes, "Source OFF did not revoke an outstanding offer")
+    try check(
+      revoked.0.isEmpty && revoked.1 != foreignBytes,
+      "Source OFF did not revoke an outstanding offer")
     _ = try cloudRequest(3, scope: scope, ack: foreignToken)
-    try check(FileManager.default.fileExists(atPath: sourceFile.path), "Revoked ACK removed a source file")
+    try check(
+      FileManager.default.fileExists(atPath: sourceFile.path), "Revoked ACK removed a source file")
     print("Checking current-value sharing is consent-scoped and independent of raw logs")
     cloudServer.liveBattery.set(live, for: peers[1].physicalDeviceID)
-    func sharedLive(_ recipient: Int, _ source: Int, consent: String?, deny: Bool = false) throws -> [String: Any] {
+    func sharedLive(_ recipient: Int, _ source: Int, consent: String?, deny: Bool = false) throws
+      -> [String: Any]
+    {
       let nonce = UUID()
-      let extra = ["liveBatteryVersion": "1", "liveBatterySharedVersion": "1",
+      let extra = [
+        "liveBatteryVersion": "1", "liveBatterySharedVersion": "1",
         "liveBatterySourceID": peers[source].physicalDeviceID.uuidString,
-        "cloudSharingVersion": "1", "cloudSharingScope": consent ?? ""]
-      let wire = try request(cloudEndpoint, hostID: cloudHost, device: peers[recipient],
+        "cloudSharingVersion": "1", "cloudSharingScope": consent ?? "",
+      ]
+      let wire = try request(
+        cloudEndpoint, hostID: cloudHost, device: peers[recipient],
         nonce: nonce, expectNoResponse: deny, sealed: true, extra: extra)
       if deny { try check(wire.isEmpty, "Unauthorized current values returned"); return [:] }
-      let plain = try opened(wire, secret: peers[recipient].secret,
+      let plain = try opened(
+        wire, secret: peers[recipient].secret,
         context: (cloudHost, peers[recipient].physicalDeviceID, nonce))
       try check(plain.0.isEmpty, "Current values were returned as a file")
       return try JSONSerialization.jsonObject(with: plain.1) as! [String: Any]
     }
-    _ = try sharedLive(0, 1, consent: scope, deny: true) // Source currently OFF.
+    _ = try sharedLive(0, 1, consent: scope, deny: true)  // Source currently OFF.
     _ = try cloudRequest(1, scope: scope, policy: true)
     let ownWithManifest = try sharedLive(0, 0, consent: scope)
     let sources = ownWithManifest["sources"] as? [[String: String]] ?? []
-    try check(sources.contains { $0["physicalDeviceID"] == peers[1].physicalDeviceID.uuidString }, "Eligible source absent from manifest")
+    try check(
+      sources.contains { $0["physicalDeviceID"] == peers[1].physicalDeviceID.uuidString },
+      "Eligible source absent from manifest")
     let sharedCurrent = try sharedLive(0, 1, consent: scope)
-    try check(sharedCurrent["sourcePhysicalDeviceID"] as? String == peers[1].physicalDeviceID.uuidString &&
-      sharedCurrent["values"] != nil && sharedCurrent["sharedVersion"] as? Int == 1,
+    try check(
+      sharedCurrent["sourcePhysicalDeviceID"] as? String == peers[1].physicalDeviceID.uuidString
+        && sharedCurrent["values"] != nil && sharedCurrent["sharedVersion"] as? Int == 1,
       "Same-account recipient lost source current values")
     _ = try sharedLive(0, 1, consent: nil, deny: true)
     _ = try sharedLive(0, 1, consent: String(repeating: "c", count: 64), deny: true)
-    _ = try sharedLive(0, 0, consent: nil) // Own values still available without iCloud.
-    try check(FileManager.default.fileExists(atPath: sourceFile.path), "Current-value request consumed a raw log")
-    let audit = SupportDiagnostics.logText(for: String(SupportDiagnostics.localTime(Date()).prefix(10)))
-    try check(audit.contains("Cloud sharing: source=") && audit.contains("recipient=") && audit.contains("decision="), "Sharing decisions cannot be traced")
-    try check(audit.contains("Transfer trace:") && audit.contains("elapsedMs="), "Transfer timing missing")
+    _ = try sharedLive(0, 0, consent: nil)  // Own values still available without iCloud.
+    try check(
+      FileManager.default.fileExists(atPath: sourceFile.path),
+      "Current-value request consumed a raw log")
+    let audit = SupportDiagnostics.logText(
+      for: String(SupportDiagnostics.localTime(Date()).prefix(10)))
+    try check(
+      audit.contains("Cloud sharing: source=") && audit.contains("recipient=")
+        && audit.contains("decision="), "Sharing decisions cannot be traced")
+    try check(
+      audit.contains("Transfer trace:") && audit.contains("elapsedMs="), "Transfer timing missing")
     try check(!audit.contains(scope), "Cloud account scope leaked into support logs")
     let leases = CloudLogSharing(), clock = Date()
     leases.update(peers[0].physicalDeviceID, scope: scope, now: clock)
     leases.update(peers[1].physicalDeviceID, scope: scope, now: clock)
     let parsedToken = CloudSharedLogToken.parse(foreignToken)!
-    try check(leases.eligible(parsedToken, recipient: peers[0].physicalDeviceID, devices: peers, now: clock), "Fresh same-account grants failed")
-    try check(!leases.eligible(parsedToken, recipient: peers[0].physicalDeviceID, devices: peers, now: clock.addingTimeInterval(900)), "Expired consent survived")
-    try check(!leases.eligible(parsedToken, recipient: peers[0].physicalDeviceID, devices: [peers[0]], now: clock), "Unpaired source remained eligible")
-    try check(CloudSharedLogToken.parse("Shared::" + scope + "::" + peers[1].physicalDeviceID.uuidString + "::Host::../Analytics-a.ips.ca.synced") == nil,
+    try check(
+      leases.eligible(
+        parsedToken, recipient: peers[0].physicalDeviceID, devices: peers, now: clock),
+      "Fresh same-account grants failed")
+    try check(
+      !leases.eligible(
+        parsedToken, recipient: peers[0].physicalDeviceID, devices: peers,
+        now: clock.addingTimeInterval(900)), "Expired consent survived")
+    try check(
+      !leases.eligible(
+        parsedToken, recipient: peers[0].physicalDeviceID, devices: [peers[0]], now: clock),
+      "Unpaired source remained eligible")
+    try check(
+      CloudSharedLogToken.parse(
+        "Shared::" + scope + "::" + peers[1].physicalDeviceID.uuidString
+          + "::Host::../Analytics-a.ips.ca.synced") == nil,
       "Shared token accepted path traversal")
     if let udid = ProcessInfo.processInfo.environment["MOCHILOG_DIRECT_DEVICE_ID"],
-      let address = ProcessInfo.processInfo.environment["MOCHILOG_DIRECT_DEVICE_IP"] {
-      let probe = PairedDevice(udid: udid, name: "Direct RSD probe", model: "iPad",
+      let address = ProcessInfo.processInfo.environment["MOCHILOG_DIRECT_DEVICE_IP"]
+    {
+      let probe = PairedDevice(
+        udid: udid, name: "Direct RSD probe", model: "iPad",
         physicalDeviceID: UUID(), secret: Data(repeating: 0, count: 32),
         manualAddress: address)
       let report = try Collector.collect(probe)
-      try check(report.failed == 0 && report.saved + report.skipped > 0,
+      try check(
+        report.failed == 0 && report.saved + report.skipped > 0,
         "Direct RSD collection did not finish: \(report.lastError ?? "no files")")
-      print("PASS: direct RSD real device collection saved \(report.saved), skipped \(report.skipped)")
+      print(
+        "PASS: direct RSD real device collection saved \(report.saved), skipped \(report.skipped)")
     }
-    print("PASS: authenticated transfer, replay rejection, host/Watch separation, acknowledgements, diagnostics, and repeat pull")
+    print(
+      "PASS: authenticated transfer, replay rejection, host/Watch separation, acknowledgements, diagnostics, and repeat pull"
+    )
   }
 }
 

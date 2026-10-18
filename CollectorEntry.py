@@ -19,12 +19,15 @@ if __name__ == "__main__":
     try:
         if len(sys.argv) > 1 and sys.argv[1] == "--mochilog-build-info":
             from CollectorBuildInfo import main as build_info_main
+
             build_info_main()
         elif len(sys.argv) > 1 and sys.argv[1] == "battery-snapshot":
             from BatterySnapshot import main as snapshot_main
+
             snapshot_main(sys.argv[2:])
         elif len(sys.argv) > 1 and sys.argv[1] == "direct-rsd":
             from DirectRsd import main as direct_main
+
             direct_main(sys.argv[2:])
         else:
             main()

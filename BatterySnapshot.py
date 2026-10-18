@@ -20,8 +20,7 @@ def encode_registry(registry: dict[str, Any]) -> bytes:
     """Preserve plist integers, booleans, bytes and dates without interpreting them."""
     if not isinstance(registry, dict) or not registry:
         raise ValueError("Battery registry unavailable")
-    payload = plistlib.dumps(registry, fmt=plistlib.FMT_XML, sort_keys=True,
-                            aware_datetime=True)
+    payload = plistlib.dumps(registry, fmt=plistlib.FMT_XML, sort_keys=True, aware_datetime=True)
     if len(payload) > MAX_REPLY_BYTES:
         raise ValueError("Battery reply exceeds transport limit")
     return payload
@@ -67,8 +66,9 @@ async def run(arguments: argparse.Namespace) -> dict[str, Any]:
         try:
             return await asyncio.wait_for(run(local), timeout=8)
         except Exception:
-            direct = argparse.Namespace(udid=arguments.udid, host=fallback_host,
-                                        port=arguments.port)
+            direct = argparse.Namespace(
+                udid=arguments.udid, host=fallback_host, port=arguments.port
+            )
             return await run(direct)
 
     if arguments.host:
