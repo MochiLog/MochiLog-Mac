@@ -33,7 +33,9 @@ enum SupportDiagnostics {
         automaticPauseUntil: device.automaticPauseUntil.map(localTime),
         routes: DiagnosticRoutes.describe(device), collection: collection)
     }
-    eventLock.lock(); let events = recentEvents(); eventLock.unlock()
+    eventLock.lock()
+    let events = recentEvents()
+    eventLock.unlock()
     return NativeDiagnostics.capture(status: status, devices: summaries, events: events)
   }
 
@@ -202,7 +204,9 @@ enum SupportDiagnostics {
   }
 
   static func macLogText() -> String {
-    eventLock.lock(); let events = recentEvents(); eventLock.unlock()
+    eventLock.lock()
+    let events = recentEvents()
+    eventLock.unlock()
     return ([CrashDiagnostics.summary()].compactMap { $0 } + events).joined(separator: "\n")
   }
 
@@ -440,19 +444,16 @@ enum SupportDiagnostics {
         at: directory,
         withIntermediateDirectories: true)
       let url = directory.appendingPathComponent("\(day).log")
-      if !FileManager.default.fileExists(atPath: url.path) {
-        FileManager.default.createFile(atPath: url.path, contents: nil)
-      }
-      let handle = try FileHandle(forUpdating: url)
-      defer { try? handle.close() }
-      let size = try handle.seekToEnd()
-      guard size == UInt64(offset) else {
+      let result = try DiagnosticArchiveChunk.append(bytes, offset: offset, to: url)
+      switch result {
+      case .duplicate: return  // A valid retry is not an error or additional progress.
+      case .rejected:
         record(
-          "Debug archive sync: phone chunk skipped; device=\(deviceID.uuidString), day=\(day), offset=\(offset), stored=\(size); expected offset required"
+          "Debug archive sync: phone chunk rejected; device=\(deviceID.uuidString), day=\(day), offset=\(offset); conflicting bytes or missing earlier data"
         )
         return
+      case .appended: break
       }
-      try handle.write(contentsOf: bytes)
       try FileManager.default.setAttributes(
         [.posixPermissions: 0o600],
         ofItemAtPath: url.path)

@@ -1,4 +1,4 @@
-name: Signed beta DMG
+name: Signed and notarized DMG
 
 on:
   workflow_dispatch:
@@ -76,10 +76,10 @@ jobs:
           fastlane mac beta_dmg
           fastlane mac notarize_beta
           xcrun stapler validate 'Build/DerivedData/Build/Products/Release/MochiLog Mac.app'
-          xcrun stapler validate Build/MochiLog-Mac-Beta.dmg
+          xcrun stapler validate Build/MochiLog-Mac.dmg
           spctl --assess --type execute --verbose 'Build/DerivedData/Build/Products/Release/MochiLog Mac.app'
           cd Build
-          shasum -a 256 MochiLog-Mac-Beta.dmg > MochiLog-Mac-Beta.sha256
+          shasum -a 256 MochiLog-Mac.dmg > MochiLog-Mac.sha256
       - name: Prepare signed update feed
         if: inputs.prepare_update_feed
         env:
@@ -94,10 +94,10 @@ jobs:
           MOCHILOG_SPARKLE_KEY_PATH="$key" bash scripts/prepare-update-feed.sh
       - uses: actions/upload-artifact@v4
         with:
-          name: MochiLog-Mac-Beta-notarized-${{ github.run_number }}
+          name: MochiLog-Mac-notarized-${{ github.run_number }}
           path: |
-            Build/MochiLog-Mac-Beta.dmg
-            Build/MochiLog-Mac-Beta.sha256
+            Build/MochiLog-Mac.dmg
+            Build/MochiLog-Mac.sha256
             Build/UpdateFeed/appcast.xml
           if-no-files-found: error
           retention-days: 7

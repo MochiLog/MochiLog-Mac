@@ -42,4 +42,4 @@ Build/NuitkaVenv/bin/python scripts/test-compiled-collector.py \
   "$app/Contents/Resources/Collector/mochilog-collector"
 
 bash scripts/repack-dmg.sh
-shasum -a 256 Build/MochiLog-Mac-Beta.dmg
+shasum -a 256 Build/MochiLog-Mac.dmg

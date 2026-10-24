@@ -1,6 +1,10 @@
 # MochiLog Mac
 
-MochiLog Mac は、iPhone・iPad のバッテリー解析ログを Mac で収集し、端末で MochiLog を開いたときに暗号化して渡すベータアプリです。Apple Watch のログがペアリング先の iPhone に保存されていれば、それも対象です。解析と記録は端末側で行います。PC 連携を設定しなくても、スマホ版の手動読み込みは使えます。
+1.0.0は初の正式版です。[更新内容](docs/RELEASE_NOTES_1.0.0.md)をご確認ください。スマホ版4.0.0のApp Store公開はAppleの審査後です。既存の4.0.0 TestFlightも利用できます。
+
+1.0.0 is the first stable release. See the [release notes](docs/RELEASE_NOTES_1.0.0.md). Mobile 4.0.0 reaches the App Store after Apple review; existing 4.0.0 TestFlight builds remain compatible.
+
+MochiLog Mac は、iPhone・iPad のバッテリー解析ログを Mac で収集し、端末で MochiLog を開いたときに暗号化して渡すアプリです。Apple Watch のログがペアリング先の iPhone に保存されていれば、それも対象です。解析と記録は端末側で行います。PC 連携を設定しなくても、スマホ版の手動読み込みは使えます。
 
 macOS 27 と iOS/iPadOS 27 向けです。[GitHub Releases](https://github.com/MochiLog/MochiLog-Mac/releases)から DMG を入手し、`MochiLog Mac.app` を「アプリケーション」にコピーしてください。利用者が Xcode、Python、Homebrew を入れる必要はありません。
 
@@ -14,7 +18,7 @@ macOS 27 と iOS/iPadOS 27 向けです。[GitHub Releases](https://github.com/M
 
 ---
 
-MochiLog Mac is a beta companion that collects iPhone and iPad battery analytics files and transfers them over an encrypted connection when you open MochiLog on the device. It also handles eligible Apple Watch files stored on a paired iPhone. Parsing and record creation happen on the mobile device. The mobile app works without Mac pairing.
+MochiLog Mac is a companion that collects iPhone and iPad battery analytics files and transfers them over an encrypted connection when you open MochiLog on the device. It also handles eligible Apple Watch files stored on a paired iPhone. Parsing and record creation happen on the mobile device. The mobile app works without Mac pairing.
 
 It supports macOS 27 and iOS/iPadOS 27. Download a DMG from [GitHub Releases](https://github.com/MochiLog/MochiLog-Mac/releases) and copy `MochiLog Mac.app` to Applications. You do not need Xcode, Python, or Homebrew. For initial setup, unlock the device and follow **Devices** in the Mac app. If prompted, connect by USB once and approve **Trust This Computer**. When wireless access is confirmed, scan the Mac's QR code in **MochiLog → Settings → Automatic Log Collection → PC Transfer** and enter the confirmation code.
 
@@ -30,6 +34,6 @@ Devices paired with the same computer can receive each other’s logs when both 
 
 Automatic update checks are off by default and can be enabled in the initial prompt or settings. Current battery values can also be shared between devices with confirmed iCloud sync on the same Apple Account. Experimental on-device collection in the mobile app is independently configurable and off by default. See the [guide and requirements](https://github.com/MochiLog/MochiLog/blob/experiment/mac-log-transfer/docs/automatic-log-collection.md).
 
-スマホ版[TestFlight 4.0.0（1044）](https://testflight.apple.com/join/vnHYsRgN)では、[idevice_pairからのペアリングファイル直接インストール](https://github.com/MochiLog/MochiLog#400ベータの対応)にも対応しています。MochiLog対応版のツールが必要です。公式ツールへのアプリ登録は[PR #84](https://github.com/jkcoxson/idevice_pair/pull/84)で提案中です。PC連携は引き続きiOS/iPadOS 27以降が対象で、端末内取得は17以降、端末内の初回ペアリングは27以降・Developer Mode必須です。アプリ内の開始前の案内で、設定経路・再起動・再起動後の承認を確認してください。
+スマホ版[TestFlight 4.0.0](https://testflight.apple.com/join/vnHYsRgN)では、[idevice_pairからのペアリングファイル直接インストール](https://github.com/MochiLog/MochiLog#400ベータの対応)にも対応しています。MochiLog対応版のツールが必要です。公式ツールへのアプリ登録は[PR #84](https://github.com/jkcoxson/idevice_pair/pull/84)で提案中です。PC連携は引き続きiOS/iPadOS 27以降が対象で、端末内取得は17以降、端末内の初回ペアリングは27以降・Developer Mode必須です。アプリ内の開始前の案内で、設定経路・再起動・再起動後の承認を確認してください。
 
-Mobile TestFlight beta 4.0.0 (1044) supports direct pairing-file installation from a MochiLog-compatible idevice_pair build. Official tool registration is proposed in [PR #84](https://github.com/jkcoxson/idevice_pair/pull/84). PC transfer still targets iOS/iPadOS 27+; on-device collection targets 17+, with device-only initial pairing requiring 27+ and Developer Mode. Follow the in-app prerequisite card for settings, restart and approval after restart. See the [mobile beta announcement](https://github.com/MochiLog/MochiLog#400ベータの対応).
+Mobile 4.0.0 supports direct pairing-file installation from a MochiLog-compatible idevice_pair build. Official tool registration is proposed in [PR #84](https://github.com/jkcoxson/idevice_pair/pull/84). PC transfer still targets iOS/iPadOS 27+; on-device collection targets 17+, with device-only initial pairing requiring 27+ and Developer Mode. Follow the in-app prerequisite card for settings, restart and approval after restart. See the [mobile beta announcement](https://github.com/MochiLog/MochiLog#400ベータの対応).

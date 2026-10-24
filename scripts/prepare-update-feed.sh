@@ -6,13 +6,13 @@ key="${MOCHILOG_SPARKLE_KEY_PATH:?Set the private signing key path outside the r
 test -f "$key"
 version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")
 build=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$app/Contents/Info.plist")
-[[ "$version" == 0.* ]]
+[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
 notes="docs/RELEASE_NOTES_$version.md"
 test -f "$notes"
 bin='Build/DerivedData/SourcePackages/artifacts/sparkle/Sparkle/bin'
 mkdir -p Build/UpdateFeed
-cp Build/MochiLog-Mac-Beta.dmg Build/UpdateFeed/
-cp "$notes" Build/UpdateFeed/MochiLog-Mac-Beta.md
+cp Build/MochiLog-Mac.dmg Build/UpdateFeed/
+cp "$notes" Build/UpdateFeed/MochiLog-Mac.md
 "$bin/generate_appcast" --maximum-deltas 0 --embed-release-notes --ed-key-file "$key" \
   --download-url-prefix "https://github.com/MochiLog/MochiLog-Mac/releases/download/v$version/" \
   -o Build/UpdateFeed/appcast.xml Build/UpdateFeed

@@ -22,7 +22,7 @@ platform :mac do
     end
     app = File.expand_path("../Build/DerivedData/Build/Products/Release/MochiLog Mac.app", __dir__)
     archive = File.expand_path("../Build/MochiLog-Mac-App-Notarization.zip", __dir__)
-    dmg = File.expand_path("../Build/MochiLog-Mac-Beta.dmg", __dir__)
+    dmg = File.expand_path("../Build/MochiLog-Mac.dmg", __dir__)
     UI.user_error!("Build the signed beta DMG first") unless File.directory?(app) && File.file?(dmg)
     sh("ditto", "-c", "-k", "--keepParent", app, archive)
     sh("xcrun", "notarytool", "submit", archive, *auth, "--wait")

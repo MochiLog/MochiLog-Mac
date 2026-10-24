@@ -151,12 +151,21 @@ private func request(
           connection.send(
             content: Data(data.prefix(100)),
             completion: .contentProcessed { error in
-              if let error { connectionError = error; finished.signal(); return }
+              if let error {
+                connectionError = error
+                finished.signal()
+                return
+              }
               queue.asyncAfter(deadline: .now() + 0.25) {
                 connection.send(
                   content: Data(data.dropFirst(100)),
                   completion: .contentProcessed { error in
-                    if let error { connectionError = error; finished.signal() } else { receive() }
+                    if let error {
+                      connectionError = error
+                      finished.signal()
+                    } else {
+                      receive()
+                    }
                   })
               }
             })
@@ -165,7 +174,12 @@ private func request(
         connection.send(
           content: data,
           completion: .contentProcessed { error in
-            if let error { connectionError = error; finished.signal() } else { receive() }
+            if let error {
+              connectionError = error
+              finished.signal()
+            } else {
+              receive()
+            }
           })
       }
     case .failed(let error):
@@ -1212,10 +1226,22 @@ struct TransferProtocolTests {
     try check(
       SupportDiagnostics.phoneLogText(for: device, day: archiveDay)
         == String(data: phoneLine, encoding: .utf8), "Retried archive chunk was duplicated")
+    let conflictingArchive = try JSONSerialization.data(
+      withJSONObject: [
+        "schema": 1,
+        "archiveChunk": [
+          "day": compactDay, "offset": 0,
+          "data": Data("conflict".utf8).base64EncodedString(),
+        ],
+      ] as [String: Any])
+    try SupportDiagnostics.savePhoneReport(conflictingArchive, for: device)
+    try check(
+      SupportDiagnostics.phoneLogText(for: device, day: archiveDay)
+        == String(data: phoneLine, encoding: .utf8), "Conflicting chunk overwrote diagnostics")
     try check(
       SupportDiagnostics.logText(for: archiveDay).contains("phone chunk stored")
-        && SupportDiagnostics.logText(for: archiveDay).contains("phone chunk skipped"),
-      "Stored and rejected diagnostic chunks have no progress audit")
+        && SupportDiagnostics.logText(for: archiveDay).contains("phone chunk rejected"),
+      "Stored and conflicting diagnostic chunks have no progress audit")
     for offset in 1...4 {
       guard
         let date = Calendar.current.date(
@@ -1457,7 +1483,7 @@ struct TransferProtocolTests {
         && native.detailsRevision != changedNative.detailsRevision,
       "Native detail changes altered the core revision")
     do {
-      _ = try LiveBatterySnapshot.fromRegistry(Data(repeating: 65, count: 1048577));
+      _ = try LiveBatterySnapshot.fromRegistry(Data(repeating: 65, count: 1_048_577))
       fatalError("Oversized plist accepted")
     } catch {}
     changedRegistry["Voltage"] = String(repeating: "a", count: 131073)
@@ -1465,7 +1491,7 @@ struct TransferProtocolTests {
       _ = try LiveBatterySnapshot.fromRegistry(
         PropertyListSerialization.data(
           fromPropertyList: changedRegistry,
-          format: .xml, options: 0));
+          format: .xml, options: 0))
       fatalError("Oversized leaf accepted")
     } catch {}
     let fixture: [String: Any] = [
@@ -1477,7 +1503,8 @@ struct TransferProtocolTests {
     let detailDigest = SHA256.hash(data: Data(details.utf8)).map { String(format: "%02x", $0) }
       .joined()
     var fullFixture = fixture
-    fullFixture["detailsJSON"] = details; fullFixture["detailsRevision"] = detailDigest
+    fullFixture["detailsJSON"] = details
+    fullFixture["detailsRevision"] = detailDigest
     let live = try LiveBatterySnapshot.decode(JSONSerialization.data(withJSONObject: fullFixture))
     do {
       _ = try LiveBatterySnapshot.decode(Data(#"{"error":"battery_unavailable"}"#.utf8))
@@ -1501,13 +1528,16 @@ struct TransferProtocolTests {
         "liveBatteryVersion": "1", "liveBatteryRevision": revision,
       ]
       if let detailsRevision {
-        payload["liveBatteryDetailsVersion"] = "1";
+        payload["liveBatteryDetailsVersion"] = "1"
         payload["liveBatteryDetailsRevision"] = detailsRevision
       }
       let wire = try request(
         endpoint, hostID: hostID, device: v3Paired, nonce: nonce,
         expectNoResponse: !sealed, overridePayload: payload, sealed: sealed)
-      if !sealed { try check(wire.isEmpty, "Live fields accepted without v3"); return [:] }
+      if !sealed {
+        try check(wire.isEmpty, "Live fields accepted without v3")
+        return [:]
+      }
       let plain = try opened(wire, secret: v3Key, context: (hostID, mobilePhysicalID, nonce))
       try check(plain.0.isEmpty, "Live request returned a log filename")
       return try JSONSerialization.jsonObject(with: plain.1) as! [String: Any]
@@ -1528,7 +1558,7 @@ struct TransferProtocolTests {
       "Unchanged details were resent")
     try check(live.fields.first?.value == "18446744073709551615", "Large integer lost precision")
     do {
-      _ = try RawBatteryField.decode(details + " ", revision: detailDigest);
+      _ = try RawBatteryField.decode(details + " ", revision: detailDigest)
       fatalError("Tampered details accepted")
     } catch {}
     let unchangedLive = try liveRequest(live.revision)
@@ -1804,7 +1834,8 @@ struct TransferProtocolTests {
     let foreignOffer = try cloudRequest(0, scope: scope)
     let offeredJSON = try JSONSerialization.jsonObject(with: foreignOffer.1) as! [String: String]
     try check(offeredJSON["sourceModel"] == peers[1].model, "Shared offer used the recipient model")
-    let foreignToken = offeredJSON["token"]!, foreignDigest = offeredJSON["sha256"]!
+    let foreignToken = offeredJSON["token"]!
+    let foreignDigest = offeredJSON["sha256"]!
     try check(
       CloudSharedLogToken.parse(foreignToken)?.origin == peers[1].physicalDeviceID,
       "Foreign offer lost the original device identity")
@@ -1852,7 +1883,10 @@ struct TransferProtocolTests {
       let wire = try request(
         cloudEndpoint, hostID: cloudHost, device: peers[recipient],
         nonce: nonce, expectNoResponse: deny, sealed: true, extra: extra)
-      if deny { try check(wire.isEmpty, "Unauthorized current values returned"); return [:] }
+      if deny {
+        try check(wire.isEmpty, "Unauthorized current values returned")
+        return [:]
+      }
       let plain = try opened(
         wire, secret: peers[recipient].secret,
         context: (cloudHost, peers[recipient].physicalDeviceID, nonce))
@@ -1885,7 +1919,8 @@ struct TransferProtocolTests {
     try check(
       audit.contains("Transfer trace:") && audit.contains("elapsedMs="), "Transfer timing missing")
     try check(!audit.contains(scope), "Cloud account scope leaked into support logs")
-    let leases = CloudLogSharing(), clock = Date()
+    let leases = CloudLogSharing()
+    let clock = Date()
     leases.update(peers[0].physicalDeviceID, scope: scope, now: clock)
     leases.update(peers[1].physicalDeviceID, scope: scope, now: clock)
     let parsedToken = CloudSharedLogToken.parse(foreignToken)!
