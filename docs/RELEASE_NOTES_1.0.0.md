@@ -17,11 +17,11 @@ First stable release. Use with MochiLog mobile 4.0.0 for analytics collection, e
 
 - Initial USB trust, QR pairing with confirmation codes, and per-device unpairing.
 - Collect iPhone/iPad logs and Apple Watch logs stored on an iPhone. Manage retained files, export, delete or resend manually, and configure storage size and retention. Unsent files remain protected.
-- sharing only between eligible devices with confirmed iCloud sync on the same Apple Account, VPN transfers and manual IP configuration.
+- Sharing only between eligible devices with confirmed iCloud sync on the same Apple Account, VPN transfers and manual IP configuration.
 - Live Battery, startup and background operation, opt-in update checks, settings and setup guides.
 
 Existing pairings, settings and pending logs are retained. Mobile manual import works without a PC. Daily analytics collection requires an unlocked device and generated analytics data. Mobile 4.0.0 will become available on the App Store after Apple review; existing 4.0.0 TestFlight builds are also compatible.
 
-macOS 27以降。Developer ID署名・アプリとDMGのApple公証を行います。
+macOS 27以降。アプリとDMGはDeveloper ID署名・Apple公証済みです。
 
 Requires macOS 27 or later. The app and DMG are Developer ID signed and Apple notarized.
