@@ -36,6 +36,7 @@ def main():
         "--python-flag=unbuffered",
         "--include-package=pymobiledevice3",
         "--include-package-data=pymobiledevice3",
+        "--include-package-data=pykdebugparser",
         "--include-package=pytun_pmd3",
         "--include-package-data=pytun_pmd3",
         "--include-module=DirectRsd",
