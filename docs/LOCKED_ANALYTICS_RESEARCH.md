@@ -98,7 +98,7 @@ Other routes are not substitutes: Apple documents that file_relay requires an Ap
 
 - Never mark a file collected from its name, size, an empty local destination, or a zero process exit status alone. The upstream `pull` uses `ignore_errors=True`; a denied FILE_OPEN can therefore yield an incomplete local result instead of a successful body transfer.
 - Treat protection/permission errors and incomplete reads as retryable acquisition failures, not permanent non-battery exclusions. Existing deferred classification remains necessary.
-- Do not infer that every log is unreadable: the earlier [September experiment](https://github.com/MochiLog/MochiLog/blob/experiment/mac-log-transfer/docs/mac-wireless-log-probe.md) read a small Jetsam report while Analytics was denied.
+- Do not infer that every log is unreadable: the earlier [September experiment](https://github.com/MochiLog/MochiLog/blob/c2093b8cc396f57fb02a2ac1af60db51f4c1bbbb/docs/mac-wireless-log-probe.md) read a small Jetsam report while Analytics was denied.
 - No runtime behavior or release was changed by this research. Windows shares the acquisition protocol, but the live locked-state probes in this memo ran from Mac, not Windows.
 
 ## Safe reproduction
