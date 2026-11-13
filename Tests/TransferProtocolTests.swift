@@ -1,6 +1,7 @@
 import CryptoKit
 import Foundation
 import Network
+import ZIPFoundation
 
 private enum TestFailure: Error {
   case failed(String)
@@ -1385,6 +1386,13 @@ struct TransferProtocolTests {
       }
     }
     try check(unpairedExport.count == 1 && unpairedExport[0].pathExtension == "zip", "Unpaired support did not produce exactly one ZIP")
+    let supportZip = try Archive(url: unpairedExport[0], accessMode: .read)
+    let settingsEntry = supportZip["mochilog-mac-settings.json"]!
+    var settingsBytes = Data()
+    _ = try supportZip.extract(settingsEntry) { settingsBytes.append($0) }
+    let settingsObject = try JSONSerialization.jsonObject(with: settingsBytes) as! [String: Any]
+    let permissionMap = settingsObject["permissions"] as! [String: [String: Any]]
+    try check(permissionMap["localNetwork"]?["status"] as? String == "unknown", "A listener was incorrectly treated as permission granted")
     let exportDirectory = unpairedExport[0].deletingLastPathComponent()
     let exportManifest = exportDirectory.appendingPathComponent("mochilog-support-manifest.json")
     try check(try String(contentsOf: exportManifest, encoding: .utf8).contains("app pairing not completed"), "Unpaired export did not explain unavailable phone data")

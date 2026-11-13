@@ -235,6 +235,9 @@ final class TransferServer: @unchecked Sendable {
       self?.handle(connection)
     }
     listener.stateUpdateHandler = { [weak self] status in
+      NetworkAccessDiagnostics.shared.record(
+        component: "pc-listener",
+        state: String(describing: status).components(separatedBy: "(").first ?? "unknown")
       switch status {
       case .ready:
         SupportDiagnostics.record("PC pairing: listener ready")
@@ -244,14 +247,17 @@ final class TransferServer: @unchecked Sendable {
         let problem = error as NSError
         SupportDiagnostics.record(
           "PC pairing: listener failed; domain=\(problem.domain), code=\(problem.code)")
-        self?.onStatus?(MacTransferL10n.format("mt_m_16", error.localizedDescription))
+        let failure = PCConnectionFailure.classify(error, phase: "listener")
+        SupportDiagnostics.record("PC connection failure: " + failure.diagnosticDescription)
+        self?.onStatus?(MacTransferL10n.text(failure.messageKey))
       default: break
       }
     }
     self.listener = listener
     listener.start(queue: queue)
     let monitor = NWPathMonitor()
-    monitor.pathUpdateHandler = { [weak self] _ in
+    monitor.pathUpdateHandler = { [weak self] path in
+      NetworkAccessDiagnostics.shared.recordPath(path, component: "pc-path")
       self?.publishReachableAddresses()
     }
     pathMonitor = monitor

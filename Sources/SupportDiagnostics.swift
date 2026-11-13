@@ -301,6 +301,8 @@ enum SupportDiagnostics {
       "lastCollection": lastCollection,
       "recentEvents": recentEvents,
     ]
+    object["settingsSnapshot"] = try? JSONSerialization.jsonObject(
+      with: MacSupportSettings.capture())
     object["lastAppDiagnostic"] = CrashDiagnostics.summary()
     let phone = phoneReport(for: device).flatMap { BoundedDiagnosticFile.read($0, maximum: 16_384) }
       .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
@@ -338,6 +340,7 @@ enum SupportDiagnostics {
       } else {
         object.removeValue(forKey: "archiveChunk")
         object.removeValue(forKey: "lastAppDiagnostic")
+        object.removeValue(forKey: "settingsSnapshot")
         return
           (try? JSONSerialization.data(
             withJSONObject: object,
@@ -491,6 +494,9 @@ enum SupportDiagnostics {
       SupportLogExport.Diagnostic(
         name: "mochilog-mac-diagnostics.json", data: device.map { macReport(for: $0) } ?? snapshot),
       .init(name: "mochilog-mac-native-diagnostics.json", data: snapshot),
+      .init(
+        name: "mochilog-mac-settings.json",
+        data: SupportSettingsSnapshot.formatted(MacSupportSettings.capture())),
     ]
     var sources = [SupportLogExport.Source(name: "mochilog-mac", directory: archiveDirectory)]
     var unavailable: [String] = []
@@ -504,6 +510,14 @@ enum SupportDiagnostics {
         let data = BoundedDiagnosticFile.read(file, maximum: 16_384)
       {
         diagnostics.append(.init(name: "mochilog-iphone-diagnostics.json", data: data))
+        if let settings = SupportSettingsSnapshot.extract(from: data) {
+          diagnostics.append(
+            .init(
+              name: "mochilog-iphone-settings.json",
+              data: SupportSettingsSnapshot.formatted(settings)))
+        } else {
+          unavailable.append("iphone: settings snapshot not received, omitted or from an older app")
+        }
       } else {
         unavailable.append("iphone: remote diagnostics not yet received or unreadable")
       }
