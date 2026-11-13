@@ -128,6 +128,7 @@ final class TransferServer: @unchecked Sendable {
   private var announcementRevision = 0
   private var pairingSession: PairingSession?
   private var pairingAuditEvents = 0
+  private var pairingSendFailures = 0
   private let cloudSharing = CloudLogSharing()
   let liveBattery = LiveBatteryCache()
   var onLiveBatteryRequested: ((UUID, Bool) -> Void)?
@@ -185,20 +186,27 @@ final class TransferServer: @unchecked Sendable {
     }
   }
 
-  func beginPairing(for selected: ConnectedDevice, existing: PairedDevice?) -> PairingInvitation {
+  func beginPairing(for selected: ConnectedDevice, existing: PairedDevice?) -> PairingInvitation? {
     queue.sync {
+      guard let listener, case .ready = listener.state, let port = listener.port else {
+        SupportDiagnostics.record("PC pairing: QR invitation withheld; listener not ready")
+        return nil
+      }
       let privateKey = Curve25519.KeyAgreement.PrivateKey()
-      let routes = Self.localIPv4Addresses(wifiInterfaces: [])
+      let wifiInterfaces = Set(
+        pathMonitor?.currentPath.availableInterfaces.filter { $0.type == .wifi }.map(\.name) ?? [])
+      let routes = Self.localIPv4Addresses(wifiInterfaces: wifiInterfaces)
       let invitation = PairingInvitation(
         sessionID: UUID(), hostID: state.hostID,
         physicalDeviceID: existing?.physicalDeviceID ?? UUID(),
         existingPhysicalDeviceID: existing?.physicalDeviceID, model: selected.model,
         publicKey: privateKey.publicKey.rawRepresentation,
         code: String(format: "%06d", Int.random(in: 0...999_999)),
-        lanAddresses: routes.lan, lanPort: Self.servicePort.rawValue,
+        lanAddresses: routes.lan, lanPort: port.rawValue,
         tailnetAddress: tailnetAddress,
         tailnetPort: tailnetAddress == nil ? nil : Self.tailnetPort)
       pairingAuditEvents = 0
+      pairingSendFailures = 0
       SupportDiagnostics.record(
         "PC pairing: QR invitation created; session=\(invitation.sessionID.uuidString), lanRoutes=\(routes.lan.count), tailnet=\(tailnetAddress != nil)"
       )
@@ -383,7 +391,11 @@ final class TransferServer: @unchecked Sendable {
                 client, bytes.baseAddress!.advanced(by: offset),
                 pairingReply.count - offset, 0)
             }
-            guard written > 0 else { return }
+            guard written > 0 else {
+              let code = errno
+              queue.async { self.auditPairingSendFailure(route: "tailnet", code: Int(code)) }
+              return
+            }
             offset += written
           }
           _ = Darwin.shutdown(client, SHUT_WR)
@@ -522,7 +534,11 @@ final class TransferServer: @unchecked Sendable {
     {
       connection.send(
         content: pairingReply,
-        completion: .contentProcessed { _ in
+        completion: .contentProcessed { [weak self] error in
+          if let error {
+            let problem = error as NSError
+            self?.auditPairingSendFailure(route: "LAN", code: problem.code)
+          }
           connection.cancel()
         })
       return
@@ -549,6 +565,13 @@ final class TransferServer: @unchecked Sendable {
         self?.onTransferActivity?(response.deviceID, false)
         connection.cancel()
       })
+  }
+
+  private func auditPairingSendFailure(route: String, code: Int) {
+    guard pairingSendFailures < 16 else { return }
+    pairingSendFailures += 1
+    SupportDiagnostics.record(
+      "PC pairing/control: response write failed; route=\(route), code=\(code)")
   }
 
   private func makePairingResponse(to requestData: Data) -> Data? {
@@ -664,7 +687,14 @@ final class TransferServer: @unchecked Sendable {
       }
       updated.revokedDevices.removeAll { $0.physicalDeviceID == physicalDeviceID }
       outcome = "save-credentials-failed"
+      let saveStarted = ProcessInfo.processInfo.systemUptime
+      SupportDiagnostics.record(
+        "PC pairing: credential persistence started; session=\(request.sessionID.uuidString), records=\(updated.devices.count + updated.revokedDevices.count)"
+      )
       guard (try? Collector.saveState(updated)) != nil else { return nil }
+      SupportDiagnostics.record(
+        "PC pairing: credential persistence finished; session=\(request.sessionID.uuidString), elapsedMs=\(Int((ProcessInfo.processInfo.systemUptime - saveStarted) * 1000))"
+      )
       state = updated
       if var replay = replayState {
         replay.upgraded.remove(physicalDeviceID)

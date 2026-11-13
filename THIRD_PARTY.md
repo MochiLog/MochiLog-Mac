@@ -9,3 +9,7 @@ The collector bundles Python 3.13. The Python Software Foundation license is inc
 License texts and package metadata for the Python environment used to build the collector are included as `LICENSE-Python-Dependencies.txt` and individually under `PythonLicenses/` inside the app. The in-app viewer lists each package separately. This report includes build-time packages as well as runtime packages so that the complete bundled environment is documented. Some upstream packages declare a license but do not ship a license text in their distribution; their declaration and project URL are shown without inventing a notice.
 
 `pymobiledevice3` talks to iOS device services through macOS's `remoted` facility. End users do not need to install Python, Xcode, Homebrew, or a separate command-line helper.
+
+## ZIPFoundation 0.9.20
+
+[ZIPFoundation](https://github.com/weichsel/ZIPFoundation) is distributed under the MIT License. The full text is bundled in Resources/LICENSE-ZIPFoundation.txt and available in the app's licenses screen.

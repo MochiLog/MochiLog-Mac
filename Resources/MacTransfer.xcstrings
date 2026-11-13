@@ -2810,6 +2810,59 @@
         }
       }
     },
+    "mt_pair_server_not_ready" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The connection is not ready. Restart MochiLog Mac and check its Local Network access permission."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "接続の準備ができていません。MochiLog Macを再起動し、ローカルネットワークのアクセス許可を確認してください。"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Verbindung ist noch nicht bereit. Starten Sie MochiLog Mac neu und prüfen Sie die Berechtigung für den Zugriff auf das lokale Netzwerk."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La conexión no está lista. Reinicia MochiLog Mac y comprueba su permiso de acceso a la red local."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La connexion n’est pas prête. Redémarrez MochiLog Mac et vérifiez son autorisation d’accès au réseau local."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "연결 준비가 되지 않았습니다. MochiLog Mac을 재시작하고 로컬 네트워크 접근 권한을 확인해 주세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接尚未就绪。请重新启动 MochiLog Mac，并检查其本地网络访问权限。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "連線尚未就緒。請重新啟動 MochiLog Mac，並檢查其本機網路存取權限。"
+          }
+        }
+      }
+    },
     "mt_unpair_button": {
       "extractionState": "manual",
       "localizations": {

@@ -1279,7 +1279,10 @@ struct TransferProtocolTests {
     let selected = ConnectedDevice(
       udid: "secure-iphone", name: "Secure iPhone",
       model: "iPhone18,3")
-    let invitation = server.beginPairing(for: selected, existing: nil)
+    let offlineServer = TransferServer(state: Collector.loadState())
+    try check(offlineServer.beginPairing(for: selected, existing: nil) == nil, "Offline listener produced a pairing QR")
+    let invitation = server.beginPairing(for: selected, existing: nil)!
+    try check(invitation.lanPort == server.testListeningPort, "QR advertised a different port from the live listener")
     try check(
       invitation.publicKey.count == 32 && invitation.code.count == 6,
       "Secure pairing invitation is incomplete")
@@ -1381,21 +1384,16 @@ struct TransferProtocolTests {
         try? FileManager.default.removeItem(at: file.deletingLastPathComponent())
       }
     }
-    try check(
-      unpairedExport.contains { $0.lastPathComponent.contains("pairing-v2-") },
-      "Unpaired support export omitted split pairing log")
-    let exportManifest = unpairedExport.first {
-      $0.lastPathComponent == "mochilog-support-manifest.json"
-    }!
-    try check(
-      try String(contentsOf: exportManifest, encoding: .utf8).contains("app pairing not completed"),
-      "Unpaired export did not explain unavailable phone data")
+    try check(unpairedExport.count == 1 && unpairedExport[0].pathExtension == "zip", "Unpaired support did not produce exactly one ZIP")
+    let exportDirectory = unpairedExport[0].deletingLastPathComponent()
+    let exportManifest = exportDirectory.appendingPathComponent("mochilog-support-manifest.json")
+    try check(try String(contentsOf: exportManifest, encoding: .utf8).contains("app pairing not completed"), "Unpaired export did not explain unavailable phone data")
     print("Checking v3 pairing preserves the mobile device's existing physical ID")
     let mobilePhysicalID = UUID()
     let secondPhone = ConnectedDevice(
       udid: "v3-iphone", name: "Existing iPhone",
       model: "iPhone18,3")
-    let v3Invitation = server.beginPairing(for: secondPhone, existing: nil)
+    let v3Invitation = server.beginPairing(for: secondPhone, existing: nil)!
     let v3Private = Curve25519.KeyAgreement.PrivateKey()
     let v3Public = v3Private.publicKey.rawRepresentation
     let v3MacPublic = try Curve25519.KeyAgreement.PublicKey(

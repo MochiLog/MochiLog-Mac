@@ -19,3 +19,11 @@ The wire protocol and saved keys are unchanged. Existing pairings and append-onl
 - Equivalent Windows export and protocol tests and the full Windows Release build pass on the physical Windows host. No USB trust, stored production pairing or driver reset is required for these isolated tests.
 
 The export tests create synthetic fixtures and do not send email. Mail-client/provider delivery limits remain separate from the app's attachment generation.
+
+## ZIP and timeout follow-up
+
+The mail composer now receives exactly one ZIP instead of the individual payload files. The ZIP preserves the prepared manifest and original log names/bytes. ZIPFoundation 0.9.20 is pinned and its MIT license is bundled and visible in the licenses screen. The app does not start a shell/Python process for compression. Synthetic ZIPs are independently checked for CRC and exact UTF-8 contents using Python only in the test harness.
+
+The timeout investigation additionally found stale QR hint/fallback problems in mobile and a Mac QR readiness gap. Mac now publishes Wi-Fi-prioritized hints and the actual bound port, withholds QR while the listener is unavailable, and records credential-persistence start/end timing and bounded response-write failures. The new unavailable status is translated in all eight supported languages. Offline-listener and actual-port checks pass alongside the existing protocol suite.
+
+The detailed cross-platform timeout-path audit is in the mobile repository's docs/PAIRING_TIMEOUT_AUDIT_2026-11-13.md. It distinguishes reproduced symptoms from reporter-specific unknowns. Source changes have not been signed, notarized, installed or released by this verification.

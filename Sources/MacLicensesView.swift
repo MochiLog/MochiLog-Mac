@@ -1,7 +1,7 @@
 import SwiftUI
 
 private enum LicenseDocument: String, CaseIterable, Identifiable {
-  case mochiLog, collector, sparkle, pythonRuntime, python, notices
+  case mochiLog, collector, sparkle, zipFoundation, pythonRuntime, python, notices
 
   var id: String { rawValue }
 
@@ -10,6 +10,7 @@ private enum LicenseDocument: String, CaseIterable, Identifiable {
     case .mochiLog: "mt_l_01"
     case .collector: "mt_l_02"
     case .sparkle: "mt_l_03"
+    case .zipFoundation: "mt_l_05"
     case .pythonRuntime: "mt_l_04"
     case .python: "mt_l_04"
     case .notices: "mt_l_05"
@@ -17,7 +18,11 @@ private enum LicenseDocument: String, CaseIterable, Identifiable {
   }
 
   var title: String {
-    self == .pythonRuntime ? "Python 3.13" : MacTransferL10n.text(titleKey)
+    switch self {
+    case .zipFoundation: "ZIPFoundation"
+    case .pythonRuntime: "Python 3.13"
+    default: MacTransferL10n.text(titleKey)
+    }
   }
 
   var resource: (String, String) {
@@ -25,6 +30,7 @@ private enum LicenseDocument: String, CaseIterable, Identifiable {
     case .mochiLog: ("LICENSE-MochiLog", "txt")
     case .collector: ("LICENSE-pymobiledevice3", "txt")
     case .sparkle: ("LICENSE-Sparkle", "txt")
+    case .zipFoundation: ("LICENSE-ZIPFoundation", "txt")
     case .pythonRuntime: ("LICENSE-Python-Runtime", "txt")
     case .python: ("LICENSE-Python-Dependencies", "txt")
     case .notices: ("THIRD_PARTY", "md")

@@ -514,8 +514,9 @@ enum SupportDiagnostics {
     if let diagnostic = CrashDiagnostics.latest() {
       diagnostics.append(.init(name: "mochilog-mac-app-diagnostic.json", data: diagnostic))
     }
-    return try SupportLogExport.prepare(
+    let files = try SupportLogExport.prepare(
       sources: sources, days: SupportLogExport.days(around: incidentDate), diagnostics: diagnostics,
       unavailable: unavailable, directory: directory)
+    return [try SupportArchive.create(files: files, directory: directory)]
   }
 }

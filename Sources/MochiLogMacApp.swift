@@ -534,7 +534,10 @@ final class CompanionModel: ObservableObject {
     guard let selected, isOSPairingVerified else { return }
     pairingInvitation = server?.beginPairing(for: selected, existing: pairedSelected)
     showPairingQR = pairingInvitation != nil
-    status = MacTransferL10n.format("mt_m_05", selected.name)
+    status =
+      pairingInvitation == nil
+      ? MacTransferL10n.text("mt_pair_server_not_ready")
+      : MacTransferL10n.format("mt_m_05", selected.name)
   }
 
   var pairingURL: String? {

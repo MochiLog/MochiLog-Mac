@@ -1,5 +1,8 @@
 name: MochiLogMac
 packages:
+  ZIPFoundation:
+    url: https://github.com/weichsel/ZIPFoundation
+    exactVersion: 0.9.20
   Sparkle:
     url: https://github.com/sparkle-project/Sparkle
     exactVersion: 2.10.0
@@ -15,7 +18,10 @@ targets:
       - path: Resources/Assets.xcassets
       - path: Resources/MacTransfer.xcstrings
       - path: Resources/InfoPlist.xcstrings
+      - path: Resources/LICENSE-ZIPFoundation.txt
     dependencies:
+      - package: ZIPFoundation
+        product: ZIPFoundation
       - package: Sparkle
         product: Sparkle
         embed: false
