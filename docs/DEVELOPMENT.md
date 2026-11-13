@@ -85,3 +85,7 @@ Full-field verification: six Python tests, core/full-detail compatibility, chang
 ローカルとCIで同じNuitkaビルドを使います。前提条件、実行コマンド、ランタイム依存の切り分けは[COMPILED_COLLECTOR.md](COMPILED_COLLECTOR.md)を参照してください。
 
 Incremental unsigned Xcode builds can replace the embedded Sparkle framework. Re-sign the complete app (including nested update helpers), verify it, and then notarize the exact unchanged bundle before publishing. The normal build-beta-dmg.sh path performs this signing; an outer-app-only signature is insufficient for distribution.
+
+## Pairing diagnostics and support exports (2026-11-13)
+
+See [the implementation and verification notes](PAIRING_DIAGNOSTICS_2026-11-13.md) for handshake auditing, support before pairing, split-file exports and compatibility.

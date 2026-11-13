@@ -3,7 +3,7 @@ import SwiftUI
 
 struct MacTransferSupportView: View {
   @Environment(\.dismiss) private var dismiss
-  let device: PairedDevice
+  let device: PairedDevice?
   @State private var nickname = ""
   @State private var email = ""
   @State private var message = ""
@@ -46,7 +46,7 @@ struct MacTransferSupportView: View {
         )
         .font(.caption).foregroundStyle(.secondary)
       }
-      if SupportDiagnostics.phoneReport(for: device) == nil {
+      if device.flatMap({ SupportDiagnostics.phoneReport(for: $0) }) == nil {
         Text(MacTransferL10n.text("mt_036"))
           .font(.caption).foregroundStyle(.orange)
       }
@@ -70,7 +70,8 @@ struct MacTransferSupportView: View {
       return
     }
     isPreparing = true
-    let device = self.device, incidentDate = self.incidentDate
+    let device = self.device
+    let incidentDate = self.incidentDate
     Task { @MainActor in
       defer { isPreparing = false }
       do {
@@ -82,7 +83,7 @@ struct MacTransferSupportView: View {
         let body = """
           \(MacTransferL10n.text("mt_032")): \(nickname)
           \(MacTransferL10n.text("mt_033")): \(email)
-          \(MacTransferL10n.text("mt_041")): \(device.model)
+          \(MacTransferL10n.text("mt_041")): \(device?.model ?? "-")
           \(MacTransferL10n.text("mt_log_incident")): \(incidentDate.formatted(date: .abbreviated, time: .shortened))
 
           \(MacTransferL10n.text("mt_034")):

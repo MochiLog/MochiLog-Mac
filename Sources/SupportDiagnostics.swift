@@ -481,52 +481,41 @@ enum SupportDiagnostics {
     }
   }
 
-  static func mailAttachments(for device: PairedDevice, incidentDate: Date) throws -> [URL] {
+  static func mailAttachments(for device: PairedDevice?, incidentDate: Date) throws -> [URL] {
     let directory = FileManager.default.temporaryDirectory
       .appendingPathComponent("MochiLog-Support-\(UUID().uuidString)", isDirectory: true)
-    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-    let mac = directory.appendingPathComponent("mochilog-mac-diagnostics.json")
-    try macReport(for: device).write(to: mac, options: .atomic)
-    var attachments = [mac]
-    let native = directory.appendingPathComponent("mochilog-mac-native-diagnostics.json")
-    try NativeDiagnostics.encode(nativeSnapshot(status: "support export", devices: [device]))
-      .write(to: native, options: .atomic)
-    attachments.append(native)
-    for offset in -2...0 {
-      guard
-        let date = Calendar.current.date(
-          byAdding: .day, value: offset,
-          to: incidentDate)
-      else { continue }
-      let day = dayString(date)
-      let log = directory.appendingPathComponent("mochilog-mac-debug-\(day).log")
-      try copyLog(archiveURL(for: day), to: log)
-      attachments.append(log)
-      let phoneLog = directory.appendingPathComponent("mochilog-iphone-debug-\(day).log")
-      try copyLog(
-        phoneArchiveDirectory.appendingPathComponent(device.physicalDeviceID.uuidString)
-          .appendingPathComponent("\(day).log"), to: phoneLog)
-      attachments.append(phoneLog)
+    let selected = device.map { [$0] } ?? []
+    let snapshot = try NativeDiagnostics.encode(
+      nativeSnapshot(status: "support export", devices: selected))
+    var diagnostics = [
+      SupportLogExport.Diagnostic(
+        name: "mochilog-mac-diagnostics.json", data: device.map { macReport(for: $0) } ?? snapshot),
+      .init(name: "mochilog-mac-native-diagnostics.json", data: snapshot),
+    ]
+    var sources = [SupportLogExport.Source(name: "mochilog-mac", directory: archiveDirectory)]
+    var unavailable: [String] = []
+    if let device {
+      sources.append(
+        .init(
+          name: "mochilog-iphone",
+          directory: phoneArchiveDirectory.appendingPathComponent(
+            device.physicalDeviceID.uuidString)))
+      if let file = phoneReport(for: device),
+        let data = BoundedDiagnosticFile.read(file, maximum: 16_384)
+      {
+        diagnostics.append(.init(name: "mochilog-iphone-diagnostics.json", data: data))
+      } else {
+        unavailable.append("iphone: remote diagnostics not yet received or unreadable")
+      }
+    } else {
+      unavailable.append(
+        "iphone: app pairing not completed; remote logs/diagnostics have not been received")
     }
     if let diagnostic = CrashDiagnostics.latest() {
-      let target = directory.appendingPathComponent("mochilog-mac-app-diagnostic.json")
-      try diagnostic.write(to: target, options: .atomic)
-      attachments.append(target)
+      diagnostics.append(.init(name: "mochilog-mac-app-diagnostic.json", data: diagnostic))
     }
-    if let phone = phoneReport(for: device) {
-      let target = directory.appendingPathComponent("mochilog-iphone-diagnostics.json")
-      try FileManager.default.copyItem(at: phone, to: target)
-      attachments.append(target)
-    }
-    return attachments
-  }
-
-  private static func copyLog(_ source: URL, to destination: URL) throws {
-    if FileManager.default.fileExists(atPath: source.path) {
-      // Preserve the full archive without decoding it or allocating a second String.
-      try FileManager.default.copyItem(at: source, to: destination)
-    } else {
-      try Data().write(to: destination)
-    }
+    return try SupportLogExport.prepare(
+      sources: sources, days: SupportLogExport.days(around: incidentDate), diagnostics: diagnostics,
+      unavailable: unavailable, directory: directory)
   }
 }

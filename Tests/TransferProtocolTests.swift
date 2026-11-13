@@ -1364,6 +1364,32 @@ struct TransferProtocolTests {
       secret: pairingKey,
       context: (hostID, invitation.physicalDeviceID, pairedNonce))
     try check(pairedReply.0.isEmpty, "Newly paired client could not pull securely")
+    let pairingAudit = SupportDiagnostics.logText(for: SupportDiagnostics.dayString(Date()))
+      .split(separator: "\n").filter { $0.contains("PC pairing:") }.joined(separator: "\n")
+    try check(
+      pairingAudit.contains("challenge-created") && pairingAudit.contains("confirmation-rejected")
+        && pairingAudit.contains("confirmed-credentials-saved"),
+      "Pairing server errors/results were not persisted")
+    try check(
+      !pairingAudit.contains(invitation.code)
+        && !pairingAudit.contains(pairingKey.base64EncodedString())
+        && !pairingAudit.contains(correctMAC), "Pairing audit leaked authentication material"
+    )
+    let unpairedExport = try SupportDiagnostics.mailAttachments(for: nil, incidentDate: Date())
+    defer {
+      if let file = unpairedExport.first {
+        try? FileManager.default.removeItem(at: file.deletingLastPathComponent())
+      }
+    }
+    try check(
+      unpairedExport.contains { $0.lastPathComponent.contains("pairing-v2-") },
+      "Unpaired support export omitted split pairing log")
+    let exportManifest = unpairedExport.first {
+      $0.lastPathComponent == "mochilog-support-manifest.json"
+    }!
+    try check(
+      try String(contentsOf: exportManifest, encoding: .utf8).contains("app pairing not completed"),
+      "Unpaired export did not explain unavailable phone data")
     print("Checking v3 pairing preserves the mobile device's existing physical ID")
     let mobilePhysicalID = UUID()
     let secondPhone = ConnectedDevice(

@@ -1,7 +1,7 @@
 import CryptoKit
+import Darwin
 import Foundation
 import Network
-import Darwin
 
 private struct PullRequest: Decodable {
   let hostID: UUID
@@ -127,6 +127,7 @@ final class TransferServer: @unchecked Sendable {
   private var activeLANConnections: [ObjectIdentifier: NWConnection] = [:]
   private var announcementRevision = 0
   private var pairingSession: PairingSession?
+  private var pairingAuditEvents = 0
   private let cloudSharing = CloudLogSharing()
   let liveBattery = LiveBatteryCache()
   var onLiveBatteryRequested: ((UUID, Bool) -> Void)?
@@ -197,6 +198,10 @@ final class TransferServer: @unchecked Sendable {
         lanAddresses: routes.lan, lanPort: Self.servicePort.rawValue,
         tailnetAddress: tailnetAddress,
         tailnetPort: tailnetAddress == nil ? nil : Self.tailnetPort)
+      pairingAuditEvents = 0
+      SupportDiagnostics.record(
+        "PC pairing: QR invitation created; session=\(invitation.sessionID.uuidString), lanRoutes=\(routes.lan.count), tailnet=\(tailnetAddress != nil)"
+      )
       pairingSession = PairingSession(
         invitation: invitation, selected: selected,
         privateKey: privateKey, expiresAt: Date().addingTimeInterval(180))
@@ -224,9 +229,13 @@ final class TransferServer: @unchecked Sendable {
     listener.stateUpdateHandler = { [weak self] status in
       switch status {
       case .ready:
+        SupportDiagnostics.record("PC pairing: listener ready")
         self?.publishReachableAddresses()
         self?.onStatus?(MacTransferL10n.text("mt_m_15"))
       case .failed(let error):
+        let problem = error as NSError
+        SupportDiagnostics.record(
+          "PC pairing: listener failed; domain=\(problem.domain), code=\(problem.code)")
         self?.onStatus?(MacTransferL10n.format("mt_m_16", error.localizedDescription))
       default: break
       }
@@ -311,8 +320,14 @@ final class TransferServer: @unchecked Sendable {
       while true {
         let client = Darwin.accept(fd, nil, nil)
         if client < 0 { break }
-        guard let self else { Darwin.close(client); continue }
-        guard self.activeTailnetClients < 4 else { Darwin.close(client); continue }
+        guard let self else {
+          Darwin.close(client)
+          continue
+        }
+        guard self.activeTailnetClients < 4 else {
+          Darwin.close(client)
+          continue
+        }
         self.activeTailnetClients += 1
         DispatchQueue.global(qos: .userInitiated).async {
           self.handleTailnetSocket(client)
@@ -461,7 +476,10 @@ final class TransferServer: @unchecked Sendable {
   }
 
   private func handle(_ connection: NWConnection) {
-    guard activeLANConnections.count < 16 else { connection.cancel(); return }
+    guard activeLANConnections.count < 16 else {
+      connection.cancel()
+      return
+    }
     let identifier = ObjectIdentifier(connection)
     activeLANConnections[identifier] = connection
     connection.stateUpdateHandler = { [weak self] status in
@@ -480,10 +498,16 @@ final class TransferServer: @unchecked Sendable {
   private func receive(on connection: NWConnection, accumulated: Data) {
     connection.receive(minimumIncompleteLength: 1, maximumLength: 32_768) {
       [weak self] data, _, complete, error in
-      guard let self, error == nil, !complete else { connection.cancel(); return }
+      guard let self, error == nil, !complete else {
+        connection.cancel()
+        return
+      }
       var bytes = accumulated
       if let data { bytes.append(data) }
-      guard bytes.count <= 32_768 else { connection.cancel(); return }
+      guard bytes.count <= 32_768 else {
+        connection.cancel()
+        return
+      }
       if let end = bytes.firstIndex(of: 10) {
         self.respond(to: Data(bytes[..<end]), on: connection)
       } else {
@@ -530,19 +554,34 @@ final class TransferServer: @unchecked Sendable {
   private func makePairingResponse(to requestData: Data) -> Data? {
     guard let request = try? JSONDecoder().decode(PairingRequest.self, from: requestData),
       ["pair-init", "pair-confirm"].contains(request.type),
-      var session = pairingSession,
-      session.invitation.sessionID == request.sessionID,
-      Date() < session.expiresAt,
-      let publicData = Data(base64Encoded: request.clientPublicKey),
+      let active = pairingSession, active.invitation.sessionID == request.sessionID
+    else { return nil }
+    var outcome = "rejected-session-or-request"
+    defer {
+      if pairingAuditEvents < 32 {
+        pairingAuditEvents += 1
+        SupportDiagnostics.record(
+          "PC pairing: server session=\(request.sessionID.uuidString), stage=\(request.type), result=\(outcome)"
+        )
+      }
+    }
+    var session = active
+    outcome = "session-expired"
+    guard Date() < session.expiresAt else { return nil }
+    outcome = "invalid-client-public-key"
+    guard let publicData = Data(base64Encoded: request.clientPublicKey),
       publicData.count == 32,
       let publicKey = try? Curve25519.KeyAgreement.PublicKey(rawRepresentation: publicData)
     else { return nil }
+    outcome = "client-public-key-changed"
     guard session.clientPublicKey == nil || session.clientPublicKey == publicData else {
       return nil
     }
     let invitation = session.invitation
     let version = request.version ?? "2"
+    outcome = "unsupported-protocol"
     guard ["2", "3"].contains(version) else { return nil }
+    outcome = "device-identity-conflict"
     let physicalDeviceID: UUID
     if version == "3" {
       guard let supplied = request.physicalDeviceID,
@@ -554,6 +593,7 @@ final class TransferServer: @unchecked Sendable {
     } else {
       physicalDeviceID = invitation.physicalDeviceID
     }
+    outcome = "negotiated-session-changed"
     guard session.negotiatedVersion == nil || session.negotiatedVersion == version,
       session.negotiatedPhysicalDeviceID == nil
         || session.negotiatedPhysicalDeviceID == physicalDeviceID
@@ -562,6 +602,7 @@ final class TransferServer: @unchecked Sendable {
     if let existing = session.key {
       key = existing
     } else {
+      outcome = "key-agreement-failed"
       guard
         let shared = try? session.privateKey.sharedSecretFromKeyAgreement(
           with: publicKey)
@@ -581,6 +622,7 @@ final class TransferServer: @unchecked Sendable {
     }
     let secret = SymmetricKey(data: key)
     if request.type == "pair-init" {
+      outcome = "challenge-created"
       let proof = HMAC<SHA256>.authenticationCode(
         for: Data("pair-challenge|\(request.sessionID.uuidString)".utf8),
         using: secret
@@ -591,6 +633,7 @@ final class TransferServer: @unchecked Sendable {
         "proof": proof,
       ]) + Data([10])
     }
+    outcome = "confirmation-rejected"
     guard session.attempts < 3,
       let supplied = request.confirmationMAC.flatMap(Data.init(hex:))
     else { return nil }
@@ -620,13 +663,16 @@ final class TransferServer: @unchecked Sendable {
         updated.devices.append(newDevice)
       }
       updated.revokedDevices.removeAll { $0.physicalDeviceID == physicalDeviceID }
+      outcome = "save-credentials-failed"
       guard (try? Collector.saveState(updated)) != nil else { return nil }
       state = updated
       if var replay = replayState {
         replay.upgraded.remove(physicalDeviceID)
+        outcome = "save-replay-state-failed"
         guard saveReplayState(replay) else { return nil }
       }
       session.confirmed = true
+      outcome = "confirmed-credentials-saved"
       pairingSession = session
       onPairingCompleted?()
     }
@@ -1013,8 +1059,8 @@ final class TransferServer: @unchecked Sendable {
           "\(device.name): preflight rejected; capability authentication failed")
       }
       if offerEnabled, request.offerToken != nil,
-        (request.offerDigest == nil || request.offerDecision == nil
-          || request.offerDecisionMAC == nil)
+        request.offerDigest == nil || request.offerDecision == nil
+          || request.offerDecisionMAC == nil
       {
         SupportDiagnostics.record("\(device.name): preflight decision rejected; incomplete fields")
       }
@@ -1166,8 +1212,8 @@ final class TransferServer: @unchecked Sendable {
   }
 }
 
-private extension Data {
-  init?(hex: String) {
+extension Data {
+  fileprivate init?(hex: String) {
     guard hex.count == 64 else { return nil }
     var result = Data()
     for index in stride(from: 0, to: hex.count, by: 2) {

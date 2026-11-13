@@ -879,9 +879,7 @@ private struct CompanionView: View {
       .background(Color(nsColor: .windowBackgroundColor))
     }
     .sheet(isPresented: $showingSupport) {
-      if let device = supportDevice {
-        MacTransferSupportView(device: device)
-      }
+      MacTransferSupportView(device: supportDevice)
     }
     .sheet(isPresented: $showingDebugLog) {
       MacTransferDebugLogView(device: supportDevice)
@@ -1542,7 +1540,7 @@ private struct CompanionView: View {
           }.frame(maxWidth: 420)
           HStack {
             Button(MacTransferL10n.text("mt_025")) { showingSupport = true }
-              .buttonStyle(.borderedProminent).disabled(supportDevice == nil)
+              .buttonStyle(.borderedProminent)
             Button(MacTransferL10n.text("mt_026")) { showingDebugLog = true }
           }
         }.frame(maxWidth: .infinity, alignment: .leading).padding(12)
