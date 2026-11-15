@@ -18,8 +18,14 @@ The user requested updated PC distribution artifacts, verified App Store 4.1.0 a
 - The actual installed app's `--verify-ui-memory` integration check passed all three screen release/recreate cycles and the disabled-setting case, restoring previous preferences. A fresh native snapshot reports 1.0.1 (39), the same two physical device identities and confirmed pairings.
 - The Mac screen became locked, so computer-use clicks and visual inspection of the new app were unavailable. The app's own bounded integration check and native snapshot ran without unlocking the Mac or reading other applications' UI. This is automated physical-Mac validation, not a claim of manual visual inspection or a new authenticated transfer from physical iPhone/iPad hardware.
 
+### Visual follow-up after user unlock
+
+- After the user unlocked the Mac, inspected the installed app's overview and support screens. The date/category selectors and separate Mac/mobile log panes rendered successfully; moving from page 1 to page 2 updated the displayed page, and closing the viewer returned to support normally.
+- Opened the inquiry sheet and verified its incident-date control and explanation of attaching the incident day plus the preceding two days of Mac/mobile diagnostics. Closed it without entering personal information, composing or sending mail. This follow-up does not establish a fresh phone transfer or reproduce the original reporter's network conditions.
+
 ## Stable publication
 
 - Published [v1.0.1](https://github.com/MochiLog/MochiLog-Mac/releases/tag/v1.0.1), targeting the exact CI source above. It is non-draft and non-prerelease and includes the notarized DMG, its SHA-256 and the CI-signed feed.
 - A fresh anonymous public DMG download passed the same public-key verifier. Only after this public download existed was the exact CI-signed feed copied to root `appcast.xml` for the installed updater. Existing signing keys and pairing identities were preserved.
+- Downloaded the canonical raw GitHub `main/appcast.xml` anonymously after pushing it, confirmed byte-for-byte identity with the CI feed, and verified both feed and public DMG signatures again against version 1.0.1/build 39.
 - Japanese/English release notes are in `RELEASE_NOTES_1.0.1.md`. Logs, private snapshots, state and the unsent customer-reply draft remain ignored under `Build/Release-1.0.1/`. No support email has been sent by this release procedure.
