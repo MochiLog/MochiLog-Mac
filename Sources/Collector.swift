@@ -449,8 +449,13 @@ enum Collector {
   }
 
   static func queueToken(for file: URL, device: PairedDevice) throws -> String {
-    let parent = file.deletingLastPathComponent()
-    if parent.standardizedFileURL.path == (try directory(for: device)).standardizedFileURL.path {
+    let canonical = file.resolvingSymlinksInPath().standardizedFileURL
+    let queue = try directory(for: device).resolvingSymlinksInPath().standardizedFileURL
+    guard canonical.path.hasPrefix(queue.path + "/") else {
+      throw CollectorError.failed(MacTransferL10n.text("mt_c_06"))
+    }
+    let parent = canonical.deletingLastPathComponent()
+    if parent.path == queue.path {
       return file.lastPathComponent
     }
     if let kind = LogKind(rawValue: parent.lastPathComponent) {
@@ -458,10 +463,10 @@ enum Collector {
     }
     let source = parent.lastPathComponent
     guard let kind = LogKind(rawValue: parent.deletingLastPathComponent().lastPathComponent),
-      parent.standardizedFileURL.path
+      parent.path
         == (try directory(
           for: device, kind: kind,
-          source: source)).standardizedFileURL.path
+          source: source)).resolvingSymlinksInPath().standardizedFileURL.path
     else {
       throw CollectorError.failed(MacTransferL10n.text("mt_c_06"))
     }

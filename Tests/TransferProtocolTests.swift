@@ -38,6 +38,7 @@ private func request(
   nonce: UUID = UUID(), ack: String = "", validMAC: Bool = true,
   diagnostics: Data? = nil, presence: String? = nil, version2: Bool = true,
   expectNoResponse: Bool = false, delayedChunks: Bool = false,
+  halfClose: Bool = false,
   overridePayload: [String: String]? = nil, offerEnabled: Bool = false,
   offer: (token: String, digest: String, decision: String)? = nil,
   sealed: Bool = false, issuedAt: Int64? = nil, extra: [String: String] = [:]
@@ -174,6 +175,7 @@ private func request(
       } else {
         connection.send(
           content: data,
+          contentContext: halfClose ? .finalMessage : .defaultMessage,
           completion: .contentProcessed { error in
             if let error {
               connectionError = error
@@ -193,7 +195,8 @@ private func request(
   defer { connection.cancel() }
   guard finished.wait(timeout: .now() + (expectNoResponse ? 3 : 10)) == .success else {
     if expectNoResponse { return Data() }
-    throw TestFailure.failed("Transfer request timed out")
+    throw TestFailure.failed(
+      "Transfer request timed out (state: \(connection.state), receivedBytes: \(received.count))")
   }
   if let connectionError, validMAC { throw connectionError }
   return received
@@ -771,6 +774,22 @@ struct TransferProtocolTests {
         for: device, kind: .watch,
         source: source
       ).appendingPathComponent(filename))
+    let queueAlias = Collector.root.appendingPathComponent("queue-alias")
+    try FileManager.default.createSymbolicLink(
+      at: queueAlias, withDestinationURL: Collector.directory(for: device))
+    let aliasedWatch = queueAlias.appendingPathComponent("Watch")
+      .appendingPathComponent(source).appendingPathComponent(filename)
+    try check(
+      Collector.queueToken(for: aliasedWatch, device: device) == watchToken,
+      "An equivalent queue path lost its Watch source identity")
+    let outside = Collector.root.appendingPathComponent("Outside/Host/" + filename)
+    try FileManager.default.createDirectory(
+      at: outside.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try hostContent.write(to: outside)
+    do {
+      _ = try Collector.queueToken(for: outside, device: device)
+      throw TestFailure.failed("An outside path was accepted as this device's queue")
+    } catch is CollectorError {}
     let unfinished = try Collector.directory(for: device)
       .appendingPathComponent(".staging-test", isDirectory: true)
     try FileManager.default.createDirectory(at: unfinished, withIntermediateDirectories: true)
@@ -786,7 +805,11 @@ struct TransferProtocolTests {
     server.onAppPresence = { _, isForeground, _ in presenceEvents.append(isForeground) }
     server.onTransferActivity = { _, active in transferEvents.append(active) }
     try server.start()
-    let endpoint = try discover(hostID.uuidString)
+    _ = try discover(hostID.uuidString)
+    // Keep protocol checks independent from this Mac's VPN/self-LAN routing.
+    // Bonjour publication/discovery is asserted separately above and below.
+    let endpoint = NWEndpoint.hostPort(
+      host: "127.0.0.1", port: NWEndpoint.Port(rawValue: server.testListeningPort!)!)
 
     print("Checking immediate-send announcement")
     let announcement = DispatchSemaphore(value: 0)
@@ -913,6 +936,12 @@ struct TransferProtocolTests {
         nonce: repeatNonce), secret: device.secret,
       context: (hostID, device.physicalDeviceID, repeatNonce))
     try check(repeatPull.0.isEmpty, "Delivered payload appeared again")
+    let finalRequestNonce = UUID()
+    let finalRequest = try opened(
+      request(
+        endpoint, hostID: hostID, device: device, nonce: finalRequestNonce, halfClose: true),
+      secret: device.secret, context: (hostID, device.physicalDeviceID, finalRequestNonce))
+    try check(finalRequest.0.isEmpty, "A complete request followed by EOF lost its response")
     print("Checking archived log manual resend over encrypted transport")
     let archivedHost = BatteryLogStorage.list(devices: [device]).filter {
       !$0.pending && $0.kind == "Host" && $0.name == filename
@@ -1281,9 +1310,13 @@ struct TransferProtocolTests {
       udid: "secure-iphone", name: "Secure iPhone",
       model: "iPhone18,3")
     let offlineServer = TransferServer(state: Collector.loadState())
-    try check(offlineServer.beginPairing(for: selected, existing: nil) == nil, "Offline listener produced a pairing QR")
+    try check(
+      offlineServer.beginPairing(for: selected, existing: nil) == nil,
+      "Offline listener produced a pairing QR")
     let invitation = server.beginPairing(for: selected, existing: nil)!
-    try check(invitation.lanPort == server.testListeningPort, "QR advertised a different port from the live listener")
+    try check(
+      invitation.lanPort == server.testListeningPort,
+      "QR advertised a different port from the live listener")
     try check(
       invitation.publicKey.count == 32 && invitation.code.count == 6,
       "Secure pairing invitation is incomplete")
@@ -1385,17 +1418,23 @@ struct TransferProtocolTests {
         try? FileManager.default.removeItem(at: file.deletingLastPathComponent())
       }
     }
-    try check(unpairedExport.count == 1 && unpairedExport[0].pathExtension == "zip", "Unpaired support did not produce exactly one ZIP")
+    try check(
+      unpairedExport.count == 1 && unpairedExport[0].pathExtension == "zip",
+      "Unpaired support did not produce exactly one ZIP")
     let supportZip = try Archive(url: unpairedExport[0], accessMode: .read)
     let settingsEntry = supportZip["mochilog-mac-settings.json"]!
     var settingsBytes = Data()
     _ = try supportZip.extract(settingsEntry) { settingsBytes.append($0) }
     let settingsObject = try JSONSerialization.jsonObject(with: settingsBytes) as! [String: Any]
     let permissionMap = settingsObject["permissions"] as! [String: [String: Any]]
-    try check(permissionMap["localNetwork"]?["status"] as? String == "unknown", "A listener was incorrectly treated as permission granted")
+    try check(
+      permissionMap["localNetwork"]?["status"] as? String == "unknown",
+      "A listener was incorrectly treated as permission granted")
     let exportDirectory = unpairedExport[0].deletingLastPathComponent()
     let exportManifest = exportDirectory.appendingPathComponent("mochilog-support-manifest.json")
-    try check(try String(contentsOf: exportManifest, encoding: .utf8).contains("app pairing not completed"), "Unpaired export did not explain unavailable phone data")
+    try check(
+      try String(contentsOf: exportManifest, encoding: .utf8).contains("app pairing not completed"),
+      "Unpaired export did not explain unavailable phone data")
     print("Checking v3 pairing preserves the mobile device's existing physical ID")
     let mobilePhysicalID = UUID()
     let secondPhone = ConnectedDevice(
@@ -1816,7 +1855,9 @@ struct TransferProtocolTests {
     let cloudHost = UUID()
     let cloudServer = TransferServer(state: CompanionState(hostID: cloudHost, devices: peers))
     try cloudServer.start()
-    let cloudEndpoint = try discover(cloudHost.uuidString)
+    _ = try discover(cloudHost.uuidString)
+    let cloudEndpoint = NWEndpoint.hostPort(
+      host: "127.0.0.1", port: NWEndpoint.Port(rawValue: cloudServer.testListeningPort!)!)
     let scope = String(repeating: "a", count: 64)
     let foreignName = "Analytics-2026-10-08-090000.ips.ca.synced"
     let sourceFile = try Collector.directory(for: peers[1]).appendingPathComponent(

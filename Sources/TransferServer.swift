@@ -125,6 +125,7 @@ final class TransferServer: @unchecked Sendable {
   private var state: CompanionState
   private var replayState: ReplayState?
   private var activeLANConnections: [ObjectIdentifier: NWConnection] = [:]
+  private var activeLANWrites: [ObjectIdentifier: TransferWriteLoop] = [:]
   private var announcementRevision = 0
   private var pairingSession: PairingSession?
   private var pairingAuditEvents = 0
@@ -503,11 +504,16 @@ final class TransferServer: @unchecked Sendable {
     connection.stateUpdateHandler = { [weak self] status in
       if case .ready = status { self?.receive(on: connection, accumulated: Data()) }
       if case .failed = status { connection.cancel() }
-      if case .cancelled = status { self?.activeLANConnections.removeValue(forKey: identifier) }
+      if case .cancelled = status {
+        self?.activeLANConnections.removeValue(forKey: identifier)
+        self?.activeLANWrites.removeValue(forKey: identifier)?.cancel()
+      }
     }
     connection.start(queue: queue)
     queue.asyncAfter(deadline: .now() + 25) { [weak self, weak connection] in
-      guard let self, self.activeLANConnections[identifier] != nil else { return }
+      guard let self, self.activeLANConnections[identifier] != nil,
+        self.activeLANWrites[identifier] == nil
+      else { return }
       connection?.cancel()
       self.activeLANConnections.removeValue(forKey: identifier)
     }
@@ -516,7 +522,7 @@ final class TransferServer: @unchecked Sendable {
   private func receive(on connection: NWConnection, accumulated: Data) {
     connection.receive(minimumIncompleteLength: 1, maximumLength: 32_768) {
       [weak self] data, _, complete, error in
-      guard let self, error == nil, !complete else {
+      guard let self, error == nil else {
         connection.cancel()
         return
       }
@@ -528,6 +534,8 @@ final class TransferServer: @unchecked Sendable {
       }
       if let end = bytes.firstIndex(of: 10) {
         self.respond(to: Data(bytes[..<end]), on: connection)
+      } else if complete {
+        connection.cancel()
       } else {
         self.receive(on: connection, accumulated: bytes)
       }
@@ -560,9 +568,14 @@ final class TransferServer: @unchecked Sendable {
     }
     onTransferActivity?(response.deviceID, true)
     let sendingAt = ProcessInfo.processInfo.systemUptime
-    connection.send(
-      content: response.data,
-      completion: .contentProcessed { [weak self] error in
+    let identifier = ObjectIdentifier(connection)
+    let writer = TransferWriteLoop(
+      packet: response.data, queue: queue,
+      sender: { bytes, completion in
+        connection.send(content: bytes, completion: .contentProcessed(completion))
+      },
+      completion: { [weak self] error in
+        self?.activeLANWrites.removeValue(forKey: identifier)
         if response.requestID != nil {
           SupportDiagnostics.record(
             "Transfer trace: LAN write request=\(response.requestID!.uuidString), recipient=\(response.deviceID.uuidString), bytes=\(response.data.count), prepareMs=\(Int((sendingAt - preparedAt) * 1000)), writeMs=\(Int((ProcessInfo.processInfo.systemUptime - sendingAt) * 1000)), result=\(error == nil ? "written" : "failed"); TCP write only; application processing not confirmed"
@@ -571,6 +584,8 @@ final class TransferServer: @unchecked Sendable {
         self?.onTransferActivity?(response.deviceID, false)
         connection.cancel()
       })
+    activeLANWrites[identifier] = writer
+    writer.start()
   }
 
   private func auditPairingSendFailure(route: String, code: Int) {
@@ -1206,6 +1221,10 @@ final class TransferServer: @unchecked Sendable {
         data: prefix + combined, deviceID: device.physicalDeviceID, requestID: request.nonce,
         file: CloudSharedLogToken.debugLabel(name))
     } catch {
+      let problem = error as NSError
+      SupportDiagnostics.record(
+        "Transfer preparation failed: request=\(request.nonce.uuidString), domain=\(problem.domain), code=\(problem.code), detail=\(problem.localizedDescription)"
+      )
       onStatus?(MacTransferL10n.format("mt_m_18", error.localizedDescription))
       return nil
     }

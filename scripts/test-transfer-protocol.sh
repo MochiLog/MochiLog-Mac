@@ -3,6 +3,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 test_root="$(mktemp -d "${TMPDIR:-/tmp}/mochilog-transfer-test.XXXXXX")"
 trap 'rm -rf "$test_root"' EXIT
+swiftc -j 1 -parse-as-library Sources/TransferWriteLoop.swift Tests/TransferWriteLoopTests.swift -o "$test_root/write-tests"
+"$test_root/write-tests"
 swiftc -j 1 -parse-as-library Sources/DiagnosticArchiveChunk.swift Sources/DiagnosticLogArchive.swift Sources/DiagnosticLogViewer.swift Tests/DiagnosticLogArchiveTests.swift -o "$test_root/archive-tests"
 "$test_root/archive-tests"
 swiftc -j 1 -warnings-as-errors -parse-as-library Sources/DiagnosticLogArchive.swift Sources/SupportLogExport.swift Tests/SupportLogExportTests.swift -o "$test_root/support-export-tests"
@@ -13,7 +15,7 @@ bash scripts/prepare-zip-test-module.sh "$test_root/zip-module"
 MOCHILOG_ZIP_TEST_MODULE="$test_root/zip-module" bash scripts/test-support-archive.sh
 swiftc -I "$test_root/zip-module" -L "$test_root/zip-module" -lZIPFoundation -j 1 -DTRANSFER_TESTING -o "$test_root/transfer-protocol-tests" \
   Sources/LocalDiagnosticsPairing.swift Sources/CloudSharedLogToken.swift Sources/CloudLogSharing.swift Sources/DiagnosticRoutes.swift Sources/Collector.swift Sources/LiveBattery.swift Sources/BatteryLogStorage.swift Sources/PairingKeyStore.swift Sources/MacTransferL10n.swift \
-  Sources/CrashDiagnostics.swift \
+  Sources/CrashDiagnostics.swift Sources/TransferWriteLoop.swift \
   Sources/GuardedProcess.swift Sources/NativeDiagnostics.swift \
   Sources/DiagnosticArchiveChunk.swift Sources/DiagnosticLogArchive.swift Sources/SupportLogExport.swift Sources/SupportArchive.swift Sources/PCConnectionFailure.swift Sources/NetworkAccessDiagnostics.swift Sources/SupportSettingsSnapshot.swift Sources/MacSupportSettings.swift Sources/SupportDiagnostics.swift Sources/TransferServer.swift \
   Tests/NativeDiagnosticTests.swift Tests/TransferProtocolTests.swift
