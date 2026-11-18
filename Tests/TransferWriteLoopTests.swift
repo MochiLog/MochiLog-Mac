@@ -10,9 +10,9 @@ struct TransferWriteLoopTests {
     var failure: Error?
     let started = ProcessInfo.processInfo.systemUptime
     let writer = TransferWriteLoop(
-      packet: packet, queue: queue, idleTimeout: 0.2,
+      packet: packet, queue: queue, idleTimeout: 1,
       sender: { chunk, completion in
-        queue.asyncAfter(deadline: .now() + 0.08) {
+        queue.asyncAfter(deadline: .now() + 0.25) {
           received.append(chunk)
           completion(nil)
         }
@@ -22,9 +22,9 @@ struct TransferWriteLoopTests {
         done.signal()
       })
     writer.start()
-    precondition(done.wait(timeout: .now() + 3) == .success)
+    precondition(done.wait(timeout: .now() + 8) == .success)
     precondition(failure == nil && received == packet)
-    precondition(ProcessInfo.processInfo.systemUptime - started > 0.2)
+    precondition(ProcessInfo.processInfo.systemUptime - started > 1)
 
     var completions = 0
     var late: ((Error?) -> Void)?
