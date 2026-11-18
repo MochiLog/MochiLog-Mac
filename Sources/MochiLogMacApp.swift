@@ -115,7 +115,10 @@ private struct ScreenMemoryHost: NSViewControllerRepresentable {
         let window = view.window
         window?.makeFirstResponder(nil)
         window?.initialFirstResponder = nil
-        if let sheet = window?.attachedSheet { window?.endSheet(sheet); sheet.orderOut(nil) }
+        if let sheet = window?.attachedSheet {
+          window?.endSheet(sheet)
+          sheet.orderOut(nil)
+        }
         screen.rootView = AnyView(EmptyView())
         screen.view.needsLayout = true
         screen.view.layoutSubtreeIfNeeded()
@@ -152,7 +155,8 @@ private struct ScreenMemoryHost: NSViewControllerRepresentable {
   }
   func makeNSViewController(context: Context) -> Controller { Controller() }
   func updateNSViewController(_ controller: Controller, context: Context) {
-    controller.model = model; controller.checkForUpdates = checkForUpdates
+    controller.model = model
+    controller.checkForUpdates = checkForUpdates
     manager.attachOwner(controller)
   }
   static func dismantleNSViewController(_ controller: Controller, coordinator: ()) {
@@ -385,7 +389,8 @@ final class CompanionModel: ObservableObject {
 
   func watchBattery(_ id: UUID, visible: Bool) {
     if visible {
-      liveBatteryViews.insert(id); Task { await refreshBattery(id) }
+      liveBatteryViews.insert(id)
+      Task { await refreshBattery(id) }
     } else {
       liveBatteryViews.remove(id)
     }
@@ -405,7 +410,8 @@ final class CompanionModel: ObservableObject {
       "Battery snapshot started; device=\(id.uuidString), trigger=\(manual ? "manual" : "automatic"), logCollectionBusy=\(isBusy)"
     )
     defer {
-      liveBatteryBusy.remove(id); lastBatteryAttempt[id] = Date()
+      liveBatteryBusy.remove(id)
+      lastBatteryAttempt[id] = Date()
       SupportDiagnostics.record(
         "Battery snapshot finished; device=\(id.uuidString), elapsedMs=\(Int((ProcessInfo.processInfo.systemUptime - started) * 1000)), failed=\(liveBatteryFailures.contains(id))"
       )
@@ -416,7 +422,9 @@ final class CompanionModel: ObservableObject {
         try Collector.currentBattery(device, peerAddress: peerAddress)
       }.value
       guard state.devices.contains(where: { $0.physicalDeviceID == id }) else {
-        server?.liveBattery.remove(id); liveBatterySnapshots.removeValue(forKey: id); return
+        server?.liveBattery.remove(id)
+        liveBatterySnapshots.removeValue(forKey: id)
+        return
       }
       liveBatterySnapshots[id] = snapshot
       liveBatteryFailures.remove(id)
@@ -492,7 +500,10 @@ final class CompanionModel: ObservableObject {
     guard !isRefreshing, !isBusy else { return }
     isRefreshing = true
     isBusy = true
-    defer { isBusy = false; isRefreshing = false }
+    defer {
+      isBusy = false
+      isRefreshing = false
+    }
     do {
       devices = try await Task.detached(priority: .utility) { try Collector.browse() }.value
       if let pendingUSBDevice,
@@ -822,6 +833,8 @@ private struct CompanionView: View {
   let checkForUpdates: () -> Void
   @EnvironmentObject private var model: CompanionModel
   @StateObject private var lifetime = ScreenLifetimeToken()
+  @StateObject private var networkPermission = PCNetworkPermissionCheck()
+  @State private var showingNetworkPermissionWarning = false
   @State private var page: Page? = Page(
     rawValue: UserDefaults.standard.string(forKey: "MochiLogLastPage") ?? "overview")
   @State private var showingSupport = false
@@ -1286,6 +1299,34 @@ private struct CompanionView: View {
 
   private var devices: some View {
     VStack(alignment: .leading, spacing: 22) {
+      GroupBox(MacTransferL10n.text("mt_permissions_title")) {
+        VStack(alignment: .leading, spacing: 10) {
+          if networkPermission.denied {
+            Label(
+              MacTransferL10n.text("mt_permissions_local_denied_mac"),
+              systemImage: "exclamationmark.triangle.fill"
+            )
+            .foregroundStyle(.orange)
+          }
+          HStack {
+            Button(MacTransferL10n.text("mt_permissions_check")) { networkPermission.check() }
+              .disabled(networkPermission.isChecking)
+            if networkPermission.isChecking { ProgressView().controlSize(.small) }
+            if networkPermission.denied {
+              Button(MacTransferL10n.text("mt_permissions_settings")) {
+                SupportDiagnostics.record("PC pairing permissions: System Settings opened by user")
+                if let url = NSWorkspace.shared.urlForApplication(
+                  withBundleIdentifier: "com.apple.systempreferences")
+                {
+                  NSWorkspace.shared.open(url)
+                }
+              }
+            }
+          }
+          Text(MacTransferL10n.text("mt_permissions_detail"))
+            .font(.caption).foregroundStyle(.secondary)
+        }.frame(maxWidth: .infinity, alignment: .leading).padding(12)
+      }
       if model.state.devices.isEmpty && !model.isOSPairingVerified {
         firstConnectionHero
       }
@@ -1416,8 +1457,12 @@ private struct CompanionView: View {
                 }
               }
             } else if model.pairedSelected == nil {
-              Button(MacTransferL10n.text("mt_016")) { model.pairApp() }
-                .buttonStyle(.borderedProminent)
+              Button(MacTransferL10n.text("mt_016")) {
+                networkPermission.check()
+                if networkPermission.denied { showingNetworkPermissionWarning = true }
+                model.pairApp()
+              }
+              .buttonStyle(.borderedProminent)
             } else {
               HStack {
                 Label(
@@ -1425,7 +1470,11 @@ private struct CompanionView: View {
                   systemImage: "checkmark.circle.fill"
                 ).foregroundStyle(.green)
                 Spacer()
-                Button(MacTransferL10n.text("mt_018")) { model.pairApp() }
+                Button(MacTransferL10n.text("mt_018")) {
+                  networkPermission.check()
+                  if networkPermission.denied { showingNetworkPermissionWarning = true }
+                  model.pairApp()
+                }
               }
             }
           } else if case .checking = model.osPairingState {
@@ -1456,8 +1505,37 @@ private struct CompanionView: View {
       }
     }
     .onAppear {
+      networkPermission.refresh()
+      if networkPermission.denied { networkPermission.check() }
       manualDeviceAddress = model.pairedSelected?.manualAddress ?? ""
       Task { [model] in await model.refresh() }
+    }
+    .onDisappear { networkPermission.stop() }
+    .onReceive(
+      NotificationCenter.default.publisher(for: NetworkAccessDiagnostics.observationsChanged)
+        .receive(on: RunLoop.main)
+    ) { _ in networkPermission.refresh() }
+    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification))
+    { _ in
+      networkPermission.refresh()
+      if networkPermission.denied { networkPermission.check() }
+    }
+    .onChange(of: networkPermission.denied) { _, denied in
+      if denied { showingNetworkPermissionWarning = true }
+    }
+    .alert(
+      MacTransferL10n.text("mt_permissions_title"), isPresented: $showingNetworkPermissionWarning
+    ) {
+      Button(MacTransferL10n.text("mt_permissions_settings")) {
+        if let url = NSWorkspace.shared.urlForApplication(
+          withBundleIdentifier: "com.apple.systempreferences")
+        {
+          NSWorkspace.shared.open(url)
+        }
+      }
+      Button("OK", role: .cancel) {}
+    } message: {
+      Text(MacTransferL10n.text("mt_permissions_local_denied_mac"))
     }
     .confirmationDialog(
       MacTransferL10n.text("mt_unpair_title"),

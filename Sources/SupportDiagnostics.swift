@@ -267,7 +267,7 @@ enum SupportDiagnostics {
       "saved": report?.saved ?? 0,
       "excluded": report?.skipped ?? 0,
       "deferred": report?.deferred ?? 0,
-      "failed": report?.failed ?? 0,
+      "failed": report?.failed ?? (error == nil ? 0 : 1),
       "retryHeld": report?.retryHeld ?? 0,
       "listingFailures": report?.listingFailures ?? 0,
       "acquisitionComplete": report?.acquisitionComplete ?? false,

@@ -14,6 +14,15 @@
   <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
   <key>LSMinimumSystemVersion</key><string>$(MACOSX_DEPLOYMENT_TARGET)</string>
   <key>NSLocalNetworkUsageDescription</key><string>This app uses the local network to transfer analytics logs to your iPhone or iPad.</string>
+  <key>NSBonjourServices</key>
+  <array>
+    <string>_mochilog._tcp</string>
+    <string>_remoted._tcp</string>
+    <string>_remotepairing._tcp</string>
+    <string>_remotepairing-manual-pairing._tcp</string>
+    <string>_remotepairing-pairable-host._tcp</string>
+    <string>_apple-mobdev2._tcp</string>
+  </array>
   <key>SUFeedURL</key><string>https://raw.githubusercontent.com/MochiLog/MochiLog-Mac/main/appcast.xml</string>
   <key>SUPublicEDKey</key><string>ukDc2UcXbca/pGzsNZRQD7OvZsvx1Vz+zvJq23tFtQQ=</string>
   <key>SUEnableAutomaticChecks</key><false/>

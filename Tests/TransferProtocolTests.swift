@@ -434,6 +434,19 @@ struct TransferProtocolTests {
       udid: "test-iphone", name: "Test iPhone",
       model: "iPhone18,3", physicalDeviceID: UUID(),
       secret: Data((0..<32).map { UInt8($0) }))
+    SupportDiagnostics.saveCollection(nil, error: CollectorError.timeout, for: device)
+    let failedSupport =
+      try JSONSerialization.jsonObject(
+        with: Data(
+          contentsOf:
+            Collector.root.appendingPathComponent(
+              "support-\(device.physicalDeviceID.uuidString)-collection.json")))
+      as! [String: Any]
+    try check(
+      failedSupport["failed"] as? Int == 1
+        && failedSupport["acquisitionComplete"] as? Bool == false
+        && failedSupport["result"] as? String == "timeout",
+      "An unsuccessful collection must not report zero failures")
     print("Checking daily priority and recovery without a second failure cooldown")
     let failureDevice = PairedDevice(
       udid: "failed-file-fixture", name: "Retry fixture",
