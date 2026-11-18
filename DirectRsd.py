@@ -21,17 +21,18 @@ from pymobiledevice3.services.crash_reports import CrashReportsManager
 async def run(arguments: argparse.Namespace) -> None:
     """Connect through the maintained library and perform one bounded operation."""
 
-    async def direct_provider(serial, autopair, remotepairing_fallback=True):
+    async def direct_provider():
         provider = await create_core_device_tunnel_service_using_remotepairing(
             arguments.udid, arguments.host, arguments.port, autopair=False
         )
-        return provider, None
+        return userspace_tunnel.TunnelProvider(provider)
 
     # The upstream userspace tunnel discovers RemotePairing through Bonjour.
     # Apple Devices on Windows does not expose that advertisement, although the
     # device's authenticated RemotePairing endpoint is reachable by IP.
-    userspace_tunnel._create_no_root_tunnel_provider = direct_provider
-    tunnel = userspace_tunnel.UserspaceRsdTunnel(serial=arguments.udid, autopair=False)
+    tunnel = userspace_tunnel.UserspaceRsdTunnel(
+        serial=arguments.udid, autopair=False, provider_factory=direct_provider
+    )
     phase = "RemotePairing tunnel"
     try:
         rsd = await asyncio.wait_for(tunnel.aopen(), timeout=45)

@@ -7,7 +7,69 @@ import plistlib
 from pathlib import Path
 
 
+async def verify_direct_provider_contract():
+    """Exercise the real library's factory and cleanup without opening a socket."""
+    from contextlib import asynccontextmanager
+    from types import SimpleNamespace
+    import DirectRsd
+    import BatterySnapshot
+    from pymobiledevice3.remote import tunnel_service, userspace_tunnel
+
+    class ProbeReached(Exception):
+        pass
+
+    services = []
+
+    class Service:
+        closed = 0
+
+        async def close(self):
+            self.closed += 1
+
+        @asynccontextmanager
+        async def start_tcp_tunnel(self):
+            raise ProbeReached()
+            yield  # Defines the async context; no network stack is created.
+
+    async def create(remote_identifier, hostname, port, autopair=True):
+        assert (remote_identifier, hostname, port, autopair) == (
+            "fixture-device",
+            "192.0.2.1",
+            49152,
+            False,
+        )
+        service = Service()
+        services.append(service)
+        return service
+
+    old_direct = DirectRsd.create_core_device_tunnel_service_using_remotepairing
+    old_remote = tunnel_service.create_core_device_tunnel_service_using_remotepairing
+    default_factory = userspace_tunnel._create_no_root_tunnel_provider
+    DirectRsd.create_core_device_tunnel_service_using_remotepairing = create
+    tunnel_service.create_core_device_tunnel_service_using_remotepairing = create
+    args = SimpleNamespace(udid="fixture-device", host="192.0.2.1", port=49152, action="verify")
+    try:
+        try:
+            await DirectRsd.run(args)
+            raise AssertionError("Diagnostic bridge did not enter its direct provider")
+        except RuntimeError as error:
+            assert isinstance(error.__cause__, ProbeReached), type(error.__cause__)
+        try:
+            await BatterySnapshot.read_direct(args)
+            raise AssertionError("Battery bridge did not enter its direct provider")
+        except ProbeReached:
+            pass
+        assert len(services) == 2 and all(service.closed == 1 for service in services)
+        assert userspace_tunnel._create_no_root_tunnel_provider is default_factory
+    finally:
+        DirectRsd.create_core_device_tunnel_service_using_remotepairing = old_direct
+        tunnel_service.create_core_device_tunnel_service_using_remotepairing = old_remote
+
+
 def main():
+    import asyncio
+
+    asyncio.run(verify_direct_provider_contract())
     names = [
         "DirectRsd",
         "BatterySnapshot",
@@ -52,6 +114,7 @@ def main():
                     "schema",
                     "crypto",
                     "typed-plist",
+                    "direct-provider-contract",
                 ],
             },
             sort_keys=True,

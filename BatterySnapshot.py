@@ -41,16 +41,17 @@ async def read_direct(arguments: argparse.Namespace) -> dict[str, Any]:
         create_core_device_tunnel_service_using_remotepairing,
     )
 
-    async def direct_provider(serial, autopair, remotepairing_fallback=True):
+    async def direct_provider():
         provider = await create_core_device_tunnel_service_using_remotepairing(
             arguments.udid, arguments.host, arguments.port, autopair=False
         )
-        return provider, None
+        return userspace_tunnel.TunnelProvider(provider)
 
     # pymobiledevice3's default provider discovers via Bonjour. A direct IP
     # also works where multicast discovery is unavailable (e.g. Tailscale).
-    userspace_tunnel._create_no_root_tunnel_provider = direct_provider
-    tunnel = userspace_tunnel.UserspaceRsdTunnel(serial=arguments.udid, autopair=False)
+    tunnel = userspace_tunnel.UserspaceRsdTunnel(
+        serial=arguments.udid, autopair=False, provider_factory=direct_provider
+    )
     try:
         provider = await asyncio.wait_for(tunnel.aopen(), timeout=20)
         return await read_registry(provider)
