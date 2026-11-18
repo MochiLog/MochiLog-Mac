@@ -25,21 +25,32 @@ final class FeedParser: NSObject, XMLParserDelegate {
   var version = ""
   var shortVersion = ""
   var element = ""
+  var inFirstItem = false
+  var finishedFirstItem = false
   func parser(
     _ parser: XMLParser, didStartElement name: String, namespaceURI: String?,
     qualifiedName: String?, attributes: [String: String]
   ) {
+    if name == "item", !finishedFirstItem { inFirstItem = true }
+    guard inFirstItem else { return }
     element = name
     if name == "enclosure", enclosure == nil { enclosure = attributes }
   }
   func parser(_ parser: XMLParser, foundCharacters text: String) {
+    guard inFirstItem else { return }
     if element == "sparkle:version" { version += text }
     if element == "sparkle:shortVersionString" { shortVersion += text }
   }
   func parser(
     _ parser: XMLParser, didEndElement name: String, namespaceURI: String?,
     qualifiedName: String?
-  ) { element = "" }
+  ) {
+    if name == "item", inFirstItem {
+      inFirstItem = false
+      finishedFirstItem = true
+    }
+    element = ""
+  }
 }
 
 do {

@@ -42,6 +42,7 @@ jobs:
         run: |
           "$(brew --prefix python@3.13)/bin/python3.13" -m unittest discover -s Tests -p 'test_*.py'
           bash scripts/test-transfer-protocol.sh
+          bash scripts/test-sparkle-release.sh
       - name: Import Developer ID certificate
         env:
           CERTIFICATE_P12_BASE64: ${{ secrets.MOCHILOG_CERTIFICATE_P12_BASE64 }}
