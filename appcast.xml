@@ -1,8 +1,36 @@
-<?xml version="1.0" standalone="yes"?><!-- sparkle-sign-warning:
+<?xml version="1.0" standalone="yes"?>
+<!-- sparkle-sign-warning:
 IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
---><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+-->
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
     <channel>
         <title>MochiLog Mac</title>
+        <item>
+            <title>1.0.3</title>
+            <pubDate>Wed, 18 Nov 2026 13:35:03 +0900</pubDate>
+            <sparkle:version>41</sparkle:version>
+            <sparkle:shortVersionString>1.0.3</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>27.0</sparkle:minimumSystemVersion>
+            <description sparkle:format="markdown"><![CDATA[# MochiLog Mac 1.0.3
+
+## 日本語
+
+・ペアリング時のローカルネットワーク権限の確認と、設定への案内を追加しました。
+・無線接続と診断サービスの互換性を改善しました。
+・ログ収集に失敗したときの結果表示と診断情報を修正しました。
+
+既存のペアリングと保存済みログを引き継ぎます。対応環境はmacOS 27以降です。
+
+## English
+
+• Added local network permission checks and guidance to Settings during pairing.
+• Improved compatibility with wireless connections and diagnostic services.
+• Corrected collection failure results and diagnostics.
+
+Existing pairings and stored logs are preserved. Requires macOS 27 or later.
+]]></description>
+            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v1.0.3/MochiLog-Mac.dmg" length="122824131" type="application/octet-stream" sparkle:edSignature="EBMVWpSLrdSvw1qyPk1J9NPnr+/9K+Ej87tOxx7LyV6deex/PcCEckXY98Vv2gdoJCyefG//1ca+pY8/f9s/Bg=="/>
+        </item>
         <item>
             <title>1.0.2</title>
             <pubDate>Wed, 18 Nov 2026 13:35:03 +0900</pubDate>
@@ -29,10 +57,11 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
 
 Existing pairings and stored logs are preserved. Requires macOS 27 or later.
 ]]></description>
-            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v1.0.2/MochiLog-Mac.dmg" length="119193708" type="application/octet-stream" sparkle:edSignature="wJaHoJyXhzXghIGnQN/uOAQHXXf6p2SS41F5WdrTHE4SjKFj3k0d9t5LnDTjHJstmGVvBybGTwBtug3ipWdrAQ=="></enclosure>
+            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v1.0.2/MochiLog-Mac.dmg" length="119193708" type="application/octet-stream" sparkle:edSignature="wJaHoJyXhzXghIGnQN/uOAQHXXf6p2SS41F5WdrTHE4SjKFj3k0d9t5LnDTjHJstmGVvBybGTwBtug3ipWdrAQ=="/>
         </item>
     </channel>
-</rss><!-- sparkle-signatures:
-edSignature: VaG2Z6Hp9EYjrbYIB+10E3vkP+C45kO0d4LHc860jiL7fHja8tJg7CRjm2GT/WdQVUQqPxel9UobZ3rrUsU5Ag==
-length: 2001
+</rss>
+<!-- sparkle-signatures:
+edSignature: MPk8peo4xYBVM5Y4kgtBOlvKpgbS/6f2Nscqsthb9fIzt/AHj615aZ6kXBoOqbtu/tijEp0CnECIIQZgokkaCw==
+length: 3414
 -->
