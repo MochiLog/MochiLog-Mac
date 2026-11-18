@@ -376,7 +376,7 @@ enum Collector {
   ) throws -> (String, [String]) {
     let native = ["--native", "--udid", udid]
     let network = ["--mobdev2", "--udid", udid]
-    let root = ["--remote-file", "/", "--depth", "1"]
+    let root = ["/", "--depth", "1"]
     if let listing = try? runCommand(["crash", "ls"] + native + root, 45),
       !listing.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     {
@@ -804,7 +804,7 @@ enum Collector {
         func addDirectory(_ path: String, source: String?) -> String? {
           do {
             let listing = try runCommand(
-              ["crash", "ls"] + connection + ["--remote-file", path, "--depth", "1"], 90)
+              ["crash", "ls"] + connection + [path, "--depth", "1"], 90)
             remoteFiles += listing.split(separator: "\n").map {
               RemoteLog(path: String($0), source: source)
             }
@@ -984,7 +984,7 @@ enum Collector {
         for attempt in 0..<(directStaging == nil ? 2 : 0) {
           do {
             _ = try runCommand(
-              ["crash", "pull", staging.path, "--remote-file", remote.path]
+              ["crash", "pull", staging.path, remote.path]
                 + connection, 180)
             pullError = nil
             break

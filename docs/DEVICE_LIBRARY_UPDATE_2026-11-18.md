@@ -11,6 +11,12 @@ It checks the selected device/address/port, `autopair=False`, both adapters reac
 The compiled, isolated smoke test requires this check too, so compilation or CLI help alone cannot pass the release gate.
 The smoke test reads the expected package version from the requirements pin instead of an obsolete hardcoded version.
 
+The new crash CLI takes the remote path as a positional argument for both `ls` and `pull`.
+Updated Swift and C# call sites, including archive and accessory directories. Native fixtures reject the obsolete option explicitly.
+The isolated compiled smoke test now parses the actual discovery, trust, list and pull command shapes with `--help`, not just the top-level groups.
+After the corrections, the new compiled Mac helper read a real iPad's current battery registry (49 top-level fields) and the crash-report root including `/Retired`.
+No battery values, device identifiers or log bodies were persisted in these check summaries.
+
 Before future releases, check the official package for an update, review changed connection APIs, refresh the pin in both PC repositories, and run native protocol tests, Python bridge tests and the isolated compiled collector test.
 These are developer build requirements; users do not install Python.
 

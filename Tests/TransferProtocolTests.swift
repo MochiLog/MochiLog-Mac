@@ -11,6 +11,15 @@ private func check(_ condition: @autoclosure () throws -> Bool, _ message: Strin
   if try !condition() { throw TestFailure.failed(message) }
 }
 
+private func crashPath(_ args: [String]) throws -> String {
+  try check(!args.contains("--remote-file"), "Obsolete crash CLI option was used")
+  if args[1] == "ls", let depth = args.firstIndex(of: "--depth"), depth > 2 {
+    return args[depth - 1]
+  }
+  try check(args[1] == "pull" && args.count > 3, "Missing positional crash path")
+  return args[3]
+}
+
 private func discover(_ name: String) throws -> NWEndpoint {
   let browser = NWBrowser(for: .bonjour(type: "_mochilog._tcp", domain: nil), using: .tcp)
   let queue = DispatchQueue(label: "mochilog.transfer.test.browser")
@@ -449,12 +458,11 @@ struct TransferProtocolTests {
         return args.contains("/Retired")
           ? "/Retired/\(pastName)\n/Retired/\(todayName)" : "/Retired"
       }
-      guard args.prefix(2) == ["crash", "pull"],
-        let pathFlag = args.firstIndex(of: "--remote-file")
+      guard args.prefix(2) == ["crash", "pull"], args.count > 3
       else {
         throw TestFailure.failed("Unexpected failed-file fixture command")
       }
-      let name = URL(fileURLWithPath: args[pathFlag + 1]).lastPathComponent
+      let name = URL(fileURLWithPath: try crashPath(args)).lastPathComponent
       pullNames.append(name)
       if name == pastName && !recover {
         throw CollectorError.failed("FILE_OPEN failed with status: 10")
@@ -620,7 +628,7 @@ struct TransferProtocolTests {
     let partialSource = "ProxiedDevice-ac12"
     var listingRecovered = false
     let partialMock: ([String], TimeInterval) throws -> String = { args, _ in
-      let path = args[args.firstIndex(of: "--remote-file")! + 1]
+      let path = try crashPath(args)
       if args.prefix(2) == ["crash", "ls"] {
         if path == "/" { return "/Retired\n/\(todayName)\n/\(partialSource)" }
         if path == "/Retired" { return "" }
@@ -676,14 +684,14 @@ struct TransferProtocolTests {
     var sourcePulls: [String] = []
     let sourceMock: ([String], TimeInterval) throws -> String = { args, _ in
       if args.prefix(2) == ["crash", "ls"] {
-        let path = args[args.firstIndex(of: "--remote-file")! + 1]
+        let path = try crashPath(args)
         if path == "/" { return "/Retired\n/\(gateWatchSource)" }
         if path == "/Retired" { return "/Retired/\(todayName)\n/Retired/\(anotherToday)" }
         if path == "/\(gateWatchSource)/Retired" { return path + "/" + todayName }
         if path == "/\(gateWatchSource)" { return path + "/Retired" }
         return ""
       }
-      let remote = args[args.firstIndex(of: "--remote-file")! + 1]
+      let remote = try crashPath(args)
       sourcePulls.append(remote)
       if remote == "/Retired/" + todayName {
         throw CollectorError.failed("FILE_OPEN failed with status: 10")
