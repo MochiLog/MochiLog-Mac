@@ -4,35 +4,35 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>MochiLog Mac</title>
         <item>
-            <title>1.0.1</title>
-            <pubDate>Sun, 15 Nov 2026 12:38:20 +0000</pubDate>
-            <sparkle:version>39</sparkle:version>
-            <sparkle:shortVersionString>1.0.1</sparkle:shortVersionString>
+            <title>1.0.2</title>
+            <pubDate>Wed, 18 Nov 2026 13:35:03 +0900</pubDate>
+            <sparkle:version>40</sparkle:version>
+            <sparkle:shortVersionString>1.0.2</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>27.0</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[# MochiLog Mac 1.0.1
+            <description sparkle:format="markdown"><![CDATA[# MochiLog Mac 1.0.2
 
 ## 日本語
 
-- ペアリング時の接続準備と、接続できないときの案内を改善しました。
-- ペアリング前でもサポート用の情報を作成できるようになりました。
-- サポートへ添付する情報を1つのZIPにまとめ、発生日時に応じたログと設定情報を含められるようになりました。
-- 連携で問題が起きた際の状況を、より詳しく記録するようにしました。
+・低速な通信環境で、ログの転送が途中で止まる問題を修正しました。
+・一部の環境でApple Watchのログを送信できない問題を修正しました。
+・端末の検出と診断サービスへの接続の互換性を改善しました。
+・接続や転送に失敗した際の診断情報を改善しました。
 
-スマホ版MochiLog 4.1.0とあわせて更新してください。既存のペアリング・設定・保管済みログは引き継ぎます。
+既存のペアリングと保存済みログを引き継ぎます。対応環境はmacOS 27以降です。
 
 ## English
 
-- Improved connection readiness during pairing and guidance when a connection cannot be established.
-- Support information can now be prepared before pairing is completed.
-- Support attachments are bundled into one ZIP with dated logs and relevant settings information.
-- Improved diagnostic detail when a connection or pairing fails.
+• Fixed interrupted log transfers on slow connections.
+• Fixed an issue that prevented Apple Watch logs from being sent in some environments.
+• Improved compatibility with device discovery and diagnostic services.
+• Improved diagnostics for failed connections and transfers.
 
-Update alongside MochiLog mobile 4.1.0. Existing pairings, settings and stored logs are preserved.
+Existing pairings and stored logs are preserved. Requires macOS 27 or later.
 ]]></description>
-            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v1.0.1/MochiLog-Mac.dmg" length="129889260" type="application/octet-stream" sparkle:edSignature="CPt+by4sx94X3zjk2+FAZhGy19Dxx1onayXrU5UsO6ccE654IsI8fh79UjbWtFcwLRXOWX9crNE7CWPNvYmyBQ=="></enclosure>
+            <enclosure url="https://github.com/MochiLog/MochiLog-Mac/releases/download/v1.0.2/MochiLog-Mac.dmg" length="119193708" type="application/octet-stream" sparkle:edSignature="wJaHoJyXhzXghIGnQN/uOAQHXXf6p2SS41F5WdrTHE4SjKFj3k0d9t5LnDTjHJstmGVvBybGTwBtug3ipWdrAQ=="></enclosure>
         </item>
     </channel>
 </rss><!-- sparkle-signatures:
-edSignature: 978D7oGixZzxcBLDdFUsc/M5g0ZgeMYFWKIJtljoZW7S4/RREF6NUNWw9M38bOl7VpPoNg+QeVJkF+0kYvT6Aw==
-length: 2208
+edSignature: VaG2Z6Hp9EYjrbYIB+10E3vkP+C45kO0d4LHc860jiL7fHja8tJg7CRjm2GT/WdQVUQqPxel9UobZ3rrUsU5Ag==
+length: 2001
 -->
